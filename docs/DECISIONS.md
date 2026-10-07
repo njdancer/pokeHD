@@ -202,9 +202,9 @@ served.
 Alternative: **Cloudflare Access** (one-time PIN email or Google login on an allowlist) would
 have given identity for free but put a login wall on every page and needed each friend's email.
 
-## D20. Gifts land through a PC hook on the overworld loop, calling the game's own routines (proposed)
+## D20. Gifts land through a PC hook on the overworld loop, calling the game's own routines
 
-**Proposed, waiting for Nick.** Amends D12's "a small assembly patch adds a mailbox check to the
+Approved by Nick on 2026-10-07 after the p3-gifts-spike, with the three rules at the end. Amends D12's "a small assembly patch adds a mailbox check to the
 overworld loop". Evidence and reproduction in `spikes/gifts/README.md`.
 
 `packages/emu` hooks `OverworldLoop` by symbol (no ROM change, CLAUDE.md level 1). When the
@@ -231,8 +231,7 @@ Rules that come with it:
 - The receiver checks a gifted Pokémon's species, level, moves and names before it reaches the
   game.
 
-**Open for Nick:** (a) whether sending a gift makes the sender save first, as the Cable Club
-does before a trade (recommended: otherwise a friend who reloads an older save keeps what they
-gave away); (b) whether key items can be gifted (recommended: no, they'd skip story steps);
-(c) whether a Pokémon gift goes to the box when the party is full (recommended: yes, as the
-game's own gifts do).
+- Sending a gift makes the sender's game save first, as the Cable Club does before a trade, so
+  a friend who reloads an older save can't keep what they gave away.
+- Key items can't be gifted: they would skip story steps.
+- A Pokémon gift goes to the current box when the party is full, as the game's own gifts do.

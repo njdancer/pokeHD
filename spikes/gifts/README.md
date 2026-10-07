@@ -7,8 +7,7 @@ still with no menu, text, script, battle or warp in progress, the hook makes the
 game's own routines*, one after another, and then carries on with the overworld loop. Money,
 items and Pokémon (party, and the box when the party is full) landed, survived the game's own
 save and a reboot from the battery save, and gifts that don't fit waited without touching
-anything. The proposed **D20** in `docs/DECISIONS.md` amends D12 accordingly; it waits for
-Nick.
+anything. **D20** in `docs/DECISIONS.md` amends D12 accordingly; Nick approved it on 2026-10-07.
 
 ## Run it
 
@@ -96,7 +95,7 @@ reading the source; a ROM test of one is cheap to add when this becomes real cod
    the friend's game uses the game's own `RemovePokemon`, `RemoveItemFromInventory` and
    `SubBCDPredef` at their safe point, but it only sticks once they save. If the gift went out
    first and they reload an older save, they keep it *and* their friend gets it. The Cable Club
-   solves this by making you save before a trade; the same rule fits here (a decision for Nick).
+   solves this by making you save before a trade; D20 adopts the same rule for gifts.
 3. **A full bag, party and box, or the money cap.** The gift waits (tested). The UI should say
    why ("make room in your bag"). The money check matters: the game's `AddBCD` saturates at
    ¥999,999, so without it a gift could silently lose money.
