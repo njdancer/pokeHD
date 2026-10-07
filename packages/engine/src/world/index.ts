@@ -3,6 +3,8 @@ export { buildRegion, placeMaps, PX_PER_UNIT, TILE_UNITS, type Region, type Regi
 export { DEFAULT_STYLE_PARAMS, type StyleParams } from "./params.ts";
 export { buildStyle, DEFAULT_STYLE, STYLES, type StyleId } from "./styles.ts";
 export { createStyledWorld, regionFocuses, type Focus, type StyledWorld } from "./content.ts";
+export { createLiveWorld, GB_FRAME_SECONDS, type LiveActor, type LiveState, type LiveWorld, type LiveWorldOptions } from "./live.ts";
+export { palletToViridian, scriptedWalk, type ScriptedState, type WalkPlan } from "./playback.ts";
 
 /** Camera framings every style is judged from; values for the engine's `look.params.camera`. */
 export const VIEW_PRESETS = {

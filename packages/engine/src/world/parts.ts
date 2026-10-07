@@ -63,7 +63,10 @@ function shadowed<T extends THREE.Object3D>(o: T, cast = true): T {
 export function terrain(region: Region, image: Image, tex: THREE.Texture, heightOf: (l: Label | undefined) => number) {
   const heights = new Float32Array(region.widthTiles * region.heightTiles);
   for (let ty = 0; ty < region.heightTiles; ty++) {
-    for (let tx = 0; tx < region.widthTiles; tx++) heights[ty * region.widthTiles + tx] = heightOf(labelAt(region, tx, ty));
+    for (let tx = 0; tx < region.widthTiles; tx++) {
+      const i = ty * region.widthTiles + tx;
+      heights[i] = region.present[i] ? heightOf(labelAt(region, tx, ty)) : NaN;
+    }
   }
   const arrays = meshHeightfield({
     width: region.widthTiles,
@@ -222,55 +225,82 @@ export function voxelProps(
   params: StyleParams,
   scaleOf: (p: StepProp) => number,
   round: (p: StepProp) => boolean,
-) {
-  const { up, out } = leanBasis(params);
-  const arrays: MeshArrays[] = [];
+): THREE.Group {
+  // Props drawn with the same four tiles look identical, so each look is meshed once and
+  // instanced: a city's worth of trees is a handful of shapes. Instances are binned into
+  // 16-step squares so frustum culling can skip the bins off screen.
+  const BIN = 16;
+  const looks = new Map<string, StepProp[]>();
+  const bins = new Map<string, StepProp[]>();
   for (const p of props) {
-    const s = scaleOf(p);
-    const px = s / 16;
-    const opaque = (i: number) => image.data[((p.sy * 16 + (i >> 4)) * image.width + p.sx * 16 + (i & 15)) * 4 + 3]! > 0;
-    const half = new Float32Array(256).fill(NaN);
-    for (let row = 0; row < 16; row++) {
-      let min = 16, max = -1;
-      for (let x = 0; x < 16; x++) {
-        if (!opaque(row * 16 + x)) continue;
-        min = Math.min(min, x);
-        max = Math.max(max, x);
-      }
-      if (max < 0) continue;
-      const r = (max - min + 1) / 2;
-      const c = (min + max + 1) / 2;
-      for (let x = min; x <= max; x++) {
-        const i = row * 16 + x;
-        if (!opaque(i)) continue;
-        const shade = region.shades[(p.sy * 16 + row) * image.width + p.sx * 16 + x]!;
-        // Darker pixels (outlines, shadowed leaves) sit one pixel deeper.
-        const recess = shade >= 2 ? 1 : 0;
-        const depthPx = round(p)
-          ? Math.max(1, Math.ceil(Math.sqrt(Math.max(0, r * r - (x + 0.5 - c) ** 2))) - recess)
-          : Math.max(1, Math.round((params.propDepth / 2) * 16) - recess);
-        half[i] = depthPx * px;
-      }
+    const t = (dx: number, dy: number) => region.tiles[(p.sy * 2 + dy) * region.widthTiles + p.sx * 2 + dx];
+    const look = `${t(0, 0)},${t(1, 0)},${t(0, 1)},${t(1, 1)},${scaleOf(p)},${round(p)}`;
+    if (!looks.has(look)) looks.set(look, [p]);
+    const bin = `${look}|${Math.floor(p.sx / BIN)},${Math.floor(p.sy / BIN)}`;
+    bins.set(bin, [...(bins.get(bin) ?? []), p]);
+  }
+  const group = new THREE.Group();
+  const material = texturedMaterial(tex);
+  const geometries = new Map([...looks].map(([look, [p]]) => [look, geometryFrom(voxelProp(p!, region, image, params, scaleOf, round))]));
+  const m = new THREE.Matrix4();
+  for (const [bin, list] of bins) {
+    const mesh = shadowed(new THREE.InstancedMesh(geometries.get(bin.split("|")[0]!)!, material, list.length));
+    list.forEach((p, i) => mesh.setMatrixAt(i, m.makeTranslation(p.sx + 0.5, 0, p.sy + 0.75)));
+    mesh.computeBoundingSphere();
+    group.add(mesh);
+  }
+  return group;
+}
+
+/** One voxel prop, centred on its card's base, textured from where it sits in `image`. */
+function voxelProp(
+  p: StepProp,
+  region: Region,
+  image: Image,
+  params: StyleParams,
+  scaleOf: (p: StepProp) => number,
+  round: (p: StepProp) => boolean,
+): MeshArrays[] {
+  const { up, out } = leanBasis(params);
+  const s = scaleOf(p);
+  const px = s / 16;
+  const opaque = (i: number) => image.data[((p.sy * 16 + (i >> 4)) * image.width + p.sx * 16 + (i & 15)) * 4 + 3]! > 0;
+  const half = new Float32Array(256).fill(NaN);
+  for (let row = 0; row < 16; row++) {
+    let min = 16, max = -1;
+    for (let x = 0; x < 16; x++) {
+      if (!opaque(row * 16 + x)) continue;
+      min = Math.min(min, x);
+      max = Math.max(max, x);
     }
-    const cx = p.sx + 0.5;
-    const cz = p.sy + 0.75;
-    // Grid y runs down the image from the card's top-left corner; columns grow both ways.
-    const origin = [cx - s / 2, -0.02 + up[1] * s, cz + up[2] * s] as const;
-    for (const side of [1, -1]) {
-      arrays.push(
-        meshHeightfield({
-          width: 16,
-          height: 16,
-          heights: half,
-          base: 0,
-          uv: (x, y) => [(p.sx * 16 + x) / image.width, (p.sy * 16 + y) / image.height],
-          origin,
-          ax: [px, 0, 0],
-          ay: [0, -up[1] * px, -up[2] * px],
-          ah: [out[0] * side, out[1] * side, out[2] * side],
-        }),
-      );
+    if (max < 0) continue;
+    const r = (max - min + 1) / 2;
+    const c = (min + max + 1) / 2;
+    for (let x = min; x <= max; x++) {
+      const i = row * 16 + x;
+      if (!opaque(i)) continue;
+      const shade = region.shades[(p.sy * 16 + row) * image.width + p.sx * 16 + x]!;
+      // Darker pixels (outlines, shadowed leaves) sit one pixel deeper.
+      const recess = shade >= 2 ? 1 : 0;
+      const depthPx = round(p)
+        ? Math.max(1, Math.ceil(Math.sqrt(Math.max(0, r * r - (x + 0.5 - c) ** 2))) - recess)
+        : Math.max(1, Math.round((params.propDepth / 2) * 16) - recess);
+      half[i] = depthPx * px;
     }
   }
-  return shadowed(new THREE.Mesh(geometryFrom(arrays), texturedMaterial(tex)));
+  // Grid y runs down the image from the card's top-left corner; columns grow both ways.
+  const origin = [-s / 2, -0.02 + up[1] * s, up[2] * s] as const;
+  return [1, -1].map((side) =>
+    meshHeightfield({
+      width: 16,
+      height: 16,
+      heights: half,
+      base: 0,
+      uv: (x, y) => [(p.sx * 16 + x) / image.width, (p.sy * 16 + y) / image.height],
+      origin,
+      ax: [px, 0, 0],
+      ay: [0, -up[1] * px, -up[2] * px],
+      ah: [out[0] * side, out[1] * side, out[2] * side],
+    }),
+  );
 }

@@ -46,7 +46,8 @@ export function createStyledWorld(region: Region, style: StyleId, params: StyleP
   };
 }
 
-function disposeTree(root: THREE.Object3D) {
+/** Frees the geometry, materials and textures under `root`. */
+export function disposeTree(root: THREE.Object3D) {
   const textures = new Set<THREE.Texture>();
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
