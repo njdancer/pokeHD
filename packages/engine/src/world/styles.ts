@@ -3,7 +3,7 @@ import { LABELS, type Label } from "@pokehd/rom";
 import { BUILDING_LABELS, findBuildings, findProps, findTrees, PROP_LABELS, tilesWith, type StepProp } from "./analyse.ts";
 import { cutOut } from "./cutout.ts";
 import { grass, water } from "./effects.ts";
-import { colourRegion, commonTile } from "./palette.ts";
+import { colourRegion, commonTile, DMG_RAMP } from "./palette.ts";
 import type { StyleParams } from "./params.ts";
 import { building, cards, imageTexture, terrain, voxelProps, voxelTerrain } from "./parts.ts";
 import type { Region } from "./region.ts";
@@ -43,6 +43,18 @@ function common(region: Region) {
   return { trees, props, full, ground, cutout, buildings: findBuildings(region) };
 }
 
+/**
+ * The plain fallback for maps without labels (interiors until they get a style of their own):
+ * the map flat on the ground in DMG greens.
+ */
+export function buildFlat(region: Region): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "flat";
+  const image = colourRegion(region, { ramp: DMG_RAMP });
+  group.add(terrain(region, image, imageTexture(image), () => 0));
+  return group;
+}
+
 export function buildStyle(id: StyleId, region: Region, params: StyleParams): THREE.Group {
   const group = new THREE.Group();
   group.name = id;
@@ -53,6 +65,7 @@ export function buildStyle(id: StyleId, region: Region, params: StyleParams): TH
     const tex = imageTexture(c.full);
     const w = c.full.width;
     const heightAt = (px: number, py: number) => {
+      if (!region.present[(py >> 3) * region.widthTiles + (px >> 3)]) return NaN;
       const label = region.labels[(py >> 3) * region.widthTiles + (px >> 3)]!;
       const shade = region.shades[py * w + px]!;
       return voxelHeight(labelName(label), shade, params);

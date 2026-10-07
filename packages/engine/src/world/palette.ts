@@ -28,6 +28,8 @@ export const LABEL_RAMPS: Record<Label, Ramp> = {
   cave: [0xbba383, 0x7b6552, 0x4a3a30, 0x1c1612],
   unused: [0xff00ff, 0xcc00cc, 0x990099, 0x330033],
 };
+/** The DMG's own greens, for maps nothing has labelled yet (interiors, for now). */
+export const DMG_RAMP: Ramp = [0xe0f8d0, 0x88c070, 0x346856, 0x081820];
 const UNLABELLED: Ramp = [0xff00ff, 0xcc00cc, 0x990099, 0x330033];
 
 export function rampFor(labelIndex: number): Ramp {
@@ -47,7 +49,7 @@ export interface Image {
  */
 export function colourRegion(
   region: Region,
-  opts: { replace?: ReadonlySet<Label>; fillTile?: number; fillLabel?: Label } = {},
+  opts: { replace?: ReadonlySet<Label>; fillTile?: number; fillLabel?: Label; ramp?: Ramp } = {},
 ): Image {
   const width = region.widthTiles * 8;
   const height = region.heightTiles * 8;
@@ -58,7 +60,7 @@ export function colourRegion(
     for (let tx = 0; tx < region.widthTiles; tx++) {
       const label = region.labels[ty * region.widthTiles + tx]!;
       const swap = replace.has(label) && opts.fillTile !== undefined;
-      const ramp = swap ? fillRamp : rampFor(label);
+      const ramp = opts.ramp ?? (swap ? fillRamp : rampFor(label));
       for (let p = 0; p < 64; p++) {
         const x = tx * 8 + (p & 7);
         const y = ty * 8 + (p >> 3);

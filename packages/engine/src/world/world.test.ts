@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { MapData, Tileset, WorldData } from "@pokehd/rom";
 import { findBuildings, findTrees } from "./analyse.ts";
 import { meshHeightfield } from "./heightfield.ts";
 import { buildRegion, placeMaps } from "./region.ts";
+import { fakeWorld } from "./fake-world.ts";
 
 const flat = { origin: [0, 0, 0], ax: [1, 0, 0], ay: [0, 0, 1], ah: [0, 1, 0], uv: () => [0, 0] as const } as const;
 
@@ -26,44 +26,15 @@ describe("meshHeightfield", () => {
   });
 });
 
-// A one-block tileset: tile 0 ground (shade 0), tile 1 tree, tile 2 roof, tile 3 wall.
-function fakeWorld(): WorldData {
-  const tileset = {
-    id: 0,
-    name: "OVERWORLD",
-    blocks: new Uint8Array(16 * 4),
-    blockCount: 4,
-    tiles: new Uint8Array(96 * 64).fill(1),
-    animation: "none",
-    semantics: { walkable: [], grass: null, counters: [], doors: [], warps: [], warpCarpets: [], bookshelves: [], pairCollisions: [], ledges: [], warpPads: [], holes: [], spinners: [], cutTrees: [], hasWater: false },
-  } as Tileset;
-  // Block 0: ground (OVERWORLD tile 0x00). Block 1: all tree (0x2a). Block 2: roof (0x05) over wall (0x0f).
-  tileset.blocks.fill(0x00, 0, 16);
-  tileset.blocks.fill(0x2a, 16, 32);
-  tileset.blocks.fill(0x05, 32, 40);
-  tileset.blocks.fill(0x0f, 40, 48);
-  const map = (id: number, name: string, blocks: number[], w: number, connections: MapData["connections"]): MapData => ({
-    id, name, tileset: 0, widthBlocks: w, heightBlocks: blocks.length / w, blocks: new Uint8Array(blocks),
-    borderBlock: 1, connections, warps: [], signs: [], npcs: [],
-  });
-  return {
-    tilesets: [tileset],
-    maps: [
-      map(0, "A", [0, 2, 0, 0], 2, [{ direction: "north", map: 1, offsetBlocks: 1 }]),
-      map(1, "B", [0, 0, 0], 3, [{ direction: "south", map: 0, offsetBlocks: -1 }]),
-    ],
-  };
-}
-
 describe("regions", () => {
   it("places connected maps by their offsets", () => {
-    expect(placeMaps(fakeWorld(), 0, [1]).map((p) => [p.map.name, p.bx, p.by])).toEqual([["A", 0, 0], ["B", 1, -1]]);
+    expect(placeMaps(fakeWorld(), 0, [1]).map((p) => [p.map.name, p.bx, p.by])).toEqual([["A", 0, 0], ["B", -1, -1]]);
   });
 
   it("stitches maps into one tile grid with border blocks around them", () => {
     const r = buildRegion(fakeWorld(), 0, { include: [1], marginBlocks: 1 });
-    expect([r.widthTiles, r.heightTiles]).toEqual([(4 + 2) * 4, (3 + 2) * 4]);
-    expect([r.rootX, r.rootY]).toEqual([4, 8]);
+    expect([r.widthTiles, r.heightTiles]).toEqual([(3 + 2) * 4, (3 + 2) * 4]);
+    expect([r.rootX, r.rootY]).toEqual([8, 8]);
     // The margin is the border block: all trees, one per step.
     expect(findTrees(r).length).toBeGreaterThan(0);
   });

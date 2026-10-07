@@ -24,8 +24,10 @@ export interface Region {
   heightTiles: number;
   /** Tile ID per tile, row-major. */
   tiles: Uint8Array;
-  /** `LABELS` index per tile, row-major; `NO_LABEL` where unlabelled. */
+  /** `LABELS` index per tile, row-major; `NO_LABEL` where unlabelled or not drawn. */
   labels: Uint8Array;
+  /** 1 where the tile is drawn, 0 where another chunk owns it (see `RegionOptions.drawBorder`). */
+  present: Uint8Array;
   /** DMG shade (0 lightest … 3 darkest) per pixel, row-major, `widthTiles * 8` wide. */
   shades: Uint8Array;
   maps: PlacedMap[];
@@ -41,6 +43,12 @@ export interface RegionOptions {
   include?: MapId[];
   /** Border blocks added on every side. */
   marginBlocks?: number;
+  /**
+   * Whether to draw the border block at (bx, by), in blocks relative to the root map. Lets
+   * neighbouring chunks, each built from its own map, share the border without overlapping.
+   * Map blocks are always drawn.
+   */
+  drawBorder?: (bx: number, by: number) => boolean;
 }
 
 /** Map origins in blocks, relative to the root, following connections between included maps. */
@@ -83,10 +91,14 @@ export function buildRegion(world: WorldData, root: MapId, options: RegionOption
   const tileset = world.tilesets[rootMap.tileset]!;
   if (placed.some((p) => p.map.tileset !== rootMap.tileset)) throw new Error("region maps must share a tileset");
   const grid = new Uint8Array(wb * hb).fill(rootMap.borderBlock);
+  const drawn = new Uint8Array(wb * hb);
+  const drawBorder = options.drawBorder ?? (() => true);
+  for (let y = 0; y < hb; y++) for (let x = 0; x < wb; x++) drawn[y * wb + x] = drawBorder(x + minX, y + minY) ? 1 : 0;
   for (const { map, bx, by } of placed) {
     for (let y = 0; y < map.heightBlocks; y++) {
       for (let x = 0; x < map.widthBlocks; x++) {
         grid[(by - minY + y) * wb + bx - minX + x] = map.blocks[y * map.widthBlocks + x]!;
+        drawn[(by - minY + y) * wb + bx - minX + x] = 1;
       }
     }
   }
@@ -95,17 +107,19 @@ export function buildRegion(world: WorldData, root: MapId, options: RegionOption
   const heightTiles = hb * 4;
   const tiles = new Uint8Array(widthTiles * heightTiles);
   const labels = new Uint8Array(widthTiles * heightTiles).fill(NO_LABEL);
+  const present = new Uint8Array(widthTiles * heightTiles);
   const shades = new Uint8Array(widthTiles * heightTiles * 64);
   const perBlock = blockLabels(tileset);
   const pxWidth = widthTiles * 8;
   for (let ty = 0; ty < heightTiles; ty++) {
     for (let tx = 0; tx < widthTiles; tx++) {
       const block = grid[(ty >> 2) * wb + (tx >> 2)]!;
+      present[ty * widthTiles + tx] = drawn[(ty >> 2) * wb + (tx >> 2)]!;
       const i = (ty & 3) * 4 + (tx & 3);
       const tile = tileset.blocks[block * 16 + i]!;
       const label = perBlock[block]?.[i];
       tiles[ty * widthTiles + tx] = tile;
-      if (label) labels[ty * widthTiles + tx] = LABELS.indexOf(label);
+      if (label && present[ty * widthTiles + tx]) labels[ty * widthTiles + tx] = LABELS.indexOf(label);
       for (let p = 0; p < 64; p++) {
         shades[(ty * 8 + (p >> 3)) * pxWidth + tx * 8 + (p & 7)] = tileset.tiles[tile * 64 + p]!;
       }
@@ -117,6 +131,7 @@ export function buildRegion(world: WorldData, root: MapId, options: RegionOption
     heightTiles,
     tiles,
     labels,
+    present,
     shades,
     maps: placed.map((p) => ({ map: p.map, x: (p.bx - minX) * 4, y: (p.by - minY) * 4 })),
     tileset,
