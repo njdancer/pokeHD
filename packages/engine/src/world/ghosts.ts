@@ -153,7 +153,7 @@ export function createGhosts(initial: GhostLook = GHOST_LOOKS[DEFAULT_GHOST_LOOK
         if (!pos) continue;
         g.sprite.position.set(pos.x, pos.bob, pos.z);
         faceCamera(g.sprite, camera);
-        g.tag?.position.set(pos.x, pos.bob + 1.35, pos.z);
+        g.tag?.position.set(pos.x, pos.bob + 1.5, pos.z);
       }
     },
     setLook(next) {
@@ -235,7 +235,7 @@ function nameTag(name: string): THREE.Sprite | null {
   tex.colorSpace = THREE.SRGBColorSpace;
   const material = new THREE.SpriteNodeMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, fog: false });
   const sprite = new THREE.Sprite(material);
-  const height = 0.32;
+  const height = 0.6;
   sprite.scale.set((height * w) / h, height, 1);
   sprite.renderOrder = 900;
   return sprite;
