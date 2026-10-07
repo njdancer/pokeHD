@@ -70,6 +70,8 @@ export interface LiveWorld extends WorldContent {
   readonly ghosts: ReadonlyMap<string, boolean>;
   /** The engine's look, once it exists (the engine is created with this world as content). */
   setLook(look: LookLike): void;
+  /** The latest chunk builds, newest last (at most 16), for perf checks. `at` is performance.now(). */
+  readonly builds: readonly { map: MapId; ms: number; at: number }[];
   /** Map ID → chunk build status, for debugging. */
   readonly chunks: ReadonlyMap<MapId, "queued" | "built">;
   dispose(): void;
@@ -149,7 +151,9 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     c.group = null;
   };
 
+  const builds: { map: MapId; ms: number; at: number }[] = [];
   const build = (c: Chunk) => {
+    const t0 = performance.now();
     const others = neighbours(c);
     const rect = (m: { map: MapData; bx: number; by: number }) => ({
       id: m.map.id, x0: m.bx, y0: m.by, x1: m.bx + m.map.widthBlocks, y1: m.by + m.map.heightBlocks,
@@ -180,6 +184,8 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     group.position.set(c.bx * 2 - region.rootX * TILE_UNITS, 0, c.by * 2 - region.rootY * TILE_UNITS);
     c.group = group;
     root.add(group);
+    builds.push({ map: c.map.id, ms: performance.now() - t0, at: t0 });
+    if (builds.length > 16) builds.shift();
   };
 
   // Actors, interpolated one emulator frame behind the newest state.
@@ -229,6 +235,9 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     },
     get ghosts() {
       return ghosts.visible;
+    },
+    get builds() {
+      return builds;
     },
     get chunks() {
       return new Map([...chunks].map(([id, c]) => [id, c.group ? "built" : "queued"] as const));

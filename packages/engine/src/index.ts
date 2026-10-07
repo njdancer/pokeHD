@@ -45,6 +45,10 @@ export interface WorldContent {
 export interface EngineStats {
   /** CPU time spent building and submitting the last frame, ms. */
   cpuMs: number;
+  /** Of that, the world's own update (live chunk builds happen here), ms. */
+  updateMs: number;
+  /** Of that, rendering and post-processing (pipeline compiles and uploads land here), ms. */
+  renderMs: number;
   width: number;
   height: number;
 }
@@ -104,7 +108,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const fogColor = uniform(rig.fogColor);
 
   let fixedSize: { width: number; height: number } | null = null;
-  const stats: EngineStats = { cpuMs: 0, width: 0, height: 0 };
+  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, width: 0, height: 0 };
   const resize = () => {
     if (fixedSize) {
       renderer.setPixelRatio(1);
@@ -190,6 +194,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     if (p.camera.orbit) p.camera.yaw = ((p.camera.yaw + dt * 8 + 180) % 360) - 180;
 
     world.update(elapsed, camera, rig.sunDirection, p.shadows.spriteShadows);
+    stats.updateMs = performance.now() - t0;
     const pitch = p.camera.pitch * (Math.PI / 180);
     const yaw = p.camera.yaw * (Math.PI / 180);
     camera.position
@@ -207,7 +212,9 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     fogNear.value = p.fog.near;
     fogFar.value = p.fog.far;
     post.update(p, camera.position.distanceTo(world.target), clock.fade);
+    const tRender = performance.now();
     post.render();
+    stats.renderMs = performance.now() - tRender;
     stats.cpuMs = performance.now() - t0;
 
   };
