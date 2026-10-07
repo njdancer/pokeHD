@@ -53,6 +53,22 @@ describe("createLiveWorld", () => {
     live.dispose();
   });
 
+  it("adds a new chunk to the scene only once its shaders are compiled", async () => {
+    const live = createLiveWorld(fakeWorld());
+    const pending: (() => void)[] = [];
+    live.setCompiler(() => new Promise<void>((resolve) => pending.push(resolve)));
+    live.push(walk()[0]!, 0);
+    live.update(0, camera, new THREE.Vector3(), false);
+    expect(live.chunks.get(0)).toBe("built");
+    const group = live.root.getObjectByName("hybrid");
+    expect(group).toBeUndefined(); // built, still compiling
+    expect(pending).toHaveLength(1);
+    pending[0]!();
+    await Promise.resolve();
+    expect(live.root.getObjectByName("hybrid")?.parent).toBe(live.root);
+    live.dispose();
+  });
+
   it("reuses the chunks it left on a warp when the player comes back", () => {
     const live = createLiveWorld(fakeWorld());
     const base = walk()[0]!;

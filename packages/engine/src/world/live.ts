@@ -15,7 +15,8 @@ import { buildFlat, buildStyle, DEFAULT_STYLE, type StyleId } from "./styles.ts"
 // frame a route edge is crossed. Chunks left behind (by a warp, or by walking more than two
 // connections away) are kept, unrendered, for a while: going back outside from a house reuses
 // them rather than building them again, and keeps their shaders compiled (the first frame that
-// draws freshly built chunks can take 80–160 ms in WebGPU and seconds in WebGL2).
+// draws freshly built chunks can take 80–160 ms in WebGPU and seconds in WebGL2). Given the
+// engine's precompiler, a new chunk joins the scene only once its shaders are compiled.
 // World units: 1 unit = 1 step, as everywhere in ./world.
 
 /**
@@ -80,6 +81,8 @@ export interface LiveWorld extends WorldContent {
   setGhostLook(look: GhostLook): void;
   /** Friend ID → whether their ghost is drawn this frame. */
   readonly ghosts: ReadonlyMap<string, boolean>;
+  /** The engine hands over its shader precompiler; new chunks wait for it before being drawn. */
+  setCompiler(compile: ((object: THREE.Object3D) => Promise<void>) | null): void;
   /** The engine's look, once it exists (the engine is created with this world as content). */
   setLook(look: LookLike): void;
   /** The latest chunk builds, newest last (at most 16), for perf checks. `at` is performance.now(). */
@@ -109,6 +112,13 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   const chunks = new Map<MapId, Chunk>();
   let current: MapId | null = null;
   let look = options.look;
+  let compile: ((object: THREE.Object3D) => Promise<void>) | null = null;
+  /** Chunk groups whose shaders are compiled (or that were built with no compiler to wait for). */
+  const compiled = new WeakSet<THREE.Group>();
+  /** Adds a loaded chunk's group to the scene, once it's compiled. */
+  const show = (c: Chunk) => {
+    if (c.group && compiled.has(c.group)) root.add(c.group);
+  };
   const clock = options.clock ?? (() => performance.now() / 1000);
 
   // Placing maps: the first map anchors world space; connected maps are placed relative to it.
@@ -177,7 +187,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     spare.delete(map.id);
     const c = { ...old, bx, by, hops };
     c.group!.position.set(bx * 2 + c.offset.x, 0, by * 2 + c.offset.z);
-    root.add(c.group!);
+    show(c);
     return c;
   };
 
@@ -221,7 +231,21 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     c.offset = { x: -region.rootX * TILE_UNITS, z: -region.rootY * TILE_UNITS };
     group.position.set(c.bx * 2 + c.offset.x, 0, c.by * 2 + c.offset.z);
     c.group = group;
-    root.add(group);
+    if (!compile) {
+      compiled.add(group);
+      root.add(group);
+    } else {
+      const ready = () => {
+        compiled.add(group);
+        // It may have been dropped, or retired and revived (a new Chunk with the same group).
+        const now = chunks.get(c.map.id);
+        if (now?.group === group) show(now);
+      };
+      compile(group).then(ready, (e: unknown) => {
+        console.warn("[pokeHD] couldn't precompile a map chunk", e);
+        ready();
+      });
+    }
     builds.push({ map: c.map.id, ms: performance.now() - t0, at: t0 });
     if (builds.length > 16) builds.shift();
   };
@@ -266,6 +290,9 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     target,
     setLook(next) {
       look = next;
+    },
+    setCompiler(next) {
+      compile = next;
     },
     setGhosts(states, at = clock()) {
       ghosts.set(states, at);

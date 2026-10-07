@@ -59,6 +59,7 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
   let lutKey = "";
 
   let owned: Disposable[] = [];
+  let scenePass: ReturnType<typeof pass> | undefined;
   let aoNode: ReturnType<typeof ao> | undefined;
   let bloomNode: ReturnType<typeof bloom> | undefined;
 
@@ -67,7 +68,7 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
     owned = [];
     aoNode = bloomNode = undefined;
 
-    const scenePass = pass(scene, camera, { samples: 0 });
+    scenePass = pass(scene, camera, { samples: 0 });
     owned.push(scenePass);
     let out: Vec4 = scenePass.getTextureNode("output");
 
@@ -153,6 +154,24 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
     },
     render() {
       pipeline.render();
+    },
+    /**
+     * Compiles `object`'s shaders for the scene pass, without drawing it, so adding it to the
+     * scene later doesn't stall a frame (WebGL2 compiles shaders synchronously on first draw).
+     * Mirrors PassNode.compileAsync, which compiles the whole scene: the pipelines must be
+     * built against the pass's render target and MRT, or the first draw builds them again.
+     */
+    compile(object: THREE.Object3D): Promise<void> {
+      if (!scenePass) return Promise.resolve();
+      const target = renderer.getRenderTarget();
+      const mrt = renderer.getMRT();
+      renderer.setRenderTarget(scenePass.renderTarget);
+      renderer.setMRT(scenePass.getMRT());
+      // compileAsync captures the render context before its first await; restore at once.
+      const done = renderer.compileAsync(object, camera, scene);
+      renderer.setRenderTarget(target);
+      renderer.setMRT(mrt);
+      return done;
     },
     dispose() {
       for (const d of owned) d.dispose();
