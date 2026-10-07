@@ -2,6 +2,7 @@ import * as THREE from "three/webgpu";
 import { LABEL_TABLES, type MapData, type MapId, type WorldData } from "@pokehd/rom";
 import type { LookController, WorldContent } from "../index.ts";
 import { disposeTree } from "./content.ts";
+import { actorBob, actorOffset, createGhosts, GHOST_LOOKS, DEFAULT_GHOST_LOOK, type GhostLook, type GhostState } from "./ghosts.ts";
 import { DEFAULT_STYLE_PARAMS, type StyleParams } from "./params.ts";
 import { buildRegion, placeMaps, TILE_UNITS } from "./region.ts";
 import { faceCamera, PERSON_GEOMETRY, personMaterial } from "./sprites.ts";
@@ -48,6 +49,10 @@ export interface LiveWorldOptions {
   params?: StyleParams;
   /** Lets fades to black wrap the day to morning when it's due (D16). Or call `setLook` later. */
   look?: LookLike;
+  /** How friends' ghosts are drawn; see `GHOST_LOOKS`. */
+  ghostLook?: GhostLook;
+  /** Seconds on the performance clock; tests replace it. */
+  clock?: () => number;
 }
 
 type LookLike = Pick<LookController, "params" | "wrapToMorning">;
@@ -55,6 +60,14 @@ type LookLike = Pick<LookController, "params" | "wrapToMorning">;
 export interface LiveWorld extends WorldContent {
   /** Hands over the state decoded after an emulator frame. `at` is in seconds (performance clock). */
   push(state: LiveState, at?: number): void;
+  /**
+   * Friends present now, from the room's presence; anyone missing has left. A friend is drawn
+   * only while their map is loaded. `at` is in seconds (performance clock).
+   */
+  setGhosts(ghosts: readonly GhostState[], at?: number): void;
+  setGhostLook(look: GhostLook): void;
+  /** Friend ID → whether their ghost is drawn this frame. */
+  readonly ghosts: ReadonlyMap<string, boolean>;
   /** The engine's look, once it exists (the engine is created with this world as content). */
   setLook(look: LookLike): void;
   /** Map ID → chunk build status, for debugging. */
@@ -80,6 +93,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   const chunks = new Map<MapId, Chunk>();
   let current: MapId | null = null;
   let look = options.look;
+  const clock = options.clock ?? (() => performance.now() / 1000);
 
   // Placing maps: the first map anchors world space; connected maps are placed relative to it.
   const place = (id: MapId): Chunk | undefined => chunks.get(id);
@@ -188,11 +202,18 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   root.add(fadeQuad);
 
   /** An actor's drawn position in world units (sprite base centre), for the current map. */
-  const drawn = (a: LiveActor, c: Chunk) => ({
-    x: c.bx * 2 + a.x + (a.step ? a.step.dx * a.step.progress : 0) + 0.5,
-    z: c.by * 2 + a.y + (a.step ? a.step.dy * a.step.progress : 0) + 0.6,
-  });
-  const bob = (a: LiveActor) => (a.step && a.animFrame % 2 === 1 ? 0.04 : 0);
+  const drawn = (a: LiveActor, c: Chunk) => {
+    const o = actorOffset(a);
+    return { x: c.bx * 2 + o.x, z: c.by * 2 + o.z };
+  };
+  const bob = actorBob;
+
+  const ghosts = createGhosts(options.ghostLook ?? GHOST_LOOKS[DEFAULT_GHOST_LOOK]);
+  root.add(ghosts.group);
+  const locate = (mapId: number) => {
+    const c = chunks.get(mapId as MapId);
+    return c?.group ? { x: c.bx * 2, z: c.by * 2 } : undefined;
+  };
 
   return {
     root,
@@ -200,10 +221,19 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     setLook(next) {
       look = next;
     },
+    setGhosts(states, at = clock()) {
+      ghosts.set(states, at);
+    },
+    setGhostLook(next) {
+      ghosts.setLook(next);
+    },
+    get ghosts() {
+      return ghosts.visible;
+    },
     get chunks() {
       return new Map([...chunks].map(([id, c]) => [id, c.group ? "built" : "queued"] as const));
     },
-    push(state, at = performance.now() / 1000) {
+    push(state, at = clock()) {
       const before = current;
       enter(state.mapId);
       const c = current === null ? undefined : chunks.get(current);
@@ -228,7 +258,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       if (pending[0]) build(pending[0]);
 
       if (latest && here && prev && last) {
-        const now = performance.now() / 1000;
+        const now = clock();
         const span = Math.max(last.at - prev.at, 1e-3);
         const t = Math.min(Math.max((now - last.at) / span, 0), 1);
         const x = prev.x + (last.x - prev.x) * t;
@@ -264,6 +294,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         if (fade < 1) wrapped = false;
       }
 
+      ghosts.update(clock(), camera, locate);
       faceCamera(playerSprite, camera);
       for (const s of npcSprites.values()) faceCamera(s, camera);
       // Keep the fade quad just in front of the camera, filling the view.
@@ -276,6 +307,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       chunks.clear();
       fadeQuad.geometry.dispose();
       fadeMaterial.dispose();
+      ghosts.dispose();
       (playerSprite.material as THREE.Material).dispose();
       npcMaterial.dispose();
     },
