@@ -41,6 +41,7 @@ export const ALLOWLIST: readonly string[] = [
   "wCurMapHeight",
   "wCurMapTileset",
   "wCurMapWidth",
+  "wCurrentMapScriptFlags",
   "wEventFlags",
   "wGrassRate",
   "wIsInBattle",

@@ -8,6 +8,7 @@ import { DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 import { createPlaceholder } from "./look/placeholder.ts";
 import { createPost } from "./look/post.ts";
 import { createRig } from "./look/rig.ts";
+import { webgpuViewsWork } from "./webgpu-probe.ts";
 
 export type { DayCycle } from "./look/cycle.ts";
 export type { LookParams } from "./look/params.ts";
@@ -83,7 +84,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const superseded = () => canvasOwner.get(canvas) !== token;
   const query = new URLSearchParams(location.search);
   const lookdev = options.lookdev ?? query.has("lookdev");
-  const forceWebGL = options.forceWebGL ?? query.has("webgl");
+  const forceWebGL = options.forceWebGL ?? (query.has("webgl") || !(await webgpuViewsWork()));
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, forceWebGL });
   await renderer.init();
   renderer.shadowMap.enabled = true;

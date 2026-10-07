@@ -47,6 +47,7 @@ export const SYMBOLS = {
   wCurMapTileset: { bank: 0x00, address: 0xd367 },
   wCurMapWidth: { bank: 0x00, address: 0xd369 },
   wCurOpponent: { bank: 0x00, address: 0xd059 },
+  wCurrentMapScriptFlags: { bank: 0x00, address: 0xd126 },
   wCurrentMenuItem: { bank: 0x00, address: 0xcc26 },
   wEnemyMon: { bank: 0x00, address: 0xcfe5 },
   wEnemyPartyCount: { bank: 0x00, address: 0xd89c },
