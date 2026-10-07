@@ -12,6 +12,14 @@
   "r2_buckets": [{ "binding": "PRIVATE", "bucket_name": "pokehd-private" }],
   "vars": { "DEV_ROM_KEY": "rom-a122f2e20e25a654c17a615c.gb" },
   "observability": { "enabled": true },
-  "upload_source_maps": true
-  // Durable Objects (multiplayer rooms) are added in the multiplayer phase.
+  "upload_source_maps": true,
+  // Multiplayer (D19): DIRECTORY holds invites, players and sessions; ROOM is the shared world.
+  // Secret: ADMIN_TOKEN, for creating invites (`pnpm invite`).
+  "durable_objects": {
+    "bindings": [
+      { "name": "DIRECTORY", "class_name": "Directory" },
+      { "name": "ROOM", "class_name": "Room" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Directory", "Room"] }]
 }

@@ -60,7 +60,7 @@ and get the coordinator's sign-off before building on them.
 
 Done: `p0-rom`, `p0-repo`, `p0-scaffold`, `p0-deploy`, `p0-devrom`.
 In progress: `p0-ci` (Nick's Hearthstone runner PR).
-Not needed now: `p0-access` (Nick declined Cloudflare Access for now).
+Not needed: `p0-access` (friends join with invite codes instead, D19).
 
 ### p0-symbols: typed symbol table (Track A)
 Generate `packages/rom/src/generated/symbols.ts` from `vendor/pokered/pokeblue.sym` with a
@@ -158,7 +158,15 @@ Two emulator instances in one page joined by an in-memory serial bridge; complet
 battle. Then insert artificial latency (50/100/200 ms) and find where the protocol breaks
 (`engine/link/cable_club.asm`, `Serial_ExchangeByte`). Report what synchronisation strategy
 works before building the networked version.
-### p3-rooms: room Durable Object, presence, friends as ghosts
+### p3-rooms: room Durable Object, presence, friends as ghosts (Track E)
+Server first (PR 1): invite codes and players in a `Directory` Durable Object (D19), the
+`/api/join`, `/api/me` and admin routes, and a `Room` Durable Object (hibernatable WebSockets)
+at `/api/room` that greets each player with everyone's presence and relays presence changes.
+Presence mirrors p1-state-read's `Player` plus the map ID. Room messages live in
+`apps/web/src/worker/room/protocol.ts` until `packages/protocol` lands (p3-link-hooks), then move
+there. Next: the client side (join screen, a room connection that sends the local player's
+presence from the state decoder) and ghosts drawn by `LiveWorld` on the same map, after p1-play.
+**Done when:** two friends on different machines see each other walk around in the deployed build.
 ### p3-gifts: mailbox patch and gifting (money, items, Pokémon)
 ### p3-link: networked link cable for trades and battles
 
@@ -170,4 +178,3 @@ works before building the networked version.
 ## Open questions for Nick
 
 - Name and URL: keep `pokehd.nick-01a.workers.dev` or add a custom domain?
-- Friends access: when friends join, gate with Cloudflare Access or invite codes?
