@@ -81,4 +81,28 @@ describe.skipIf(!existsSync(ROM_PATH))("parseWorld", () => {
     expect(mart.semantics.counters).toEqual([0x18, 0x19, 0x1e]);
     expect(mart.tiles).toBe(world.tilesets.find((t) => t.name === "POKECENTER")!.tiles);
   });
+
+  it("reads sprite sheets byte for byte as the disassembly's graphics", () => {
+    const gfx = (name: string) => new URL(`../../../../vendor/pokered/gfx/sprites/${name}.2bpp`, import.meta.url);
+    const check = (sheet: { tiles: Uint8Array }, name: string) => {
+      if (!existsSync(gfx(name))) return;
+      const want = decode2bpp(new Uint8Array(readFileSync(gfx(name))));
+      expect(Array.from(sheet.tiles.subarray(0, want.length))).toEqual(Array.from(want));
+    };
+    expect(world.sprites).toHaveLength(0x49);
+    expect(world.sprites[0]).toBeNull();
+    const red = world.sprites[0x01]!;
+    expect(red.still).toBe(false);
+    expect(red.tiles).toHaveLength(24 * 64);
+    check(red, "red");
+    check(world.sprites[0x03]!, "oak");
+    check(world.bikeSprite, "red_bike");
+    const ball = world.sprites[0x3d]!;
+    expect(ball.still).toBe(true);
+    expect(ball.tiles).toHaveLength(4 * 64);
+    check(ball, "poke_ball");
+    // Oak's lab: the three starters' balls on the table.
+    const lab = map("OAKS_LAB");
+    expect(lab.npcs.filter((n) => n.sprite === 0x3d).length).toBeGreaterThanOrEqual(3);
+  });
 });

@@ -5,7 +5,7 @@ import { disposeTree } from "./content.ts";
 import { actorBob, actorOffset, createGhosts, GHOST_LOOKS, DEFAULT_GHOST_LOOK, type GhostLook, type GhostState } from "./ghosts.ts";
 import { DEFAULT_STYLE_PARAMS, type StyleParams } from "./params.ts";
 import { buildRegion, placeMaps, TILE_UNITS } from "./region.ts";
-import { faceCamera, PERSON_GEOMETRY, personMaterial } from "./sprites.ts";
+import { createSpriteSet, faceCamera, SPRITE_RED, SPRITE_SEEL, type Facing, type SpriteActor } from "./sprites.ts";
 import { buildFlat, buildStyle, DEFAULT_STYLE, type StyleId } from "./styles.ts";
 
 // The live overworld (p1-state-render): the world the game is in, driven by a stream of decoded
@@ -26,11 +26,18 @@ export interface LiveActor {
   y: number;
   step: { dx: number; dy: number; progress: number } | null;
   animFrame: number;
+  /** Which way the sprite faces; down when absent. */
+  facing?: Facing;
 }
 export interface LiveState {
   mapId: number;
-  player: LiveActor;
-  npcs: (LiveActor & { slot: number; visible: boolean })[];
+  /** `transport` picks the player's sheet (walking, bike, surfing); walking when absent. */
+  player: LiveActor & { transport?: "walk" | "bike" | "surf" };
+  /**
+   * `pictureId` is the sprite ID (SPRITE_* constant); when absent, the map data's sprite for
+   * the slot's object is used.
+   */
+  npcs: (LiveActor & { slot: number; visible: boolean; pictureId?: number })[];
   /** 0 normal, 1 black, −1 white. */
   fade: number;
 }
@@ -183,11 +190,13 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   };
 
   // Actors, interpolated one emulator frame behind the newest state.
-  const playerSprite = new THREE.Mesh(PERSON_GEOMETRY, personMaterial("player"));
-  playerSprite.castShadow = true;
+  const sprites = createSpriteSet();
+  const player = sprites.actor();
+  const playerSprite = player.mesh;
   root.add(playerSprite);
-  const npcMaterial = personMaterial("npc");
-  const npcSprites = new Map<number, THREE.Mesh>();
+  const npcSprites = new Map<number, SpriteActor>();
+  const playerSheet = (transport: LiveState["player"]["transport"]) =>
+    transport === "bike" ? world.bikeSprite : world.sprites[transport === "surf" ? SPRITE_SEEL : SPRITE_RED];
 
   interface Sample { at: number; x: number; z: number }
   let prev: Sample | null = null;
@@ -264,23 +273,25 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         const x = prev.x + (last.x - prev.x) * t;
         const z = prev.z + (last.z - prev.z) * t;
         playerSprite.position.set(x, bob(latest.player), z);
+        player.show(playerSheet(latest.player.transport), latest.player.facing ?? "down", latest.player.animFrame);
         target.set(x, 0.5, z);
 
         const seen = new Set<number>();
         for (const npc of latest.npcs) {
           let s = npcSprites.get(npc.slot);
           if (!s) {
-            s = new THREE.Mesh(PERSON_GEOMETRY, npcMaterial);
-            s.castShadow = true;
+            s = sprites.actor();
             npcSprites.set(npc.slot, s);
-            root.add(s);
+            root.add(s.mesh);
           }
           const d = drawn(npc, here);
-          s.position.set(d.x, bob(npc), d.z);
-          s.visible = npc.visible;
+          const sprite = npc.pictureId ?? here.map.npcs[npc.slot - 1]?.sprite;
+          s.show(sprite === undefined ? null : world.sprites[sprite], npc.facing ?? "down", npc.animFrame);
+          s.mesh.position.set(d.x, bob(npc), d.z);
+          s.mesh.visible = npc.visible;
           seen.add(npc.slot);
         }
-        for (const [slot, s] of npcSprites) if (!seen.has(slot)) s.visible = false;
+        for (const [slot, s] of npcSprites) if (!seen.has(slot)) s.mesh.visible = false;
 
         // Fades: the game's own fade drawn over the HD view; the day wraps inside a black one.
         const fade = latest.fade;
@@ -296,7 +307,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
 
       ghosts.update(clock(), camera, locate);
       faceCamera(playerSprite, camera);
-      for (const s of npcSprites.values()) faceCamera(s, camera);
+      for (const s of npcSprites.values()) faceCamera(s.mesh, camera);
       // Keep the fade quad just in front of the camera, filling the view.
       camera.getWorldDirection(fadeQuad.position);
       fadeQuad.position.multiplyScalar(0.6).add(camera.position);
@@ -308,8 +319,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       fadeQuad.geometry.dispose();
       fadeMaterial.dispose();
       ghosts.dispose();
-      (playerSprite.material as THREE.Material).dispose();
-      npcMaterial.dispose();
+      sprites.dispose();
     },
   };
 }

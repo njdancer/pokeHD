@@ -2,6 +2,7 @@ import { MAP_NAMES, type MapData, type MapId, type WorldData } from "@pokehd/rom
 import type { GhostState } from "./ghosts.ts";
 import type { LiveActor, LiveState } from "./live.ts";
 import { buildRegion } from "./region.ts";
+import { initialFacing, type Facing } from "./sprites.ts";
 
 // A stand-in for a recorded emulator session: a scripted walk across connected maps, one state
 // per Game Boy frame, shaped like the decoder's output. It lets the live world be built and
@@ -9,7 +10,6 @@ import { buildRegion } from "./region.ts";
 // Moves follow the game's timing: a walking step takes 8 frames, the walk animation advances
 // every 4, and a door warp fades out and in a third at a time.
 
-export type Facing = "down" | "up" | "left" | "right";
 export interface ScriptedState extends LiveState {
   player: LiveActor & { facing: Facing };
 }
@@ -75,7 +75,9 @@ export function scriptedWalk(world: WorldData, plan: WalkPlan): ScriptedState[] 
     frames.push({
       mapId: map.id,
       player: { ...player, facing, x: player.x - ox, y: player.y - oy },
-      npcs: map.npcs.map((n, i) => ({ slot: i + 1, x: n.x, y: n.y, step: null, animFrame: 0, visible: true })),
+      npcs: map.npcs.map((n, i) => ({
+        slot: i + 1, x: n.x, y: n.y, step: null, animFrame: 0, visible: true, pictureId: n.sprite, facing: initialFacing(n.movement),
+      })),
       fade,
     });
   const at = (sx: number, sy: number) => {
