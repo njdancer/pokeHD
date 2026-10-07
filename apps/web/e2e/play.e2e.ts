@@ -32,6 +32,9 @@ const BALL_SLOTS = [2, 3, 4];
 interface Actor { x: number; y: number; step: unknown; visible?: boolean; slot?: number }
 interface State { mapId: number; mode: "overworld" | "dialog" | "battle"; fade: number; player: Actor; npcs: Actor[] }
 
+/** What the game page exposes with ?stats (see src/client/game/Game.tsx). */
+type Hooked = Window & { __pokehd?: { state: State | null; inWorld: boolean } };
+
 type Dir = "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight";
 const DIRS: { key: Dir; dx: number; dy: number }[] = [
   { key: "ArrowUp", dx: 0, dy: -1 },
@@ -86,7 +89,7 @@ class Player {
 
   state(): Promise<State> {
     return this.page.evaluate(() => {
-      const s = window.__pokehd?.state;
+      const s = (window as Hooked).__pokehd?.state;
       return s ? JSON.parse(JSON.stringify(s)) : null;
     }) as Promise<State>;
   }
@@ -215,13 +218,15 @@ test("a new game from Red's room to Viridian City", async ({ page }) => {
   // Title screen and intro: mash A, with Down now and then to pick the default names.
   for (let tick = 0; ; tick++) {
     const s = await p.state();
-    const inWorld = await page.evaluate(() => window.__pokehd?.inWorld);
+    const inWorld = await page.evaluate(() => (window as Hooked).__pokehd?.inWorld);
     if (inWorld && s.mapId === REDS_HOUSE_2F && s.mode === "overworld" && s.fade === 0) break;
     await p.tap(tick % 64 === 63 ? "Enter" : tick % 8 === 7 ? "ArrowDown" : "z", 33);
     await sleep(100);
   }
   await p.clearDialogs();
-  await expect(page.getByTestId("gb-screen")).not.toHaveAttribute("data-layout", "full");
+  // On the overworld the HD view takes over (unless there's no renderer at all).
+  const hd = !(await page.getByTestId("stats").textContent())?.startsWith("no renderer");
+  if (hd) await expect(page.getByTestId("gb-screen")).not.toHaveAttribute("data-layout", "full");
 
   // Red's room, downstairs, out of the front door.
   await p.walkTo(REDS_HOUSE_2F, [5, 1]);
