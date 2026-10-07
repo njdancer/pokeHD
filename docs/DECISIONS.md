@@ -94,10 +94,11 @@ The HD camera sees far more than the Game Boy's 10×9-tile screen, so the overwo
 maps (and connected neighbours) from ROM data, positioned by WRAM state. Text boxes and menus
 are decoded from the window tilemap via the charmap and re-typeset with a modern font.
 
-## D14. Emulator core: SameBoy, compiled to wasm (PROPOSED, awaiting Nick's OK)
+## D14. Emulator core: SameBoy, compiled to wasm
 
-**Status: proposal from the p1-emu spike. Not settled until Nick approves; B2 doesn't start
-before then.** Evidence and reproduction in `spikes/emu/README.md`.
+Approved by Nick on 2026-10-07 after the p1-emu spike. Evidence and reproduction in
+`spikes/emu/README.md`. SameBoy also had far more recent upstream activity than binjgb (69 vs 14
+commits in the past year), though mostly from one author; we pin a commit either way.
 
 Use SameBoy's core (`Core/*.c`, Expat/MIT licence) built with Emscripten into `packages/emu`,
 pinned to a commit, with a thin C wrapper and the debugger, rewind and cheat modules compiled
