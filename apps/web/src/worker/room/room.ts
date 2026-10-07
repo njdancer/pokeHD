@@ -3,6 +3,7 @@
 import {
   CloseCode,
   parseClientMessage,
+  type Gift,
   type PlayerInfo,
   type Presence,
   type ServerMessage,
@@ -16,8 +17,27 @@ export interface Peer {
   close(code: number, reason: string): void;
 }
 
+/** A gift waiting for its receiver (D20), as the room stores it. */
+export interface StoredGift {
+  id: string;
+  from: PlayerInfo;
+  gift: Gift;
+}
+
+/**
+ * Gifts the room holds until their receiver acknowledges them. The sender's game has already
+ * saved without the gift, so the room is the only copy: it lives in Durable Object storage.
+ */
+export interface GiftStore {
+  /** Stores (or, for an ID already stored, keeps) a gift for player `to`. */
+  put(to: string, gift: StoredGift): void;
+  /** Gifts waiting for player `to`, oldest first. */
+  list(to: string): StoredGift[];
+  delete(to: string, id: string): void;
+}
+
 /** A new connection: replace the player's old one, greet them, tell everyone else. */
-export function join(peers: readonly Peer[], newcomer: Peer): void {
+export function join(peers: readonly Peer[], newcomer: Peer, gifts?: GiftStore): void {
   const others = peers.filter((p) => p !== newcomer);
   const previous = others.filter((p) => p.player.id === newcomer.player.id);
   for (const old of previous) {
@@ -33,10 +53,12 @@ export function join(peers: readonly Peer[], newcomer: Peer): void {
   });
   // A reconnect isn't news to anyone; the ghost just carries on from its next presence.
   if (previous.length === 0) broadcast(present, { type: "joined", player: newcomer.player });
+  // Gifts that arrived while they were away, until they acknowledge them.
+  for (const g of gifts?.list(newcomer.player.id) ?? []) newcomer.send({ type: "gift", ...g });
 }
 
 /** A frame from `from`. */
-export function receive(peers: readonly Peer[], from: Peer, frame: string | ArrayBuffer): void {
+export function receive(peers: readonly Peer[], from: Peer, frame: string | ArrayBuffer, gifts?: GiftStore): void {
   const message = parseClientMessage(frame);
   if (!message) return from.send({ type: "error", reason: "bad-message" });
   switch (message.type) {
@@ -50,6 +72,18 @@ export function receive(peers: readonly Peer[], from: Peer, frame: string | Arra
       to.send({ type: "link", from: from.player.id, message: message.message });
       return;
     }
+    case "gift": {
+      if (!gifts || message.to === from.player.id) return from.send({ type: "error", reason: "bad-message" });
+      const stored: StoredGift = { id: message.id, from: from.player, gift: message.gift };
+      gifts.put(message.to, stored);
+      from.send({ type: "gift-stored", id: message.id });
+      // The receiver may be online; otherwise it gets the gift when it next connects.
+      for (const to of peers) if (to.player.id === message.to) to.send({ type: "gift", ...stored });
+      return;
+    }
+    case "gift-ack":
+      gifts?.delete(from.player.id, message.id);
+      return;
   }
 }
 
