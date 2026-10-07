@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { checkRom, type RomHeader } from "@pokehd/rom";
 import { Cartridge } from "./Cartridge.tsx";
 import { GameView } from "./GameView.tsx";
+import { fetchDevRom } from "./dev-rom.ts";
 import { forgetRom, loadStoredRom, storeRom } from "./rom-store.ts";
 
 type State = { kind: "loading" } | { kind: "needs-rom"; error?: string } | { kind: "ready"; header: RomHeader };
@@ -9,19 +10,22 @@ type State = { kind: "loading" } | { kind: "needs-rom"; error?: string } | { kin
 export function App() {
   const [state, setState] = useState<State>({ kind: "loading" });
 
-  useEffect(() => {
-    loadStoredRom().then(async (rom) => {
-      const check = rom && (await checkRom(rom));
-      setState(check && check.ok ? { kind: "ready", header: check.header } : { kind: "needs-rom" });
-    });
-  }, []);
-
   const accept = async (rom: Uint8Array) => {
     const check = await checkRom(rom);
     if (!check.ok) return setState({ kind: "needs-rom", error: check.reason });
     await storeRom(rom);
     setState({ kind: "ready", header: check.header });
   };
+
+  useEffect(() => {
+    (async () => {
+      const devRom = await fetchDevRom();
+      if (devRom) return accept(devRom);
+      const rom = await loadStoredRom();
+      const check = rom && (await checkRom(rom));
+      setState(check && check.ok ? { kind: "ready", header: check.header } : { kind: "needs-rom" });
+    })();
+  }, []);
 
   const forget = async () => {
     await forgetRom();
