@@ -209,8 +209,10 @@ export const PLAY_USE: Partial<PlaywrightTestOptions & PlaywrightWorkerOptions> 
   launchOptions: {
     headless: !process.env["POKEHD_PLAY_HEADED"],
     // POKEHD_PLAY_NO_GPU=1: no renderer at all (the page falls back to the Game Boy screen), for
-    // checking the script where only a slow software renderer exists.
-    args: process.env["POKEHD_PLAY_NO_GPU"] ? ["--disable-gpu", "--disable-software-rasterizer"] : ["--enable-unsafe-webgpu"],
+    // checking the script where only a slow software renderer exists. No --enable-unsafe-webgpu:
+    // WebGPU is on by default where it works, and in Chromium 141 that flag swaps in an older
+    // texture-view API that three.js trips over, so the run wouldn't match a player's browser.
+    args: process.env["POKEHD_PLAY_NO_GPU"] ? ["--disable-gpu", "--disable-software-rasterizer"] : [],
   },
 };
 
