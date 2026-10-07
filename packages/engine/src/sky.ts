@@ -1,20 +1,40 @@
 import * as THREE from "three/webgpu";
-import { color, mix, normalize, positionWorld, smoothstep, uniform } from "three/tsl";
+import { cameraPosition, dot, max, mix, normalize, positionWorld, pow, smoothstep, uniform } from "three/tsl";
 
-// Placeholder backdrop: a daytime sky dome drifting between morning and late afternoon.
-// It proves the WebGPU/TSL pipeline end to end; the real world renderer replaces it.
+// Stylised daytime sky: a horizon-to-zenith gradient plus a sun disc with a soft halo that
+// feeds the bloom. The look-dev rig drives every uniform from the time of day.
 export function createSky(scene: THREE.Scene) {
-  const dayPhase = uniform(0); // 0 = morning, 1 = late afternoon
-  const height = smoothstep(-0.1, 0.8, normalize(positionWorld).y);
-  const zenith = mix(color(0x5d8fd6), color(0x4a76c4), dayPhase);
-  const horizon = mix(color(0xf3d9b8), color(0xf5b97a), dayPhase);
-  const material = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthWrite: false });
-  material.colorNode = mix(horizon, zenith, height);
-  scene.add(new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), material));
+  const zenith = uniform(new THREE.Color(0x5d8fd6));
+  const horizon = uniform(new THREE.Color(0xf3d9b8));
+  const sunColor = uniform(new THREE.Color(0xffffff));
+  const sunDirection = uniform(new THREE.Vector3(0, 1, 0));
+  const discSize = uniform(1); // degrees, roughly
+  const discIntensity = uniform(10);
+
+  const dir = normalize(positionWorld.sub(cameraPosition));
+  const height = smoothstep(-0.05, 0.7, dir.y);
+  const cosAngle = dot(dir, sunDirection);
+  const discCos = discSize.mul(Math.PI / 180).cos();
+  const disc = smoothstep(discCos.sub(0.00004), discCos, cosAngle);
+  const halo = pow(max(cosAngle, 0), 64).mul(0.25);
+
+  const material = new THREE.MeshBasicNodeMaterial({ side: THREE.BackSide, depthWrite: false, fog: false });
+  material.colorNode = mix(horizon, zenith, height).add(sunColor.mul(disc.mul(discIntensity).add(halo)));
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(500, 48, 24), material);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -1;
+  scene.add(mesh);
+
   return {
-    update(seconds: number) {
-      // Morning → afternoon → morning roughly every four minutes.
-      dayPhase.value = 0.5 - 0.5 * Math.cos((seconds / 240) * Math.PI * 2);
+    zenith: zenith.value,
+    horizon: horizon.value,
+    sunColor: sunColor.value,
+    sunDirection: sunDirection.value,
+    discSize,
+    discIntensity,
+    /** Keeps the dome centred on the camera so it never clips. */
+    follow(camera: THREE.Camera) {
+      mesh.position.copy(camera.position);
     },
   };
 }

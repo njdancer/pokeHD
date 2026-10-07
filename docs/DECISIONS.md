@@ -121,3 +121,14 @@ the fallback if SameBoy's CPU cost bites on phones. **Gambatte** (gambatte-core 
 GPLv2 would put `packages/emu` and the shipped wasm under the GPL once friends load it, its
 original repo went private, and its wasm is the largest (202 KB gzip). **mGBA** (MPL-2.0) was a
 reference point only; a GBA-first core with nothing extra for DMG.
+
+## D15. The look: a day cycle of Golden hour → Diorama → Golden hour
+
+From the p0-lookdev presets (Diorama, Clear day, Golden hour, Storybook), Nick sat between
+Diorama and Golden hour, disliked Clear day, and left the call to Claude. The engine blends three
+looks across the day: Golden hour in the morning, Diorama at midday, Golden hour again in the late
+afternoon. Mornings still read paler than afternoons because the sun's own colour and angle
+follow the time of day. What this commits to: a filmic AgX tone curve, a strong tilt-shift
+miniature feel, soft shadows, light haze and gentle bloom. Clear day (flat, saturated, little
+blur) was dropped. Every value stays tunable in the `?lookdev` panel; refine within this
+direction rather than reopening it.
