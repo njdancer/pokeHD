@@ -65,7 +65,10 @@ export interface Npc extends Actor {
 
 export interface OverworldState {
   mode: OverworldMode;
-  /** wCurMap; also the index into MAP_NAMES and the map headers. */
+  /**
+   * wCurMap; also the index into MAP_NAMES and the map headers. `OverworldDecoder` holds it
+   * back during a warp's fade-out (see there); `decodeOverworldState` reports it raw.
+   */
   mapId: number;
   player: Player;
   /** The current map's NPC slots that hold a sprite, in slot order. */
@@ -96,6 +99,10 @@ const rBGP = 0xff47;
  */
 export const OVERWORLD_WATCHES = {
   map: sym("wCurMap"),
+  /** wCurMapTileset, wCurMapHeight, wCurMapWidth: change when a new map's header loads. */
+  mapHeader: sym("wCurMapTileset", 3),
+  /** wWarpedFromWhichMap: the map the last warp left, to tell warps from connections. */
+  warpedFrom: sym("wWarpedFromWhichMap"),
   /** wYCoord, wXCoord (adjacent). */
   coords: sym("wYCoord", 2),
   walkCounter: sym("wWalkCounter"),

@@ -61,6 +61,14 @@ PC hooks and register writes.
 ## Overworld state
 
 `src/state/` turns watched WRAM into an `OverworldState` (map, player, NPCs, mode, fade) for the
-live world renderer. Pass `OVERWORLD_WATCHES` to `EmulatorHost.watch`, then decode each
-`FrameMessage.watched` with `decodeOverworldState`. Positions are in step cells (16 px) with
-the step in progress alongside, so the renderer interpolates between frames.
+live world renderer. Pass `OVERWORLD_WATCHES` to `EmulatorHost.watch`, then feed each
+`FrameMessage.watched` to one `OverworldDecoder`, in order. Positions are in step cells (16 px)
+with the step in progress alongside, so the renderer interpolates between frames.
+
+The decoder holds the map ID back during a warp's fade-out: the game writes the new map
+before fading, so the raw value (`decodeOverworldState`) would switch maps with the old one
+still on screen. Connections switch in the same frame the player crosses.
+
+`POKEHD_RECORD_STATE=out.json pnpm vitest run packages/emu/src/state` records the ROM test's
+walk from Red's room to Viridian City, one state per frame, for building the renderer without
+an emulator.

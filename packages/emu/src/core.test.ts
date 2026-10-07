@@ -1,29 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Button, CYCLES_PER_FRAME, GameBoy, SCREEN_HEIGHT, SCREEN_WIDTH } from "./core.ts";
+import { playIntro } from "./testing.ts";
 
 const ROM_PATH = new URL("../../../rom/pokeblue.gb", import.meta.url);
 const WASM_PATH = new URL("./generated/sameboy.wasm", import.meta.url);
 const hasRom = existsSync(ROM_PATH);
 
 const REDS_HOUSE_2F = 0x26;
-
-/** Mashes A (with the odd Down and Start) through the intro until the overworld loop runs. */
-function playIntro(gb: GameBoy): number {
-  let reached = false;
-  const remove = gb.addHook("OverworldLoop", () => (reached = true));
-  let frame = 0;
-  while (!reached && frame < 20_000) {
-    const press = frame % 64 < 8 ? Button.Down : frame % 512 < 8 ? Button.Start : Button.A;
-    gb.setButtons(frame % 8 < 2 ? press : 0);
-    gb.runFrame();
-    frame++;
-  }
-  remove();
-  gb.setButtons(0);
-  for (let i = 0; i < 60; i++) gb.runFrame();
-  return frame;
-}
 
 const position = (gb: GameBoy) => [gb.readSymbol("wCurMap"), gb.readSymbol("wXCoord"), gb.readSymbol("wYCoord")];
 
