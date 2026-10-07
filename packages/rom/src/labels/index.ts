@@ -1,11 +1,27 @@
 import type { Tileset } from "../world/types.ts";
+import { GYM } from "./gym.ts";
+import { HOUSE } from "./house.ts";
 import { OVERWORLD } from "./overworld.ts";
+import { POKECENTER } from "./pokecenter.ts";
+import { REDS_HOUSE } from "./reds-house.ts";
 import type { Label, TilesetLabelTable } from "./types.ts";
 
 export { LABELS, type Label, type TilesetLabelTable } from "./types.ts";
 
-/** Hand-labelled tilesets, by tileset name. Others are seeded from the ROM only. */
-export const LABEL_TABLES: Partial<Record<string, TilesetLabelTable>> = { OVERWORLD };
+/**
+ * Hand-labelled tilesets, by tileset name. Others are seeded from the ROM only. Tilesets that share
+ * graphics and blocks in ROM share a table.
+ */
+export const LABEL_TABLES: Partial<Record<string, TilesetLabelTable>> = {
+  OVERWORLD,
+  REDS_HOUSE_1: REDS_HOUSE,
+  REDS_HOUSE_2: REDS_HOUSE,
+  HOUSE,
+  POKECENTER,
+  MART: POKECENTER,
+  GYM,
+  DOJO: GYM,
+};
 
 /** Labels the ROM's own lists imply: doors, tall grass, ledges. */
 export function seedLabels(tileset: Tileset): (Label | undefined)[] {
