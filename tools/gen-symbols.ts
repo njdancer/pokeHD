@@ -6,6 +6,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 /** Symbols the codebase uses. Extend as tasks need more; keep each group sorted. */
 export const ALLOWLIST: readonly string[] = [
+  // Code addresses for emulator hooks and tests (p1-emu)
+  "DelayFrame",
+  "OverworldLoop",
   // Map headers (p0-extract)
   "MapHeaderBanks",
   "MapHeaderPointers",
