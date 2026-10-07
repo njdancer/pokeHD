@@ -8,13 +8,14 @@ import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
 import { parseWorld, type RomHeader } from "@pokehd/rom";
 import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../input/index.ts";
 import { SaveControls } from "../saves/SaveControls.tsx";
+import { cloudBackup } from "../saves/cloud-save.ts";
 import { openSaveSlot, storeSave } from "../saves/save-store.ts";
 import { me } from "../room/account.ts";
 import { RoomClient, type Friend, type RoomStatus } from "../room/client.ts";
 import { RoomLink } from "../room/link.ts";
 import { LinkPicker } from "../room/LinkPicker.tsx";
 import { toGhosts, toPresence } from "./presence.ts";
-import { mapLoaded, screenLayout, type ScreenLayout } from "./screen.ts";
+import { inWorldTracker, screenLayout, type ScreenLayout } from "./screen.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
@@ -78,6 +79,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [room, setRoom] = useState<{ status: RoomStatus; friends: Friend[] } | null>(null);
   /** The link cable over the room, once the room has said who we are. */
   const [link, setLink] = useState<RoomLink | null>(null);
+  /** Another device backed up a newer save than this browser's; restoring it is in Settings. */
+  const [cloudNewer, setCloudNewer] = useState(false);
   const touch = useTouchDevice();
   // Bumped by a .sav import: restarts the emulator on the imported save.
   const [boot, setBoot] = useState(0);
@@ -134,11 +137,13 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       live = createLiveWorld(world);
       const slot = await openSaveSlot(romKey);
       if (disposed) return;
+      void cloudBackup(romKey).status().then((s) => !disposed && setCloudNewer(s.kind === "newer"), () => {});
 
       // The emulator starts at once; the HD view joins when the renderer is ready.
       const ctx = screenRef.current!.getContext("2d")!;
       const image = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
       const decoder = new OverworldDecoder();
+      const trackInWorld = inWorldTracker();
       let latest: OverworldState | null = null;
       let emuFrames = 0;
       host = new EmulatorHost({
@@ -151,7 +156,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           emuFrames++;
           const bytes = watched as OverworldWatched;
           const state = decoder.decode(bytes);
-          const inWorld = mapLoaded(bytes);
+          const inWorld = trackInWorld(bytes);
           // Before the first map loads (title, intro) the state is meaningless; the HD view waits.
           if (inWorld) live!.push(state, performance.now() / 1000);
           latest = state;
@@ -295,6 +300,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
         <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
         <button type="button" onClick={() => setSettings((v) => !v)} aria-expanded={settings}>Settings</button>
+        {cloudNewer && <button type="button" onClick={() => setSettings(true)}>Newer save in the cloud</button>}
         {room && <RoomBadge status={room.status} friends={room.friends.length} />}
         {message && <span role="status">{message}</span>}
       </div>

@@ -108,6 +108,12 @@ export const OVERWORLD_WATCHES = {
   walkCounter: sym("wWalkCounter"),
   transport: sym("wWalkBikeSurfState"),
   inBattle: sym("wIsInBattle"),
+  /**
+   * wCurrentMapScriptFlags: EnterMap sets bits 5 and 6 (BIT_CUR_MAP_LOADED_1/2) and map scripts
+   * clear them. Unlike the map header, it isn't part of the save, so the main menu's save
+   * preview doesn't set it: the first sign that the overworld is actually running.
+   */
+  mapScriptFlags: sym("wCurrentMapScriptFlags"),
   /** The game's copy of rWY; the window is on screen when it's below 144. */
   windowY: sym("hWY"),
   numSprites: sym("wNumSprites"),
