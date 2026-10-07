@@ -79,7 +79,14 @@ test("a new game from Red's room to Viridian City", async ({ page }) => {
   await p.leave("ArrowUp", VIRIDIAN_CITY);
   s = await p.walkTo(VIRIDIAN_CITY, [20, 28]);
   expect(s.mapId).toBe(VIRIDIAN_CITY);
-  await page.screenshot({ path: test.info().outputPath("viridian.png") });
+  await p.screenshot("viridian.png");
+
+  // Display frames over 50 ms, with what the page was doing at the time. Frames that overlap a
+  // screenshot are the test's own doing, so they're kept apart.
+  type Slow = { at: number; ms: number; map: number | null };
+  const all = await page.evaluate(() => (window as { __pokehd?: { slow: unknown[] } }).__pokehd?.slow ?? []) as Slow[];
+  const duringShot = (f: Slow) => p.shots.some(([a, b]) => f.at >= a && f.at - f.ms <= b);
+  const slow = all.filter((f) => !duringShot(f));
 
   // Frame rate per map, on the overworld.
   const byMap = new Map<number, typeof p.samples>();
@@ -89,12 +96,11 @@ test("a new game from Red's room to Viridian City", async ({ page }) => {
     samples: xs.length,
     meanFps: +(xs.reduce((a, x) => a + x.fps, 0) / xs.length).toFixed(1),
     minFps: Math.min(...xs.map((x) => x.fps)),
-    worstFrameMs: Math.max(...xs.map((x) => x.worstMs)),
+    /** The slowest frame on this map, screenshots aside (frames under 50 ms aren't logged). */
+    worstFrameMs: Math.max(0, ...slow.filter((f) => f.map === map).map((f) => f.ms)),
     meanCpuMs: +(xs.reduce((a, x) => a + x.cpuMs, 0) / xs.length).toFixed(2),
   }));
-  // Display frames over 50 ms, with what the page was doing at the time.
-  const slow = await page.evaluate(() => (window as { __pokehd?: { slow: unknown[] } }).__pokehd?.slow ?? []);
-  const report = { log: p.log, summary, errors, slow };
+  const report = { log: p.log, summary, errors, slow, slowDuringScreenshots: all.filter(duringShot) };
   writeFileSync(test.info().outputPath("play-report.json"), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
   // Expected noise: no renderer in a GPU-less browser, and /api/me's 401 when not signed in.
