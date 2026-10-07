@@ -9,6 +9,9 @@ import { parseWorld, type RomHeader } from "@pokehd/rom";
 import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../input/index.ts";
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { openSaveSlot, storeSave } from "../saves/save-store.ts";
+import { me } from "../room/account.ts";
+import { RoomClient, type RoomStatus } from "../room/client.ts";
+import { toGhosts, toPresence } from "./presence.ts";
 import { mapLoaded, screenLayout, type ScreenLayout } from "./screen.ts";
 import "./game.css";
 
@@ -69,6 +72,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [message, setMessage] = useState<string>("Starting…");
   const [stats, setStats] = useState<Stats>();
   const [noHd, setNoHd] = useState(false);
+  /** The shared world: how we're connected and how many friends are in it. */
+  const [room, setRoom] = useState<{ status: RoomStatus; friends: number } | null>(null);
   const touch = useTouchDevice();
   // Bumped by a .sav import: restarts the emulator on the imported save.
   const [boot, setBoot] = useState(0);
@@ -103,6 +108,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     let engine: Engine | null = null;
     let live: LiveWorld | null = null;
     let host: EmulatorHost | null = null;
+    let roomClient: RoomClient | null = null;
+    let unsubscribeRoom = () => {};
     let raf = 0;
     const joypad = new JoypadInput({
       onChange: (mask, source) => {
@@ -143,6 +150,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           // Before the first map loads (title, intro) the state is meaningless; the HD view waits.
           if (inWorld) live!.push(state, performance.now() / 1000);
           latest = state;
+          roomClient?.sendPresence(toPresence(state, inWorld));
           const scene = sceneRef.current;
           if (scene.mode !== state.mode || scene.inWorld !== inWorld) {
             sceneRef.current = { mode: state.mode, inWorld };
@@ -154,6 +162,25 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       host.watch(OVERWORLD_WATCHES);
       host.setButtons(joypad.mask);
       hostRef.current = host;
+
+      // Friends, for players signed in with an invite (D19); everyone else plays alone.
+      void me().then(
+        (player) => {
+          if (disposed) return;
+          if (!player) return setRoom({ status: "signed-out", friends: 0 });
+          const client = new RoomClient();
+          roomClient = client;
+          const show = ({ status, friends }: { status: RoomStatus; friends: Record<string, unknown> }) =>
+            setRoom({ status, friends: Object.keys(friends).length });
+          unsubscribeRoom = client.store.subscribe((next, prev) => {
+            if (next.friends !== prev.friends) live!.setGhosts(toGhosts(next.friends));
+            if (next.status !== prev.status || next.friends !== prev.friends) show(next);
+          });
+          client.connect();
+          show(client.store.getState());
+        },
+        () => {}, // Offline or no server: play alone.
+      );
 
       if (showStats) {
         // For scripted play-throughs (e2e/play.e2e.ts): the newest decoded state, every frame.
@@ -213,6 +240,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       disposed = true;
       cancelAnimationFrame(raf);
       joypad.dispose();
+      unsubscribeRoom();
+      roomClient?.close();
       host?.dispose();
       hostRef.current = null;
       engine?.dispose();
@@ -222,6 +251,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       sceneRef.current = { mode: "overworld", inWorld: false };
       setLayout("full");
       setNoHd(false);
+      setRoom(null);
       setSound(false);
     };
   }, [rom, romKey, boot]);
@@ -252,6 +282,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
         <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
         <button type="button" onClick={() => setSettings((v) => !v)} aria-expanded={settings}>Settings</button>
+        {room && <RoomBadge {...room} />}
         {message && <span role="status">{message}</span>}
       </div>
       {settings && (
@@ -286,4 +317,17 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       {input && touch && <TouchPad onChange={onTouch} />}
     </div>
   );
+}
+
+function RoomBadge({ status, friends }: { status: RoomStatus; friends: number }) {
+  if (status === "signed-out") return <a className="room-badge" href="/join">Play with friends</a>;
+  const text: Record<RoomStatus, string> = {
+    connecting: "Connecting…",
+    open: friends === 1 ? "1 friend online" : `${friends} friends online`,
+    reconnecting: "Reconnecting…",
+    "signed-out": "",
+    replaced: "Playing in another tab",
+    closed: "Offline",
+  };
+  return <span className="room-badge" data-status={status}>{text[status]}</span>;
 }

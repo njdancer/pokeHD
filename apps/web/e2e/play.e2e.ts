@@ -292,5 +292,6 @@ test("a new game from Red's room to Viridian City", async ({ page }) => {
   const report = { log: p.log, summary, errors };
   writeFileSync(test.info().outputPath("play-report.json"), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
-  expect(errors.filter((e) => !/renderer failed/.test(e))).toEqual([]);
+  // Expected noise: no renderer in a GPU-less browser, and /api/me's 401 when not signed in.
+  expect(errors.filter((e) => !/renderer failed|status of 401/.test(e))).toEqual([]);
 });
