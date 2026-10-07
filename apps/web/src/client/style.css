@@ -35,3 +35,7 @@ html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(-
   font: inherit; color: var(--fg); background: #ffffff14; border: 1px solid #ffffff26;
   border-radius: 6px; padding: .25rem .6rem; cursor: pointer;
 }
+.map-viewer { height: 100%; overflow: auto; padding: 1rem; }
+.map-viewer header { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1rem; color: var(--muted); }
+.map-viewer select { font: inherit; }
+.map-viewer canvas { display: block; image-rendering: pixelated; }
