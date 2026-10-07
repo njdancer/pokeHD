@@ -80,13 +80,14 @@ an exchange takes ~1 ms, and with a 200 ms round trip the two sides' loops no lo
 |---|---|---|
 | 1 ms | ✅ | ✅ |
 | 4 ms | ✅ | ✅ |
-| 16 ms | ❌ **corrupt**: completes, but Alice receives species 253 (glitch mon) | ASYNC16 |
-| 50 ms | ❌ hangs in the trade menu | ASYNC50 |
-| 100 ms | ❌ **corrupt**: species 253 again | ASYNC100 |
-| 200 ms | ❌ never syncs at the receptionist (48k bytes of retries) | ASYNC200 |
+| 16 ms | ❌ **corrupt**: completes, but Alice receives species 253 (glitch mon) | ❌ freezes mid-battle |
+| 50 ms | ❌ hangs during the trade | ❌ freezes mid-battle |
+| 100 ms | ❌ **corrupt**: species 253 again | ❌ freezes mid-battle |
+| 200 ms | ❌ never settles: one side drops back to the Pokémon Center (48k bytes of retries) | ❌ freezes mid-battle |
 
 The pipelining tolerates a frame or so of staleness, then data shifts by a byte and the game
-accepts it: a silently broken trade is the worst failure a player could get.
+accepts it: a silently broken trade is the worst failure a player could get. Battles reach the
+first turn and then both sides wait forever on each other.
 
 ### dual: each client runs both Game Boys; only joypad input crosses the network
 
