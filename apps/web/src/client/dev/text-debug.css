@@ -1,0 +1,23 @@
+.text-debug { max-width: 1320px; height: 100%; overflow: auto; margin: 0 auto; padding: 4vh 16px; }
+.text-debug h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+.text-debug .screens { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.text-debug canvas,
+.text-debug .model { width: 100%; aspect-ratio: 160 / 144; display: block; }
+.text-debug canvas { image-rendering: pixelated; background: #000; }
+.text-debug .model {
+  position: relative;
+  container-type: inline-size;
+  background: var(--panel, #1b1d22);
+  border: 1px solid var(--muted, #888);
+  font: 4.2cqw/1 ui-monospace, monospace;
+}
+.text-debug .model.hidden { opacity: .4; }
+.text-debug .box { position: absolute; border: 2px solid currentColor; border-radius: 4px; box-sizing: border-box; background: var(--panel, #1b1d22); }
+.text-debug .line { position: absolute; white-space: pre; display: flex; align-items: center; }
+.text-debug .line.loose { color: var(--muted, #aaa); }
+.text-debug .line.selected { background: color-mix(in srgb, currentColor 25%, transparent); }
+.text-debug .line.chosen { text-decoration: underline; }
+.text-debug .summary { line-height: 1.6; }
+.text-debug .summary .current { font-weight: 700; text-decoration: underline; }
+.text-debug .status { color: var(--muted); }
+.text-debug pre { font-size: .75rem; max-height: 40vh; overflow: auto; }
