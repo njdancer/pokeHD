@@ -26,6 +26,7 @@ test.skip(!process.env.POKEHD_GIFTS || !token || !existsSync(ROM_PATH), "POKEHD_
 
 type Hooked = Window & { __pokehd?: { state: { mode: string } | null; inWorld: boolean } };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const log = (...args: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...args);
 
 /**
  * A battery save in Red's room, made by the game: a new game, then (for the sender) two
@@ -70,6 +71,14 @@ async function makeSave(sender: boolean): Promise<Uint8Array> {
 /** A browser profile signed in as a new player, with `sram` as its save, in the overworld. */
 async function player(browser: Browser, name: string, sram: Uint8Array): Promise<Page> {
   const page = await (await browser.newContext()).newPage();
+  // No HD view: two pages rendering it in software WebGL starve each other, and gifts don't
+  // need it. The page falls back to the Game Boy screen alone.
+  await page.addInitScript(() => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string, ...rest: unknown[]) {
+      return kind.startsWith("webgl") ? null : (getContext as (...a: unknown[]) => unknown).call(this, kind, ...rest);
+    } as typeof getContext;
+  });
   const invite = await page.request.post("/api/admin/invites", { headers: { authorization: `Bearer ${token}` }, data: {} });
   const { code } = (await invite.json()) as { code: string };
   expect((await page.request.post("/api/join", { data: { code, name } })).ok()).toBe(true);
@@ -83,6 +92,7 @@ async function player(browser: Browser, name: string, sram: Uint8Array): Promise
     },
     { key: POKEBLUE_SHA1, bytes: [...sram] },
   );
+  log(name, "save stored");
   await page.goto("/?stats");
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   // Title, CONTINUE, the save's summary: A until the overworld loop runs.
@@ -97,13 +107,15 @@ async function player(browser: Browser, name: string, sram: Uint8Array): Promise
     await page.keyboard.up("z");
     await sleep(250);
   }
+  log(name, "in the overworld", await page.locator(".room-badge").textContent().catch(() => "no badge"));
   await expect(page.getByText(/friends? online/)).toBeVisible({ timeout: 20_000 });
   return page;
 }
 
 test("friends send each other money, an item and a Pokémon", async ({ browser }) => {
-  test.setTimeout(10 * 60_000);
+  test.setTimeout(25 * 60_000);
   const [senderSave, receiverSave] = [await makeSave(true), await makeSave(false)];
+  log("saves made");
   const stamp = Date.now() % 10000;
   const sender = await player(browser, `Sam${stamp}`, senderSave);
   const receiver = await player(browser, `Alex${stamp}`, receiverSave);
