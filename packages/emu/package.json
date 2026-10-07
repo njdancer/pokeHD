@@ -2,7 +2,7 @@
   "name": "@pokehd/emu",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": { ".": "./src/index.ts", "./link-scenario": "./src/link-scenario.ts" },
   "scripts": {
     "typecheck": "tsc -p .",
     "build:wasm": "native/build.sh"
