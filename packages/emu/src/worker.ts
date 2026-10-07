@@ -5,6 +5,7 @@
 // never starves and video follows at the core's own ~59.73 Hz. Without audio (no user gesture
 // yet, or muted), a wall-clock timer runs frames at FRAME_RATE instead.
 import { FRAME_RATE, GameBoy } from "./core.ts";
+import { LinkPort } from "./link.ts";
 import type { FromWorker, FromWorklet, ToWorker, ToWorklet, Watch } from "./protocol.ts";
 
 const AUDIO_LEAD_FRAMES = 3;
@@ -24,6 +25,7 @@ let paused = false;
 let frames = 0;
 let watches: Record<string, Watch> = {};
 let lastSramFlush = 0;
+let link: LinkPort | undefined;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
 
@@ -108,6 +110,21 @@ scope.onmessage = async ({ data }) => {
         break;
       case "load-state":
         gb?.loadState(data.state);
+        break;
+      case "link-open":
+        link?.dispose();
+        link = gb && new LinkPort(gb, {
+          role: data.role,
+          connectTimeoutFrames: data.connectTimeoutFrames,
+          send: (message) => post({ type: "link-send", message }),
+        });
+        break;
+      case "link-receive":
+        link?.receive(data.message);
+        break;
+      case "link-close":
+        link?.dispose();
+        link = undefined;
         break;
     }
   } catch (err) {
