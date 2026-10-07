@@ -73,3 +73,4 @@ html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(-
 .styles-panel .sliders { display: grid; grid-template-columns: 1fr; gap: .15rem; }
 .styles-panel .sliders label { display: grid; grid-template-columns: 6.5rem 1fr 2.5rem; gap: .4rem; align-items: center; }
 .styles-panel output { text-align: right; color: var(--fg); }
+.live-page { position: fixed; inset: 0; }

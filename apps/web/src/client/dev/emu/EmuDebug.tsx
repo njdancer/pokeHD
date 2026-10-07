@@ -1,21 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, EmulatorHost, SCREEN_HEIGHT, SCREEN_WIDTH } from "@pokehd/emu";
-import { SYMBOLS } from "@pokehd/rom";
+import { readHeader, SYMBOLS, type RomHeader } from "@pokehd/rom";
 import { fetchDevRom } from "../../dev-rom.ts";
 import { loadStoredRom } from "../../rom-store.ts";
+import { SaveControls } from "../../saves/SaveControls.tsx";
+import { openSaveSlot, romKey } from "../../saves/save-store.ts";
 import "./emu-debug.css";
 
-const KEYS: Record<string, number> = {
-  ArrowUp: Button.Up,
-  ArrowDown: Button.Down,
-  ArrowLeft: Button.Left,
-  ArrowRight: Button.Right,
-  KeyZ: Button.A,
-  KeyX: Button.B,
-  Enter: Button.Start,
-  ShiftRight: Button.Select,
-  Backspace: Button.Select,
-};
+import { BUTTON_NAMES, JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../../input/index.ts";
+
+const heldNames = (mask: number) => BUTTON_NAMES.filter((name) => mask & Button[name]).join(" ") || "none";
 
 /** Dev page (/dev/emu): the raw emulator in a 2D canvas, with live WRAM readouts. */
 export function EmuDebug() {
@@ -25,6 +19,12 @@ export function EmuDebug() {
   const savedRef = useRef<Uint8Array>(null);
   const [status, setStatus] = useState("Loading ROM…");
   const [sound, setSound] = useState(false);
+  const [input, setInput] = useState<JoypadInput>();
+  const [held, setHeld] = useState(0);
+  const touch = useTouchDevice();
+  const [cart, setCart] = useState<{ key: string; header: RomHeader }>();
+  // Bumped by a .sav import: restarts the emulator on the imported save.
+  const [boot, setBoot] = useState(0);
 
   const enableSound = async () => {
     await hostRef.current?.enableAudio();
@@ -32,12 +32,25 @@ export function EmuDebug() {
   };
 
   useEffect(() => {
+    const joypad = new JoypadInput({
+      onChange: (mask, source) => {
+        hostRef.current?.setButtons(mask);
+        setHeld(mask);
+        // Keyboard and touch changes come from user gestures, which may start audio; gamepad polls don't.
+        if (mask && source !== "gamepad") void enableSound();
+      },
+    });
+    setInput(joypad);
     let host: EmulatorHost | undefined;
     let cancelled = false;
     (async () => {
       const rom = (await fetchDevRom()) ?? (await loadStoredRom());
       if (cancelled) return;
       if (!rom) return setStatus("No ROM yet. Load one on the main page first.");
+      const key = await romKey(rom);
+      const slot = await openSaveSlot(key);
+      if (cancelled) return;
+      setCart({ key, header: readHeader(rom) });
       const ctx = canvasRef.current!.getContext("2d")!;
       const image = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
       let fpsFrames = 0;
@@ -45,6 +58,8 @@ export function EmuDebug() {
       let fps = 0;
       host = new EmulatorHost({
         rom,
+        sram: slot.sram,
+        onSram: slot.persist,
         onFrame: ({ pixels, count, watched }) => {
           image.data.set(new Uint8Array(pixels));
           ctx.putImageData(image, 0, 0);
@@ -64,29 +79,21 @@ export function EmuDebug() {
       });
       // wYCoord and wXCoord are adjacent (d361, d362).
       host.watch({ map: [SYMBOLS.wCurMap.address, 1], pos: [SYMBOLS.wYCoord.address, 2] });
+      host.setButtons(joypad.mask);
       hostRef.current = host;
-      setStatus("Running. Arrows move, Z is A, X is B, Enter is Start, Backspace is Select.");
+      setStatus(`${slot.sram ? "Continuing from the stored save" : "No stored save"}. Running. Keys are listed below; a gamepad or the on-screen pad works too.`);
     })();
 
-    let held = 0;
-    const onKey = (e: KeyboardEvent) => {
-      const bit = KEYS[e.code];
-      if (bit === undefined) return;
-      e.preventDefault();
-      held = e.type === "keydown" ? held | bit : held & ~bit;
-      hostRef.current?.setButtons(held);
-      if (e.type === "keydown") void enableSound();
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("keyup", onKey);
     return () => {
       cancelled = true;
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("keyup", onKey);
+      joypad.dispose();
       host?.dispose();
       hostRef.current = null;
+      setSound(false);
     };
-  }, []);
+  }, [boot]);
+
+  const onTouch = useMemo(() => (mask: number) => input?.setTouchMask(mask), [input]);
 
   const save = async () => {
     savedRef.current = (await hostRef.current?.saveState()) ?? null;
@@ -94,17 +101,23 @@ export function EmuDebug() {
   const load = () => savedRef.current && hostRef.current?.loadState(savedRef.current);
 
   return (
-    <main className="emu-debug">
+    <main className={touch ? "emu-debug with-touch-pad" : "emu-debug"}>
       <h1>Emulator debug view</h1>
       <canvas ref={canvasRef} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
       <pre ref={infoRef} className="info" />
+      <p className="held">
+        Held: <output data-testid="held" data-mask={held}>{heldNames(held)}</output>
+      </p>
       <p className="status">{status}</p>
       <div className="actions">
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Enable sound"}</button>
         <button type="button" onClick={save}>Save state</button>
         <button type="button" onClick={load}>Load state</button>
+        {cart && <SaveControls romKey={cart.key} header={cart.header} onImported={() => setBoot((n) => n + 1)} />}
         <a href="/">Back</a>
       </div>
+      {input && <KeyBindingsPanel input={input} />}
+      {input && touch && <TouchPad onChange={onTouch} />}
     </main>
   );
 }

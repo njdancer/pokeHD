@@ -26,12 +26,37 @@ pinned `vendor/SameBoy` submodule and `native/wrapper.c`, fetching Emscripten in
 together with any wrapper or pin change. The boot ROM baked in is SameBoy's own (MIT), built
 from source with the pinned rgbds.
 
+## The link cable (D17)
+
+`LinkPort` plugs a `GameBoy` into a friend's: the game's link routines are hooked by symbol and
+each exchange becomes one `LinkMessage` (`@pokehd/protocol`), about 20 each way for a trade.
+The transport stays outside: an in-memory pair in `link.test.ts`, the room later.
+
+```ts
+const port = new LinkPort(gb, { role: "leader", send: (m) => room.send(m) });
+room.onMessage((m) => port.receive(parseLinkMessage(m)));   // in order
+// In the app the worker owns it: host.openLink({ role, send }).receive(message)
+```
+
+- **Waiting keeps the game live.** A routine whose reply hasn't arrived sends the core through
+  `DelayFrame` (or the game's own busy-wait when only the serial interrupt is on) and back to
+  the routine, so the screen and music keep running and the game's timeouts still apply.
+- **Roles.** Both players talk to their receptionist; each sends `connect` and waits for the
+  friend's (768 frames by default, then the game's "reserved for 2 friends" message). The
+  transport decides who is the `leader` (the game's clock master: its random numbers drive a
+  battle, it sits on the left, it wins menu ties). On a real cable that's whoever talks first.
+- **Sessions.** A `connect` clears whatever the friend sent before it, so a timed-out exchange
+  can't pair with the next session's messages.
+- Not done yet: the room menu still exchanges once per poll, so at 200 ms one way the cursor
+  answers ~2.5 times a second; "send on change" would fix that. A dropped friend leaves the game
+  waiting where the original would (block exchanges, battle turns); the transport should close
+  the link.
+
 ## Extending the native API
 
-New capabilities (the link cable's serial callbacks, for p3-link) go in `native/wrapper.c` as
-`emu_*` exports, typed in `src/generated/sameboy.d.mts` and wrapped on `GameBoy`. SameBoy's
-`GB_set_serial_transfer_bit_start_callback` / `..._bit_end_callback` are the entry points for
-the link.
+New capabilities go in `native/wrapper.c` as `emu_*` exports, typed in
+`src/generated/sameboy.d.mts` and wrapped on `GameBoy`. The link needed none: it is built on
+PC hooks and register writes.
 
 ## Overworld state
 

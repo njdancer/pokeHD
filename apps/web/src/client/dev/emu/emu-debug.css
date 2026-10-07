@@ -11,3 +11,6 @@
 .emu-debug .info { font-size: .85rem; min-height: 2.6em; margin: .75rem 0 0; }
 .emu-debug .status { color: var(--muted); }
 .emu-debug .actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+/* Room under the content for the fixed on-screen pad. */
+.emu-debug.with-touch-pad { padding-bottom: calc(min(36vw, 168px) + 120px); }
+.emu-debug .held { margin: .25rem 0 .75rem; }

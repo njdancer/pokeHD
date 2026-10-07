@@ -27,7 +27,22 @@ export const LABEL_RAMPS: Record<Label, Ramp> = {
   sign: [0xf2d9b2, 0xab7a4c, 0x6b4529, 0x23170e],
   cave: [0xbba383, 0x7b6552, 0x4a3a30, 0x1c1612],
   unused: [0xff00ff, 0xcc00cc, 0x990099, 0x330033],
+  // Interiors: placeholders until interiors get their own look (p1-interiors).
+  floor: [0xf4e6bd, 0xd2b582, 0x9a7a52, 0x3e2e20],
+  "wall-interior": [0xfbf6ea, 0xd8ccb4, 0x968672, 0x2c2620],
+  void: [0x000000, 0x000000, 0x000000, 0x000000],
+  furniture: [0xf2d9b2, 0xc28f5c, 0x7f5634, 0x2a1a10],
+  table: [0xf2d9b2, 0xb8875a, 0x7a5236, 0x2a1a10],
+  counter: [0xfbf6ea, 0xc8d2a8, 0x7c8c5c, 0x26301c],
+  shelf: [0xf0d8ae, 0xa9784c, 0x6b4529, 0x23170e],
+  machine: [0xe4f6ff, 0x9cb4c8, 0x546878, 0x1a2430],
+  plant: [0xc0e494, 0x5fa64c, 0x2d6a3a, 0x0f261c],
+  picture: [0xfff6ee, 0xd8b4a0, 0x8c6458, 0x2c1a18],
+  statue: [0xf4f4f0, 0xbcbcb4, 0x76766e, 0x262622],
+  rock: [0xe2d8c8, 0xa89884, 0x6a5c4e, 0x262019],
 };
+/** The DMG's own greens, for maps nothing has labelled yet (interiors, for now). */
+export const DMG_RAMP: Ramp = [0xe0f8d0, 0x88c070, 0x346856, 0x081820];
 const UNLABELLED: Ramp = [0xff00ff, 0xcc00cc, 0x990099, 0x330033];
 
 export function rampFor(labelIndex: number): Ramp {
@@ -47,7 +62,7 @@ export interface Image {
  */
 export function colourRegion(
   region: Region,
-  opts: { replace?: ReadonlySet<Label>; fillTile?: number; fillLabel?: Label } = {},
+  opts: { replace?: ReadonlySet<Label>; fillTile?: number; fillLabel?: Label; ramp?: Ramp } = {},
 ): Image {
   const width = region.widthTiles * 8;
   const height = region.heightTiles * 8;
@@ -58,7 +73,7 @@ export function colourRegion(
     for (let tx = 0; tx < region.widthTiles; tx++) {
       const label = region.labels[ty * region.widthTiles + tx]!;
       const swap = replace.has(label) && opts.fillTile !== undefined;
-      const ramp = swap ? fillRamp : rampFor(label);
+      const ramp = opts.ramp ?? (swap ? fillRamp : rampFor(label));
       for (let p = 0; p < 64; p++) {
         const x = tx * 8 + (p & 7);
         const y = ty * 8 + (p >> 3);

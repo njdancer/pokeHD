@@ -19,7 +19,20 @@ export const LABELS = [
   "fence", // fences and bollards
   "sign",
   "cave", // cave mouths
-  "unused", // past the end of the tileset graphics; the game never shows it
+  "unused", // no block draws it (or past the end of the tileset graphics); the game never shows it
+  // Interiors (p1-labels-interiors). Appended so the index of every label above stays put.
+  "floor", // walkable indoor floor, including rugs, doormats and gym floor markings
+  "wall-interior", // back walls, and the raised partitions in gyms and the Elite Four rooms
+  "void", // the black outside a room's walls
+  "furniture", // chairs, stools, beds, bins and other small props
+  "table",
+  "counter", // shop and Pokécentre counters you talk across
+  "shelf", // bookshelves, shop shelving and display cases
+  "machine", // PCs, TVs, consoles, the healing machine, lab equipment, cash registers
+  "plant", // potted plants
+  "picture", // things hung or painted on walls: maps, posters, emblems, blackboards, lamps
+  "statue", // gym statues on their plinths
+  "rock", // boulders inside gyms (Pewter, Bruno)
 ] as const;
 
 export type Label = (typeof LABELS)[number];
