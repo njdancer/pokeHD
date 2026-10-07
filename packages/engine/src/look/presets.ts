@@ -2,7 +2,7 @@ import type { DayCycle } from "./cycle.ts";
 import { mergeLook, type LookParams } from "./params.ts";
 
 // Built-in presets. Each is the JSON the panel's "Copy JSON" produces (trimmed to the fields
-// that differ from DEFAULT_LOOK). The shipped look is DEFAULT_CYCLE (see D14).
+// that differ from DEFAULT_LOOK). The shipped look is DEFAULT_CYCLE (see D15).
 
 export const DEFAULT_LOOK: LookParams = {
   time: { phase: 0.35, drift: true, cycleSeconds: 240, animate: true },
@@ -94,7 +94,7 @@ export const BUILT_IN_PRESETS: Record<string, LookParams> = {
   }),
 };
 
-/** The chosen look (D14): golden mornings and afternoons around a Diorama midday. */
+/** The chosen look (D15): golden mornings and afternoons around a Diorama midday. */
 export const DEFAULT_CYCLE_NAMES = { morning: "Golden hour", midday: "Diorama", afternoon: "Golden hour" } as const;
 
 export const DEFAULT_CYCLE: DayCycle = {

@@ -178,6 +178,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@pokehd/emu':
+        specifier: workspace:*
+        version: link:../../packages/emu
       '@pokehd/engine':
         specifier: workspace:*
         version: link:../../packages/engine
@@ -215,6 +218,16 @@ importers:
       wrangler:
         specifier: ^4.148.0
         version: 4.148.0(@types/node@24.19.1)
+
+  packages/emu:
+    dependencies:
+      '@pokehd/rom':
+        specifier: workspace:*
+        version: link:../rom
+    devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.19.1
 
   packages/engine:
     dependencies:

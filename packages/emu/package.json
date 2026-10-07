@@ -1,0 +1,12 @@
+{
+  "name": "@pokehd/emu",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "build:wasm": "native/build.sh"
+  },
+  "dependencies": { "@pokehd/rom": "workspace:*" },
+  "devDependencies": { "@types/node": "^24.13.3" }
+}

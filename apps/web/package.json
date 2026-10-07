@@ -11,6 +11,7 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
+    "@pokehd/emu": "workspace:*",
     "@pokehd/engine": "workspace:*",
     "@pokehd/rom": "workspace:*",
     "hono": "^4",
