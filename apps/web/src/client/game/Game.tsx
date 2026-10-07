@@ -23,9 +23,23 @@ const showStats = new URLSearchParams(location.search).has("stats");
 declare global {
   interface Window {
     /** Set with ?stats, for scripted play-throughs. */
-    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean };
+    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly slow: SlowFrame[] };
   }
 }
+/** A display frame over 50 ms, with what the page was doing (for ?stats perf checks). */
+interface SlowFrame {
+  at: number;
+  ms: number;
+  updateMs: number;
+  renderMs: number;
+  /** A chunk build that started during the frame. */
+  build: string | null;
+  map: number | null;
+  mode: string | null;
+  fade: number | null;
+  layout: string;
+}
+
 const PIP_KEY = "pokehd.screen.pip.v1";
 /** Toggles the picture-in-picture screen, unless the player has bound it to a button. */
 const PIP_TOGGLE_CODE = "KeyP";
@@ -200,6 +214,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
 
       if (showStats) {
         // For scripted play-throughs (e2e/play.e2e.ts): the newest decoded state, every frame.
+        const slow: SlowFrame[] = [];
         window.__pokehd = {
           get state() {
             return latest;
@@ -207,6 +222,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           get inWorld() {
             return sceneRef.current.inWorld;
           },
+          slow,
         };
         // Display frame times, and emulated frames per second, for perf checks.
         const times: number[] = [];
@@ -217,6 +233,20 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           raf = requestAnimationFrame(tick);
           const now = performance.now();
           times.push(now - lastT);
+          if (now - lastT > 50 && slow.length < 500) {
+            const build = live?.builds.at(-1);
+            slow.push({
+              at: Math.round(now),
+              ms: +(now - lastT).toFixed(1),
+              updateMs: +(engine?.stats.updateMs ?? 0).toFixed(1),
+              renderMs: +(engine?.stats.renderMs ?? 0).toFixed(1),
+              build: build && build.at > lastT ? `${build.map} ${build.ms.toFixed(1)} ms` : null,
+              map: latest?.mapId ?? null,
+              mode: latest?.mode ?? null,
+              fade: latest?.fade ?? null,
+              layout: screenRef.current?.dataset["layout"] ?? "",
+            });
+          }
           lastT = now;
           if (times.length > 240) times.shift();
           if (now - shown < 500) return;

@@ -92,7 +92,9 @@ test("a new game from Red's room to Viridian City", async ({ page }) => {
     worstFrameMs: Math.max(...xs.map((x) => x.worstMs)),
     meanCpuMs: +(xs.reduce((a, x) => a + x.cpuMs, 0) / xs.length).toFixed(2),
   }));
-  const report = { log: p.log, summary, errors };
+  // Display frames over 50 ms, with what the page was doing at the time.
+  const slow = await page.evaluate(() => (window as { __pokehd?: { slow: unknown[] } }).__pokehd?.slow ?? []);
+  const report = { log: p.log, summary, errors, slow };
   writeFileSync(test.info().outputPath("play-report.json"), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
   // Expected noise: no renderer in a GPU-less browser, and /api/me's 401 when not signed in.
