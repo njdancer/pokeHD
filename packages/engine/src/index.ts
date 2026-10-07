@@ -96,6 +96,12 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const forceWebGL = options.forceWebGL ?? (query.has("webgl") || !(await webgpuViewsWork()));
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, forceWebGL });
   await renderer.init();
+  // three.js puts a small InstancedMesh's matrices in a uniform array sized by its instance count
+  // and named after the buffer, so every one gets its own shader: dozens per map chunk, each
+  // compiled on first draw (seconds of stalls in WebGL2). With no uniform-buffer room they all use
+  // instanced attributes and share their shaders.
+  const capabilities = (renderer.backend as unknown as { capabilities: { getUniformBufferLimit(): number } }).capabilities;
+  capabilities.getUniformBufferLimit = () => 0;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // PCF honours shadow.radius for softness
 
