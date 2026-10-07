@@ -57,3 +57,10 @@ room.onMessage((m) => port.receive(parseLinkMessage(m)));   // in order
 New capabilities go in `native/wrapper.c` as `emu_*` exports, typed in
 `src/generated/sameboy.d.mts` and wrapped on `GameBoy`. The link needed none: it is built on
 PC hooks and register writes.
+
+## Overworld state
+
+`src/state/` turns watched WRAM into an `OverworldState` (map, player, NPCs, mode, fade) for the
+live world renderer. Pass `OVERWORLD_WATCHES` to `EmulatorHost.watch`, then decode each
+`FrameMessage.watched` with `decodeOverworldState`. Positions are in step cells (16 px) with
+the step in progress alongside, so the renderer interpolates between frames.
