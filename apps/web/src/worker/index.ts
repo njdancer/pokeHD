@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { Player } from "./directory/store.ts";
 import { PLAYER_ID_HEADER, PLAYER_NAME_HEADER } from "./room/do.ts";
+import { savesApi } from "./saves/saves.ts";
 
 export { Directory } from "./directory/do.ts";
 export { Room } from "./room/do.ts";
@@ -79,6 +80,9 @@ app.get("/room", async (c) => {
   const room = c.env.ROOM.getByName("world");
   return room.fetch(new Request(c.req.raw, { headers }));
 });
+
+/** Cloud backup of the player's battery saves, per ROM. */
+app.route("/saves", savesApi<Bindings>(currentPlayer));
 
 // Admin: Nick, holding ADMIN_TOKEN (a Worker secret). `pnpm invite` wraps these.
 
