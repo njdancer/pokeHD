@@ -5,12 +5,14 @@ synchronisation strategy are parameters. Both games run the real Cable Club code
 receptionist, saving, the room menu, the Trade Center and the Colosseum. Nothing here is imported
 by the app. No ROM, boot ROM, save or screenshot is committed.
 
-**Answer: don't put the serial port on the network. Put the joypads on it.** Each client runs
-*both* Game Boys (its own and a replica of the friend's) on a perfect local cable, and the room
-only relays button presses in lockstep with a few frames of input delay. That completed every
-trade and battle at 0–200 ms with both clients' replicas identical byte for byte, and the game's
-link timing never sees the network. Forwarding serial bytes, the obvious design, is either slow
-and fragile (stall the master per byte) or silently corrupts trades (don't stall).
+**Answer: hook the game's four link routines in the emulator and send each one's exchange as a
+single message.** One emulator per player, no ROM change. A trade becomes about 20 messages each
+way plus 8 raw bytes at the receptionist, instead of ~1,500 byte round trips, and the game's
+frame-counted handshakes become "wait for the friend's message". Trades and battles completed
+and verified at 0, 50, 100, 200 and 500 ms one-way; at 200 ms a trade took 5.5 s longer than at
+0 ms. Forwarding serial bytes as-is is slow and deadlocks trades from 100 ms (pausing the master
+per byte) or silently corrupts trades from 16 ms (not pausing). Running both Game Boys on each
+client with input lockstep also works (kept below for comparison), but Nick prefers one emulator.
 
 ## What was run
 
@@ -25,6 +27,9 @@ and fragile (stall the master per byte) or silently corrupts trades (don't stall
   scripts then do what players do: talk, save, choose the room, sit, press A on the Game Boy on
   the table, and either trade first mons or mash FIGHT/first move until one side faints (battles
   use one mon each so no switch menu is needed). Menus are detected by reading the tilemap.
+- `HookedLink` in `lib.mjs` is the chosen design: PC hooks (by `pokeblue.sym`, bank-checked)
+  on the link routines, which pause that core, send one message and resume it with the friend's
+  data written where the routine would have put it (see "Hooks" below).
 - `run.mjs` runs each strategy × latency on a simulated wall clock (both Game Boys at real
   speed), so the times below are what players would wait, not CPU time.
 
@@ -54,25 +59,40 @@ Read from `home/serial.asm`, `engine/link/cable_club*.asm`, `engine/menus/main_m
 
 ## Results
 
-Times include the scripted walking and text (about 72 s at 0 ms), so the cost of latency is the
-difference from the 0 ms row. "One-way" latency; round trip is double.
+Times include the scripted walking and text (about 66–71 s at 0 ms), so the cost of latency is
+the difference from the 0 ms row. Latency is one-way; a round trip is double.
+
+### hooks: one emulator each, link routines exchanged as messages (chosen)
+
+| one-way | trade | battle | messages each way | raw bytes | time paused waiting |
+|---|---|---|---|---|---|
+| 0 ms | ✅ 67 s | ✅ 66 s | 20 / 19 | 8 / 6 | 1 s |
+| 50 ms | ✅ 68 s | ✅ 67 s | 20 / 19 | 8 / 6 | 2–4 s |
+| 100 ms | ✅ 69 s | ✅ 68 s | 20 / 19 | 8 / 6 | 4–5 s |
+| 200 ms | ✅ 72 s | ✅ 71 s | 20 / 19 | 8 / 6 | 7–8 s |
+| 500 ms | ✅ 176 s | ✅ 173 s | 20 / 19 | 186 / 184 | 105 s |
+
+Up to 200 ms the only cost is one round trip per message, at "Please wait" and "Waiting..."
+moments. At 500 ms the receptionist's raw connection handshake (90-frame timeout, both sides
+trying to clock at once) needed many retries before it caught; it still connected and the trade
+and battle were correct. Hooking that handshake too would remove the last raw bytes.
 
 ### stall: forward each byte, pause the master until the reply arrives
 
 | one-way | trade | battle |
 |---|---|---|
-| 0 ms | ✅ 72 s | ✅ 70 s |
-| 25 ms | ✅ 144 s | ✅ 108 s |
-| 50 ms | ✅ 217 s | ✅ 150 s |
-| 100 ms | ❌ hangs after "Trade completed!" | ✅ 225 s |
-| 200 ms | ❌ hangs after "Trade completed!" | ✅ 379 s |
+| 0 ms | ✅ 71 s | ✅ 69 s |
+| 25 ms | ✅ 142 s | ✅ 116 s |
+| 50 ms | ✅ 213 s | ✅ 156 s |
+| 100 ms | ❌ hangs after "Trade completed!" | ✅ 211 s |
+| 200 ms | ❌ hangs after "Trade completed!" | ✅ 380 s |
 
-Every byte costs one round trip of frozen game on the master's screen (≈1,460 × 100 ms = 146 s
+Every byte costs one round trip of frozen game on the master's screen (≈1,450 × 100 ms = 145 s
 at 50 ms). From 100 ms the trade itself lands (both parties swap) but the closing handshake
 deadlocks: the master is still in `Serial_SyncAndExchangeNybble` while the slave, running at
-full speed, has finished its fixed frame counts and moved on to `Serial_ExchangeByte` waiting
-for a block. Inferred from where both CPUs sat for the last 100 s; the fixed-frame loops assume
-an exchange takes ~1 ms, and with a 200 ms round trip the two sides' loops no longer overlap.
+full speed, has finished its fixed frame counts and is waiting in `Serial_ExchangeByte` for a
+block. Inferred from where both CPUs sat for the last 100 s of the run; the fixed-frame loops
+assume an exchange takes ~1 ms.
 
 ### async: forward each byte, never pause (master gets the partner's port as last seen)
 
@@ -86,8 +106,9 @@ an exchange takes ~1 ms, and with a 200 ms round trip the two sides' loops no lo
 | 200 ms | ❌ never settles: one side drops back to the Pokémon Center (48k bytes of retries) | ❌ freezes mid-battle |
 
 The pipelining tolerates a frame or so of staleness, then data shifts by a byte and the game
-accepts it: a silently broken trade is the worst failure a player could get. Battles reach the
-start but stall partway and never finish (both still in battle after 25 simulated minutes).
+accepts it: a silently broken trade is the worst failure a player could get. (These rows are
+from the first run, with 2-frame button taps; the 16 ms trade was re-run with the final script
+and corrupted the same way.)
 
 ### dual: each client runs both Game Boys; only joypad input crosses the network
 
@@ -95,41 +116,62 @@ Input delay D frames: a press is applied D frames after it's made, on both clien
 
 | one-way | D | trade | battle | waiting on the network | replicas |
 |---|---|---|---|---|---|
-| 0 ms | 6 | ✅ 74 s | ✅ 80 s | 0 s | identical (15/16 checks) |
-| 50 ms | 6 | ✅ 74 s | ✅ 80 s | 0 s | identical |
-| 100 ms | 6 | ✅ 74 s | ✅ 80 s | 0 s | identical |
-| 200 ms | 6 | ✅ 146 s | ✅ 159 s | 73 s / 79 s | identical |
-| 200 ms | 14 | ✅ 75 s | ✅ 79 s | 0 s | identical |
+| 0 ms | 6 | ✅ 86 s | ✅ 71 s | 0 s | identical |
+| 100 ms | 6 | ✅ 86 s | ✅ 71 s | 0 s | identical |
+| 200 ms | 6 | ✅ 171 s | ✅ 141 s | 85 s / 70 s | identical |
+| 200 ms | 14 | ✅ 72 s | ✅ 89 s | 0 s | identical |
 
-No breakage at any latency, because the cable is local and perfect; latency only shows up as
-input lag (D frames, 100 ms at D = 6) and, if latency exceeds D, as both games slowing together
-(the 200 ms / D = 6 row). Turn-based menus hide 100–250 ms of input lag well.
+Robust at any latency (the cable is local and perfect), at the cost of input lag and two cores
+per client. Kept as the fallback if hooks hit a routine we can't express as a message.
+
+## Hooks
+
+Each hook fires when the CPU reaches the routine's first instruction (SameBoy's execution
+callback, bank-checked); the core rewinds to the registers it had there and pauses. The harness
+sends one message, and once the friend's arrives it writes the result and returns from the
+routine (`pc = [sp]`, `sp += 2`), so the game continues exactly as if the routine had run.
+
+| routine | used for | message | on the friend's reply |
+|---|---|---|---|
+| `Serial_ExchangeBytes` (hl → de, bc bytes) | random numbers, party data, patch lists | our `bc + 16` bytes | write theirs from byte 1 (the real loop stores after the first preamble `$FD`), `hl += bc`, `de += bc`, `bc = 0` |
+| `Serial_SyncAndExchangeNybble` | receptionist, trade choice, cancel | `wSerialExchangeNybbleSendData` | write it to both nybble receive bytes |
+| `LinkBattleExchangeData.syncLoop1` (bank $0F) | each battle turn's action | `wSerialExchangeNybbleSendData` | write `wSerialExchangeNybbleReceiveData` |
+| `Serial_ExchangeLinkMenuSelection` | room menu, every poll | 2-byte selection buffer | write the receive buffer, then tail-call `DelayFrame` |
+
+Messages pair up per routine in order (the n-th call on each side), which holds because both
+games run the same link script. What these do not do yet, and p3-link must:
+
+- **Pausing freezes the screen and music.** Fine for a round trip; not for the first player at
+  the receptionist, who waits until the friend talks too. Wait in a `DelayFrame` loop instead
+  (when `rIE` includes V-Blank; block exchanges run with serial-only interrupts and are short).
+- **Timeouts.** The game's own "link closed because of inactivity" (`wUnknownSerialCounter`)
+  no longer fires inside a hooked routine. Give up after the same number of frames.
+- **The receptionist handshake** still uses raw bytes over the byte bridge. It's 8 bytes and
+  works to 200 ms; at 500 ms it took a minute of retries. Hook it as a fifth message.
+- **Room menu cursor** runs one round trip per poll, so at 200 ms the cursor answers about
+  2.5 times a second. Turning it into "send on change" would remove that.
+- Script note: menus poll the joypad every few frames, so input scripts hold buttons 6 frames,
+  as a person does. With 2-frame taps the hooked menu could miss presses entirely.
 
 ## Recommendation for p3-link (networked link)
 
-1. **Linking = start a dual session.** When both players are at the receptionist, each client
-   snapshots its own Game Boy (SameBoy save state, ~82 KB) and sends it to the other through the
-   room. Both clients then run the pair from the identical (A, B) snapshots, stepped in a fixed
-   order on fixed tick slices (`Pair` in `lib.mjs`) so the result is deterministic. The client
-   pauses its own game for the one round trip this takes, in the Pokémon Center.
-2. **Lockstep input with adaptive delay.** The room relays one byte of joypad per player per
-   frame (~60 B/s each way). Pick D from measured RTT (e.g. one-way ÷ 16.7 ms + 2, clamped
-   4–15); stall rather than roll back when input is late. No rollback needed for turn-based play.
-3. **Leaving the club = drop the replica.** Each player keeps their own core, which ran the exact
-   same frames as the friend's replica of it. Before resuming, compare a WRAM hash once (the room
-   can relay it) and refuse to save on mismatch. A desync would mean nondeterminism we introduced,
-   e.g. reading wall-clock time, the RTC (Blue has none) or unequal wasm builds; pin the build.
-4. **Costs.** Two cores per client while linked: ~32 s CPU for a ~73 s trade here, about 2× a
-   single game, which is still several times real time on a desktop Xeon. Worth a phone check in
-   B2; binjgb (D14's fallback) has no serial port, but in this design serial is local, so adding
-   one there would be simple. The friend's save travels to me inside the snapshot; it's their own
-   game data, never stored server-side beyond relaying.
-5. **Fairness/cheating** isn't addressed by either design (a modified client can always send a
-   modified snapshot), which is acceptable for friends-only.
+1. **`packages/emu` exposes link hooks.** The wrapper already needed for PC hooks (D14) gets the
+   four (five, with the receptionist) routine hooks and a "pause here, resume with these
+   registers" call. Symbols come from the generated table, so a disassembly change can't
+   silently move a hook.
+2. **The room relays link messages.** A Durable Object passes each message to the friend in
+   order, tagged with the routine; ~40 messages per trade or short battle. No timing, no serial
+   semantics on the server.
+3. **The game's link code still decides everything.** Which mon is traded, every random number
+   and every battle action are the game's own bytes; the hooks only replace how they travel.
+   That keeps D1 and D12's intent. It does touch game timing (waits become message waits), which
+   is why this is a decision rather than an implementation detail.
+4. **Fallback:** if a routine turns up that can't be expressed as a message, the dual design
+   above works without any hooks.
 
-Not tried: bit-level forwarding (strictly worse than byte stall: 8 round trips per byte), and
-patching the game's serial routines to batch blocks (would change game code, against the
-non-negotiables, and the dual design makes it unnecessary).
+Not tried: bit-level forwarding (strictly worse than byte stall: 8 round trips per byte), and an
+assembly patch to the ROM (the emulator-level hooks do the same job without changing a byte of
+the game, which is CLAUDE.md's preferred injection level).
 
 ## Reproduce
 
@@ -138,6 +180,6 @@ non-negotiables, and the dual design makes it unnecessary).
 spikes/link/build.sh /tmp/link-spike
 cd spikes/link
 node run.mjs /tmp/link-spike/out ../../rom/pokeblue.gb ../../vendor/pokered/pokeblue.sym \
-  /tmp/link-spike/out/dmg_boot.bin stall:0:trade stall:50:battle async:16:trade dual:200:trade:14
+  /tmp/link-spike/out/dmg_boot.bin hooks:200:trade hooks:200:battle stall:50:trade async:16:trade dual:200:trade:14
 ```
 Each spec is `strategy:one-way-ms:trade|battle[:delay-frames]`; one JSON line per run.

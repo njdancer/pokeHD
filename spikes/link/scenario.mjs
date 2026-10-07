@@ -71,7 +71,8 @@ export class Rig {
 
 // Input scripts. Each is a generator over one core: yield [keys, frames] holds keys for that
 // many of that core's frames (frames pause while the core is stalled on the cable).
-const tap = (key, hold = 2, gap = 6) => [[key, hold], [0, gap]];
+// Presses are held 6 frames, as a person does: menus poll the joypad only every few frames.
+const tap = (key, hold = 6, gap = 6) => [[key, hold], [0, gap]];
 function* mashUntil(cond, key = K.A, limit = 6000) {
   for (let n = 0; !cond(); n++) { if (n > limit) throw new Error('mash timeout'); yield* tap(key); }
 }

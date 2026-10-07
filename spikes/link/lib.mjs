@@ -70,6 +70,7 @@ export class Link {
     this.stats = { bytes: [0, 0], stallTicks: [0, 0], log: [] };
     this.stallStart = [0, 0];
     this.logBytes = false;
+    for (const i of [0, 1]) m._h_link_unhook(i);
   }
   at(t, fn) { const e = { t, fn }; let k = this.events.length; while (k > 0 && this.events[k - 1].t > t) k--; this.events.splice(k, 0, e); }
   portSeen(i, t) { // the partner's port as observed at wall time t (async)
@@ -110,7 +111,9 @@ export class Link {
       let budget = this.Q;
       while (budget > 0) {
         const ran = m._h_run(i, budget); budget -= ran; this.emu[i] += ran;
-        if (m._h_stopped()) { this.onTransfer(i); if (this.stalled[i]) break; }
+        const why = m._h_stopped();
+        if (why === 1) { this.onTransfer(i); if (this.stalled[i]) break; }
+        if (why === 2) { this.onHook(i); if (this.stalled[i]) break; }
       }
     }
     this.wall += this.Q;
@@ -150,6 +153,70 @@ export function writeParty(m, i, sym, party, otName) {
 }
 // Charmap encoding for A-Z, a-z and space, terminated by '@' (0x50).
 export const encodeName = (s) => [...s].map((c) => (c === ' ' ? 0x7f : c >= 'a' ? 0xa0 + c.charCodeAt(0) - 97 : 0x80 + c.charCodeAt(0) - 65)).concat(0x50);
+
+/**
+ * `hooks`: one emulator per player, with the game's link routines hooked at the emulator level
+ * (PC hooks by symbol, no ROM change). Each routine's whole exchange becomes one network
+ * message each way instead of one round trip per byte, and the fixed frame-count handshakes are
+ * replaced by "wait for the friend's message". Bytes outside the hooked routines (the
+ * receptionist's connection handshake) still go through the byte `stall` bridge.
+ *
+ * - Serial_ExchangeBytes (party, random numbers, patch lists): send our whole buffer, store the
+ *   friend's, skipping one preamble byte as the real loop does once it has synced.
+ * - Serial_SyncAndExchangeNybble (receptionist, trade menu): send our nybble, return theirs.
+ * - LinkBattleExchangeData from .syncLoop1 (every battle turn): send our action, return theirs.
+ * - Serial_ExchangeLinkMenuSelection (room menu, every frame): one paired round per call, then
+ *   one DelayFrame as the original takes at least that long.
+ */
+export class HookedLink extends Link {
+  constructor(m, sym, opts) {
+    super(m, { ...opts, strategy: 'stall' });
+    this.sym = sym; this.inbox = [{}, {}]; this.pending = [null, null]; this.stats.messages = [0, 0];
+    this.names = ['bytes', 'nybble', 'battle', 'menu'];
+    const at = ['Serial_ExchangeBytes', 'Serial_SyncAndExchangeNybble', 'LinkBattleExchangeData.syncLoop1', 'Serial_ExchangeLinkMenuSelection'].map((n) => sym[n]);
+    for (const i of [0, 1]) for (const { bank, addr } of at) m._h_link_hook(i, bank, addr);
+  }
+  A(s) { return this.sym[s].addr; }
+  send(i, type, payload) {
+    const j = 1 - i; this.stats.messages[i]++;
+    this.at(this.wall + this.L, () => { (this.inbox[j][type] ??= []).push(payload); this.tryFinish(j); });
+  }
+  tryFinish(i) {
+    const p = this.pending[i]; if (!p) return;
+    const q = this.inbox[i][p.type]; if (!q?.length) return;
+    this.pending[i] = null; p.finish(q.shift());
+    this.m._h_hook_done(i); this.stalled[i] = false;
+  }
+  onHook(i) {
+    const m = this.m, name = this.names[m._h_hook_hit(i)];
+    const rd = (a) => m._h_read(i, a), wr = (a, v) => m._h_write(i, a, v), reg = (k) => m._h_reg(i, k);
+    const ret = () => { const sp = reg(4); m._h_set_reg(i, 5, rd(sp) | (rd(sp + 1) << 8)); m._h_set_reg(i, 4, sp + 2); };
+    let payload, finish;
+    if (name === 'bytes') {
+      const [bc, de, hl] = [reg(1), reg(2), reg(3)];
+      payload = Array.from({ length: bc + 16 }, (_, k) => rd(hl + k));
+      finish = (theirs) => {
+        for (let k = 0; k < bc; k++) wr(de + k, theirs[k + 1]);
+        wr(this.A('hSerialIgnoringInitialData'), 0);
+        m._h_set_reg(i, 3, hl + bc); m._h_set_reg(i, 2, de + bc); m._h_set_reg(i, 1, 0); ret();
+      };
+    } else if (name === 'nybble' || name === 'battle') {
+      payload = rd(this.A('wSerialExchangeNybbleSendData'));
+      finish = (theirs) => {
+        if (name === 'nybble') wr(this.A('wSerialSyncAndExchangeNybbleReceiveData'), theirs);
+        wr(this.A('wSerialExchangeNybbleReceiveData'), theirs); ret();
+      };
+    } else {
+      const sb = this.A('wLinkMenuSelectionSendBuffer'), rb = this.A('wLinkMenuSelectionReceiveBuffer');
+      payload = [rd(sb), rd(sb + 1)];
+      finish = (theirs) => { wr(rb, theirs[0]); wr(rb + 1, theirs[1]); m._h_set_reg(i, 5, this.A('DelayFrame')); };
+    }
+    this.stalled[i] = true; this.stallStart[i] = this.wall;
+    this.pending[i] = { type: name, finish: (t) => { this.stats.stallTicks[i] += this.wall - this.stallStart[i]; finish(t); } };
+    this.send(i, name, payload);
+    this.tryFinish(i);
+  }
+}
 
 export const FRAME_TICKS = 140448; // one Game Boy frame (70224 cycles) in 8 MHz ticks
 

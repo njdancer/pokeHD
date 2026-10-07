@@ -143,20 +143,26 @@ the wrap happens inside one of Gen 1's own fades to black (doors, caves, route c
 `look.wrapToMorning(true)`, so it's never seen; the look-dev preview fades out and back in
 instead. Still never night.
 
-## D17 (proposed). Link play is input lockstep: each client runs both Game Boys
+## D17. Link play: one emulator each, the game's link routines exchanged as messages
 
-Proposed after p3-link-spike; amends D12's "emulated serial over WebSockets". Evidence and
-reproduction in `spikes/link/README.md`.
+Nick chose this direction on 2026-10-07 ("patch the ROM/emulator rather than run two") after the
+p3-link-spike first results; the spike then confirmed it. Amends D12's "emulated serial over
+WebSockets". Evidence and reproduction in `spikes/link/README.md`.
 
-When two players link, each client snapshots its own Game Boy, they swap snapshots through the
-room, and from then on each client runs **both** Game Boys on a local, perfect cable. The room
-relays only joypad input (one byte per player per frame) in lockstep, applied a few frames late
-(input delay picked from the measured round trip). Leaving the Cable Club drops the replica;
-each player keeps their own core, checked once against the friend's replica by a WRAM hash.
+`packages/emu` hooks the game's link routines at the emulator level by symbol (no ROM change):
+`Serial_ExchangeBytes`, `Serial_SyncAndExchangeNybble`, `LinkBattleExchangeData` and
+`Serial_ExchangeLinkMenuSelection`, plus the receptionist's connection handshake. When the game
+enters one, its core waits (in a frame loop, so the screen stays live) for the friend's matching
+message, writes the friend's data where the routine would have, and returns from the routine.
+The room relays these messages in order; it knows nothing about serial timing.
 
 Why: the game's serial code assumes a byte crosses the cable in ~1 ms. Forwarding bytes and
 pausing the master per byte made a trade 3× slower at 50 ms one-way and deadlocked its closing
-handshake from 100 ms. Forwarding without pausing silently corrupted trades from 16 ms (the
-received mon became species 253). Input lockstep completed every trade and battle at 0–200 ms
-with both clients' replicas identical, at the cost of input lag and two cores per client while
-linked. D12's intent is unchanged: the game's own link code runs, untouched.
+handshake from 100 ms; forwarding without pausing silently corrupted trades from 16 ms (the
+received mon became species 253). With hooks a trade is ~20 messages each way and completed,
+verified, at 0–500 ms, 5.5 s slower at 200 ms than at 0 ms. Every traded byte, random number and
+battle action is still the game's own; only how they travel changes.
+
+Alternative kept as the fallback: each client runs both Game Boys and only joypad input crosses
+the network (input lockstep). It also worked at 0–200 ms with no hooks, at the cost of two
+emulators per client and input delay.

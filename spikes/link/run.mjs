@@ -21,10 +21,10 @@ for (const spec of runs) {
     out = { strategy, latencyMs: +ms, delayFrames: +delay, kind, done: res.done, err: res.err, wallSec: +res.wallSec.toFixed(1),
       cableBytes: d.clients.map((p) => p.bytes), waitSec: res.waitSec, replicaChecks: res.compared, replicaMismatches: res.mismatches };
   } else {
-    const link = new L.Link(m, { strategy, latencyMs: +ms });
+    const link = strategy === 'hooks' ? new L.HookedLink(m, rig.sym, { latencyMs: +ms }) : new L.Link(m, { strategy, latencyMs: +ms });
     const res = S.run(link, S.scripts(rig, kind), { budgetSec });
     out = { strategy, latencyMs: +ms, kind, done: res.done, err: res.err, wallSec: +res.wallSec.toFixed(1),
-      masterBytes: link.stats.bytes[0] + link.stats.bytes[1], stallSec: link.stats.stallTicks.map((t) => +(t / L.TICKS_PER_SEC).toFixed(1)) };
+      masterBytes: link.stats.bytes[0] + link.stats.bytes[1], messages: link.stats.messages, stallSec: link.stats.stallTicks.map((t) => +(t / L.TICKS_PER_SEC).toFixed(1)) };
   }
   out.cpuSec = +((performance.now() - t0) / 1000).toFixed(1);
   if (kind === 'trade') {

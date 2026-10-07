@@ -17,6 +17,10 @@ typedef struct {
   uint8_t reply;      // byte shifted into the master, MSB first
   int bit;            // bits consumed from reply
   uint16_t hook_addr; unsigned hook_hits;
+  // Link hooks: PCs (with ROM bank for 0x4000+) where the game enters a link routine.
+  int nhooks; uint16_t hook_pc[16]; uint16_t hook_bank[16];
+  int hook_hit;                   // index of the hook just entered, or -1
+  GB_registers_t hook_regs;       // registers as they were on entry
 } core_t;
 #define NCORES 4 // two for a direct cable; four for two clients that each run both Game Boys
 static core_t cores[NCORES];
@@ -25,7 +29,17 @@ static int idx(GB_gameboy_t *gb) { for (int i = 1; i < NCORES; i++) if (gb == co
 static uint32_t rgb(GB_gameboy_t *g, uint8_t r, uint8_t gg, uint8_t b) { return 0xff000000u | (b << 16) | (gg << 8) | r; }
 static void sample_cb(GB_gameboy_t *g, GB_sample_t *s) {}
 static void vblank(GB_gameboy_t *g, GB_vblank_type_t t) { cores[idx(g)].frames++; }
-static void exec_cb(GB_gameboy_t *g, uint16_t addr, uint8_t op) { core_t *c = &cores[idx(g)]; if (addr == c->hook_addr) c->hook_hits++; }
+static void exec_cb(GB_gameboy_t *g, uint16_t addr, uint8_t op) {
+  core_t *c = &cores[idx(g)];
+  if (addr == c->hook_addr) c->hook_hits++;
+  for (int k = 0; k < c->nhooks; k++) {
+    if (addr == c->hook_pc[k] && (addr < 0x4000 || g->mbc_rom_bank == c->hook_bank[k])) {
+      // The opcode at addr is already fetched and will execute; keep the registers from before
+      // it so the harness can resume as if the routine had not started.
+      c->hook_hit = k; c->hook_regs = *GB_get_registers(g);
+    }
+  }
+}
 
 // Called on the SC write that starts an internal-clock transfer (bit 0) and before bits 1..7.
 static void bit_start(GB_gameboy_t *gb, bool bit) {
@@ -43,7 +57,7 @@ static bool bit_end(GB_gameboy_t *gb) {
 }
 
 EMSCRIPTEN_KEEPALIVE int h_new(int i, uint8_t *rom, size_t size, uint8_t *boot, size_t bootsize) {
-  core_t *c = &cores[i]; memset(c, 0, sizeof *c);
+  core_t *c = &cores[i]; memset(c, 0, sizeof *c); c->hook_hit = -1; c->hook_addr = 0xffff;
   c->gb = GB_init(GB_alloc(), GB_MODEL_DMG_B);
   GB_load_boot_rom_from_buffer(c->gb, boot, bootsize);
   GB_set_rgb_encode_callback(c->gb, rgb); GB_set_pixels_output(c->gb, c->pixels);
@@ -56,14 +70,17 @@ EMSCRIPTEN_KEEPALIVE void h_keys(int i, unsigned mask) {
   static const GB_key_t map[8] = {GB_KEY_A, GB_KEY_B, GB_KEY_SELECT, GB_KEY_START, GB_KEY_RIGHT, GB_KEY_LEFT, GB_KEY_UP, GB_KEY_DOWN};
   for (int k = 0; k < 8; k++) GB_set_key_state(cores[i].gb, map[k], (mask >> k) & 1);
 }
-// Run up to `ticks` (8 MHz units). Returns ticks run; sets *stopped to 1 if a master transfer
-// started and has no reply yet (the caller must not run this core until h_set_reply).
+// Run up to `ticks` (8 MHz units). Returns ticks run; h_stopped() is 1 if a master transfer
+// started and has no reply yet (don't run this core until h_set_reply), 2 if the game entered a
+// link hook (registers rewound to the hook's entry; don't run it until h_hook_done).
 static int stopped;
 EMSCRIPTEN_KEEPALIVE int h_run(int i, int ticks) {
   core_t *c = &cores[i]; int done = 0; stopped = 0;
   if (c->xfer_pending && !c->reply_ready) { stopped = 1; return 0; }
+  if (c->hook_hit >= 0) { stopped = 2; return 0; }
   while (done < ticks) {
     done += GB_run(c->gb);
+    if (c->hook_hit >= 0) { *GB_get_registers(c->gb) = c->hook_regs; stopped = 2; break; }
     if (c->xfer_pending && !c->reply_ready) { stopped = 1; break; }
   }
   return done;
@@ -92,12 +109,22 @@ EMSCRIPTEN_KEEPALIVE void h_write(int i, int addr, int v) {
   else GB_write_memory(gb, addr, v);
 }
 EMSCRIPTEN_KEEPALIVE int h_pc(int i) { return GB_get_registers(cores[i].gb)->pc; }
-EMSCRIPTEN_KEEPALIVE void h_hook(int i, int addr) { cores[i].hook_addr = addr; GB_set_execution_callback(cores[i].gb, addr >= 0 ? exec_cb : NULL); }
+static void update_exec(int i) { core_t *c = &cores[i]; GB_set_execution_callback(c->gb, (c->hook_addr != 0xffff || c->nhooks) ? exec_cb : NULL); }
+EMSCRIPTEN_KEEPALIVE void h_hook(int i, int addr) { cores[i].hook_addr = addr < 0 ? 0xffff : addr; update_exec(i); }
+EMSCRIPTEN_KEEPALIVE void h_link_hook(int i, int bank, int pc) {
+  core_t *c = &cores[i]; c->hook_bank[c->nhooks] = bank; c->hook_pc[c->nhooks++] = pc; update_exec(i);
+}
+EMSCRIPTEN_KEEPALIVE void h_link_unhook(int i) { cores[i].nhooks = 0; cores[i].hook_hit = -1; update_exec(i); }
+EMSCRIPTEN_KEEPALIVE int h_hook_hit(int i) { return cores[i].hook_hit; }
+EMSCRIPTEN_KEEPALIVE void h_hook_done(int i) { cores[i].hook_hit = -1; }
+// 16-bit registers: 0 AF, 1 BC, 2 DE, 3 HL, 4 SP, 5 PC.
+EMSCRIPTEN_KEEPALIVE int h_reg(int i, int k) { return GB_get_registers(cores[i].gb)->registers[k]; }
+EMSCRIPTEN_KEEPALIVE void h_set_reg(int i, int k, int v) { GB_get_registers(cores[i].gb)->registers[k] = v; }
 EMSCRIPTEN_KEEPALIVE unsigned h_hook_hits(int i) { return cores[i].hook_hits; }
 EMSCRIPTEN_KEEPALIVE uint32_t *h_pixels(int i) { return cores[i].pixels; }
 EMSCRIPTEN_KEEPALIVE size_t h_state_size(int i) { return GB_get_save_state_size(cores[i].gb); }
 EMSCRIPTEN_KEEPALIVE size_t h_save(int i, uint8_t *buf) { GB_save_state_to_buffer(cores[i].gb, buf); return GB_get_save_state_size(cores[i].gb); }
 EMSCRIPTEN_KEEPALIVE int h_load(int i, uint8_t *buf, size_t n) {
-  core_t *c = &cores[i]; c->xfer_pending = 0; c->reply_ready = 0;
+  core_t *c = &cores[i]; c->xfer_pending = 0; c->reply_ready = 0; c->hook_hit = -1;
   return GB_load_state_from_buffer(c->gb, buf, n) == 0;
 }
