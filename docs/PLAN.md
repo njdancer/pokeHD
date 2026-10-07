@@ -163,8 +163,8 @@ Server first (PR 1): invite codes and players in a `Directory` Durable Object (D
 `/api/join`, `/api/me` and admin routes, and a `Room` Durable Object (hibernatable WebSockets)
 at `/api/room` that greets each player with everyone's presence and relays presence changes.
 Presence mirrors p1-state-read's `Player` plus the map ID. Room messages live in
-`apps/web/src/worker/room/protocol.ts` until `packages/protocol` lands (p3-link-hooks), then move
-there. Next: the client side (join screen, a room connection that sends the local player's
+`packages/protocol/src/room.ts`; a `link` message carries a D17 `LinkMessage` to one named
+friend, in order, for p3-link. Next: the client side (join screen, a room connection that sends the local player's
 presence from the state decoder) and ghosts drawn by `LiveWorld` on the same map, after p1-play.
 **Done when:** two friends on different machines see each other walk around in the deployed build.
 ### p3-gifts: mailbox patch and gifting (money, items, Pokémon)

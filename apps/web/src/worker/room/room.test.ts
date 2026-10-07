@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CloseCode, type Presence, type ServerMessage } from "./protocol.ts";
+import { CloseCode, type Presence, type ServerMessage } from "@pokehd/protocol";
 import { join, leave, receive, type Peer } from "./room.ts";
 
 const here: Presence = {
@@ -93,7 +93,7 @@ describe("room", () => {
       JSON.stringify({ type: "presence", presence: { ...here, mapId: 256 } }),
       JSON.stringify({ type: "presence", presence: { ...here, extra: 1 } }),
       JSON.stringify({ type: "shout" }),
-      JSON.stringify({ type: "presence", presence: here, pad: "x".repeat(2000) }),
+      JSON.stringify({ type: "presence", presence: here, pad: "x".repeat(5000) }),
       new ArrayBuffer(4),
     ]) {
       receive(r.peers, sam, frame);
@@ -121,5 +121,47 @@ describe("room", () => {
     const alex = r.connect("alex");
     r.disconnect(alex);
     expect(sam.inbox.at(-1)).toEqual({ type: "left", id: "alex" });
+  });
+});
+
+describe("link relay", () => {
+  const bytes = { kind: "bytes", data: new Array(424).fill(0xfd) } as const;
+
+  it("passes a link message to the named friend only, in order", () => {
+    const r = room();
+    const sam = r.connect("sam");
+    const alex = r.connect("alex");
+    const kim = r.connect("kim");
+    for (const p of r.peers) p.inbox.length = 0;
+    receive(r.peers, sam, JSON.stringify({ type: "link", to: "alex", message: { kind: "connect" } }));
+    receive(r.peers, sam, JSON.stringify({ type: "link", to: "alex", message: bytes }));
+    expect(alex.inbox).toEqual([
+      { type: "link", from: "sam", message: { kind: "connect" } },
+      { type: "link", from: "sam", message: bytes },
+    ]);
+    expect(kim.inbox).toEqual([]);
+    expect(sam.inbox).toEqual([]);
+  });
+
+  it("tells the sender when the friend isn't here", () => {
+    const r = room();
+    const sam = r.connect("sam");
+    sam.inbox.length = 0;
+    receive(r.peers, sam, JSON.stringify({ type: "link", to: "alex", message: { kind: "nybble", value: 4 } }));
+    receive(r.peers, sam, JSON.stringify({ type: "link", to: "sam", message: { kind: "cancel" } }));
+    expect(sam.inbox).toEqual([
+      { type: "error", reason: "not-here", to: "alex" },
+      { type: "error", reason: "not-here", to: "sam" },
+    ]);
+  });
+
+  it("rejects malformed link messages", () => {
+    const r = room();
+    const sam = r.connect("sam");
+    const alex = r.connect("alex");
+    alex.inbox.length = 0;
+    receive(r.peers, sam, JSON.stringify({ type: "link", to: "alex", message: { kind: "nybble", value: 256 } }));
+    expect(alex.inbox).toEqual([]);
+    expect(sam.inbox.at(-1)).toEqual({ type: "error", reason: "bad-message" });
   });
 });

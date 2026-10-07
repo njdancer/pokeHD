@@ -6,7 +6,7 @@ import {
   type PlayerInfo,
   type Presence,
   type ServerMessage,
-} from "./protocol.ts";
+} from "@pokehd/protocol";
 
 /** One open connection. A player normally has one; a second replaces the first. */
 export interface Peer {
@@ -41,6 +41,12 @@ export function receive(peers: readonly Peer[], from: Peer, frame: string | Arra
       from.presence = message.presence;
       broadcast(others(peers, from), { type: "presence", id: from.player.id, presence: message.presence });
       return;
+    case "link": {
+      const to = peers.find((p) => p.player.id === message.to && p !== from);
+      if (!to) return from.send({ type: "error", reason: "not-here", to: message.to });
+      to.send({ type: "link", from: from.player.id, message: message.message });
+      return;
+    }
   }
 }
 
