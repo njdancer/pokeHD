@@ -7,10 +7,14 @@ const EmuDebug = lazy(() => import("./dev/emu/EmuDebug.tsx").then((m) => ({ defa
 const MapViewer = import.meta.env.DEV
   ? lazy(() => import("./dev/MapViewer.tsx").then((m) => ({ default: m.MapViewer })))
   : null;
+const LabelViewer = import.meta.env.DEV
+  ? lazy(() => import("./dev/LabelViewer.tsx").then((m) => ({ default: m.LabelViewer })))
+  : null;
 
 export function Root() {
   const path = location.pathname.replace(/\/$/, "");
   if (path === "/dev/emu") return <Suspense><EmuDebug /></Suspense>;
   if (MapViewer && location.hash === "#maps") return <Suspense><MapViewer /></Suspense>;
+  if (LabelViewer && location.hash === "#labels") return <Suspense><LabelViewer /></Suspense>;
   return <App />;
 }

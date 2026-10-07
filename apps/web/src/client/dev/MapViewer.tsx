@@ -1,9 +1,10 @@
 // Dev-only: draws any map flat in 2D from extracted WorldData, to check the parser by eye.
 // Open /#maps on the dev server. Greyscale DMG shades; colour comes later from palette data.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { parseWorld, type MapData, type WorldData } from "@pokehd/rom";
+import { blockLabels, parseWorld, type MapData, type WorldData } from "@pokehd/rom";
 import { fetchDevRom } from "../dev-rom.ts";
 import { loadStoredRom } from "../rom-store.ts";
+import { COLOURS } from "./label-colours.ts";
 
 const SHADES = [
   [0xe0, 0xf8, 0xd0],
@@ -14,8 +15,9 @@ const SHADES = [
 const SCALE = 2;
 const STEP = 16;
 
-function drawMap(ctx: CanvasRenderingContext2D, world: WorldData, map: MapData, overlay: boolean) {
-  const { blocks, tiles } = world.tilesets[map.tileset]!;
+function drawMap(ctx: CanvasRenderingContext2D, world: WorldData, map: MapData, overlay: boolean, tint: boolean) {
+  const tileset = world.tilesets[map.tileset]!;
+  const { blocks, tiles } = tileset;
   const w = map.widthBlocks * 32;
   const h = map.heightBlocks * 32;
   const img = ctx.createImageData(w, h);
@@ -40,6 +42,20 @@ function drawMap(ctx: CanvasRenderingContext2D, world: WorldData, map: MapData, 
   ctx.imageSmoothingEnabled = false;
   createImageBitmap(img).then((bmp) => {
     ctx.drawImage(bmp, 0, 0, w * SCALE, h * SCALE);
+    if (tint) {
+      const labels = blockLabels(tileset);
+      const size = 8 * SCALE;
+      ctx.globalAlpha = 0.45;
+      map.blocks.forEach((block, n) => {
+        labels[block]!.forEach((label, i) => {
+          ctx.fillStyle = label ? COLOURS[label] : "#ff00ff";
+          const x = (n % map.widthBlocks) * 4 + (i % 4);
+          const y = Math.floor(n / map.widthBlocks) * 4 + Math.floor(i / 4);
+          ctx.fillRect(x * size, y * size, size, size);
+        });
+      });
+      ctx.globalAlpha = 1;
+    }
     if (!overlay) return;
     const mark = (x: number, y: number, colour: string) => {
       ctx.strokeStyle = colour;
@@ -57,6 +73,7 @@ export function MapViewer() {
   const [error, setError] = useState<string | null>(null);
   const [mapId, setMapId] = useState(0);
   const [overlay, setOverlay] = useState(true);
+  const [tint, setTint] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -69,8 +86,8 @@ export function MapViewer() {
 
   const map = world?.maps[mapId] ?? null;
   useEffect(() => {
-    if (world && map) drawMap(canvasRef.current!.getContext("2d")!, world, map, overlay);
-  }, [world, map, overlay]);
+    if (world && map) drawMap(canvasRef.current!.getContext("2d")!, world, map, overlay, tint);
+  }, [world, map, overlay, tint]);
 
   const options = useMemo(() => world?.maps.filter((m): m is MapData => m !== null) ?? [], [world]);
 
@@ -89,6 +106,13 @@ export function MapViewer() {
         <label>
           <input type="checkbox" checked={overlay} onChange={(e) => setOverlay(e.target.checked)} /> warps (red),
           signs (amber), NPCs (blue)
+        </label>
+        <label>
+          <input type="checkbox" checked={tint} onChange={(e) => setTint(e.target.checked)} /> tint by label (
+          <a href="#labels" onClick={() => setTimeout(() => location.reload())}>
+            label table
+          </a>
+          )
         </label>
         {map && (
           <span>
