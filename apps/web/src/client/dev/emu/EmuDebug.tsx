@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, EmulatorHost, SCREEN_HEIGHT, SCREEN_WIDTH } from "@pokehd/emu";
-import { SYMBOLS } from "@pokehd/rom";
+import { readHeader, SYMBOLS, type RomHeader } from "@pokehd/rom";
 import { fetchDevRom } from "../../dev-rom.ts";
 import { loadStoredRom } from "../../rom-store.ts";
+import { SaveControls } from "../../saves/SaveControls.tsx";
+import { openSaveSlot, romKey } from "../../saves/save-store.ts";
 import "./emu-debug.css";
 
 import { BUTTON_NAMES, JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../../input/index.ts";
@@ -20,6 +22,9 @@ export function EmuDebug() {
   const [input, setInput] = useState<JoypadInput>();
   const [held, setHeld] = useState(0);
   const touch = useTouchDevice();
+  const [cart, setCart] = useState<{ key: string; header: RomHeader }>();
+  // Bumped by a .sav import: restarts the emulator on the imported save.
+  const [boot, setBoot] = useState(0);
 
   const enableSound = async () => {
     await hostRef.current?.enableAudio();
@@ -42,6 +47,10 @@ export function EmuDebug() {
       const rom = (await fetchDevRom()) ?? (await loadStoredRom());
       if (cancelled) return;
       if (!rom) return setStatus("No ROM yet. Load one on the main page first.");
+      const key = await romKey(rom);
+      const slot = await openSaveSlot(key);
+      if (cancelled) return;
+      setCart({ key, header: readHeader(rom) });
       const ctx = canvasRef.current!.getContext("2d")!;
       const image = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
       let fpsFrames = 0;
@@ -49,6 +58,8 @@ export function EmuDebug() {
       let fps = 0;
       host = new EmulatorHost({
         rom,
+        sram: slot.sram,
+        onSram: slot.persist,
         onFrame: ({ pixels, count, watched }) => {
           image.data.set(new Uint8Array(pixels));
           ctx.putImageData(image, 0, 0);
@@ -70,7 +81,7 @@ export function EmuDebug() {
       host.watch({ map: [SYMBOLS.wCurMap.address, 1], pos: [SYMBOLS.wYCoord.address, 2] });
       host.setButtons(joypad.mask);
       hostRef.current = host;
-      setStatus("Running. Keys are listed below; a gamepad or the on-screen pad works too.");
+      setStatus(`${slot.sram ? "Continuing from the stored save" : "No stored save"}. Running. Keys are listed below; a gamepad or the on-screen pad works too.`);
     })();
 
     return () => {
@@ -78,8 +89,9 @@ export function EmuDebug() {
       joypad.dispose();
       host?.dispose();
       hostRef.current = null;
+      setSound(false);
     };
-  }, []);
+  }, [boot]);
 
   const onTouch = useMemo(() => (mask: number) => input?.setTouchMask(mask), [input]);
 
@@ -101,6 +113,7 @@ export function EmuDebug() {
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Enable sound"}</button>
         <button type="button" onClick={save}>Save state</button>
         <button type="button" onClick={load}>Load state</button>
+        {cart && <SaveControls romKey={cart.key} header={cart.header} onImported={() => setBoot((n) => n + 1)} />}
         <a href="/">Back</a>
       </div>
       {input && <KeyBindingsPanel input={input} />}
