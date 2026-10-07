@@ -7,15 +7,16 @@ import "./style.css";
 const MapViewer = import.meta.env.DEV
   ? lazy(() => import("./dev/MapViewer.tsx").then((m) => ({ default: m.MapViewer })))
   : null;
+const LabelViewer = import.meta.env.DEV
+  ? lazy(() => import("./dev/LabelViewer.tsx").then((m) => ({ default: m.LabelViewer })))
+  : null;
+
+const DevPage = { "#maps": MapViewer, "#labels": LabelViewer }[location.hash];
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {MapViewer && location.hash === "#maps" ? (
-      <Suspense>
-        <MapViewer />
-      </Suspense>
-    ) : (
-      <App />
-    )}
+    <Suspense>
+      {DevPage ? <DevPage /> : <App />}
+    </Suspense>
   </StrictMode>,
 );
