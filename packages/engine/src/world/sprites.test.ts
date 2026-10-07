@@ -36,7 +36,7 @@ describe("live world sprites", () => {
     live.update(GB_FRAME_SECONDS, camera, new THREE.Vector3(), false);
     const maps = live.root.children
       .filter((o): o is THREE.Mesh => o instanceof THREE.Mesh && o.castShadow)
-      .map((m) => (m.material as THREE.MeshStandardNodeMaterial).map);
+      .map((m) => (m.material as THREE.MeshStandardNodeMaterial).map as THREE.DataTexture | null);
     const [player, person, item, missing] = maps;
     expect(player).toBe(person); // both sprite 1 in the fake world
     expect(item).not.toBe(person);
