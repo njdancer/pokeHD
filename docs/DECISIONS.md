@@ -93,3 +93,31 @@ point: a small assembly patch adds a mailbox check to the overworld loop.
 The HD camera sees far more than the Game Boy's 10×9-tile screen, so the overworld renders whole
 maps (and connected neighbours) from ROM data, positioned by WRAM state. Text boxes and menus
 are decoded from the window tilemap via the charmap and re-typeset with a modern font.
+
+## D14. Emulator core: SameBoy, compiled to wasm
+
+Approved by Nick on 2026-10-07 after the p1-emu spike. Evidence and reproduction in
+`spikes/emu/README.md`. SameBoy also had far more recent upstream activity than binjgb (69 vs 14
+commits in the past year), though mostly from one author; we pin a commit either way.
+
+Use SameBoy's core (`Core/*.c`, Expat/MIT licence) built with Emscripten into `packages/emu`,
+pinned to a commit, with a thin C wrapper and the debugger, rewind and cheat modules compiled
+out. Run it in a Web Worker as a DMG (not SGB: D11 takes palettes from the ROM ourselves). Use
+SameBoy's own MIT boot ROM, built from its source with the rgbds we already pin; it isn't
+Nintendo data, so committing or serving it is fine.
+
+Why: all three candidates booted Blue to Red's room with the same input script and passed WRAM
+reads, PC hooks and save-state round trips. The differences are in what we'd have to own.
+SameBoy has upstream APIs for everything p1–p3 need: per-instruction execution callbacks (PC
+hooks by symbol, checked in C and only crossing into JS on a hit), read and write watch
+callbacks (useful for the gift mailbox), BESS save states, and bit-level link-cable callbacks
+that its author uses to link two instances in one process, which is p3-link-spike's first step.
+It's also the most accurate open core. Cost: 77 KB gzip and ~600 frames/s on a cloud Xeon
+(10× realtime), against binjgb's 29 KB and ~3,400 frames/s. Both are far past 59.73 Hz.
+
+Alternatives: **binjgb** (MIT, smallest and fast) has no link cable at all (serial always reads
+0xFF) and PC hooks only in a special build, so D12's main risk would sit in our own fork; it's
+the fallback if SameBoy's CPU cost bites on phones. **Gambatte** (gambatte-core fork) is rejected:
+GPLv2 would put `packages/emu` and the shipped wasm under the GPL once friends load it, its
+original repo went private, and its wasm is the largest (202 KB gzip). **mGBA** (MPL-2.0) was a
+reference point only; a GBA-first core with nothing extra for DMG.
