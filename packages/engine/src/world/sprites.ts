@@ -71,8 +71,8 @@ export const SPRITE_RED = 0x01;
 export const SPRITE_SEEL = 0x3c;
 
 /**
- * Sprite colours until the SGB palettes land (p1-colour): DMG shades 0–3, lightest first.
- * Shade 2 goes unused; the overworld's object palette skips it.
+ * Neutral sprite colours, for places whose SGB palette is near-grey (./place.ts): DMG shades
+ * 0–3, lightest first. Shade 2 goes unused; the overworld's object palette skips it.
  */
 export const SPRITE_RAMP: Ramp = [0xfbf7ef, 0xc9b9a6, 0x7a6a5c, 0x1e1a24];
 /** rOBP0 in the overworld ($d0): colour 1 → shade 0, 2 → 1, 3 → 3. Colour 0 is transparent. */
@@ -135,19 +135,21 @@ const FRAME_GEOMETRY = Array.from({ length: FRAMES * 2 }, (_, i) => {
 /** A billboard mesh showing a sprite sheet, or the placeholder person when there's no sheet. */
 export interface SpriteActor {
   mesh: THREE.Mesh;
-  /** Picks the sheet and the frame to show. */
-  show(sheet: SpriteSheet | null | undefined, facing: Facing, animFrame: number): void;
+  /** Picks the sheet, the frame to show and its colours (the set's ramp when absent). */
+  show(sheet: SpriteSheet | null | undefined, facing: Facing, animFrame: number, ramp?: Ramp): void;
 }
 
-/** Materials per sheet, shared by every actor using it. Dispose when the world goes. */
-export function createSpriteSet(ramp: Ramp = SPRITE_RAMP) {
-  const materials = new Map<SpriteSheet, THREE.MeshStandardNodeMaterial>();
+/** Materials per sheet and ramp, shared by every actor using them. Dispose when the world goes. */
+export function createSpriteSet(defaultRamp: Ramp = SPRITE_RAMP) {
+  const materials = new Map<Ramp, Map<SpriteSheet, THREE.MeshStandardNodeMaterial>>();
   const fallback = personMaterial("npc");
-  const material = (sheet: SpriteSheet) => {
-    let m = materials.get(sheet);
+  const material = (sheet: SpriteSheet, ramp: Ramp) => {
+    let byRamp = materials.get(ramp);
+    if (!byRamp) materials.set(ramp, (byRamp = new Map()));
+    let m = byRamp.get(sheet);
     if (!m) {
       m = new THREE.MeshStandardNodeMaterial({ map: sheetTexture(sheet, ramp), alphaTest: 0.5, roughness: 1, side: THREE.DoubleSide });
-      materials.set(sheet, m);
+      byRamp.set(sheet, m);
     }
     return m;
   };
@@ -157,20 +159,20 @@ export function createSpriteSet(ramp: Ramp = SPRITE_RAMP) {
       mesh.castShadow = true;
       return {
         mesh,
-        show(sheet, facing, animFrame) {
+        show(sheet, facing, animFrame, ramp = defaultRamp) {
           if (!sheet) {
             mesh.material = fallback;
             mesh.geometry = PERSON_GEOMETRY;
             return;
           }
           const { frame, flip } = spriteFrame(facing, animFrame, sheet.still);
-          mesh.material = material(sheet);
+          mesh.material = material(sheet, ramp);
           mesh.geometry = FRAME_GEOMETRY[frame * 2 + (flip ? 1 : 0)]!;
         },
       };
     },
     dispose() {
-      for (const m of [...materials.values(), fallback]) {
+      for (const m of [...[...materials.values()].flatMap((b) => [...b.values()]), fallback]) {
         m.map?.dispose();
         m.dispose();
       }
@@ -185,9 +187,9 @@ export function initialFacing(movement: NpcMovement): Facing {
 }
 
 /** Map objects where the map data places them (static; the live world moves them from game state). */
-export function npcSprites(region: Region) {
+export function npcSprites(region: Region, ramp?: Ramp) {
   const group = new THREE.Group();
-  const set = createSpriteSet();
+  const set = createSpriteSet(ramp);
   for (const { map, x, y } of region.maps) {
     for (const npc of map.npcs) {
       const { mesh, show } = set.actor();

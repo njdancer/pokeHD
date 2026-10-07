@@ -1,9 +1,10 @@
 import * as THREE from "three/webgpu";
-import { LABEL_TABLES, type MapData, type MapId, type WorldData } from "@pokehd/rom";
+import { FIRST_INDOOR_MAP, LABEL_TABLES, type MapData, type MapId, type WorldData } from "@pokehd/rom";
 import type { LookController, WorldContent } from "../index.ts";
 import { disposeTree } from "./content.ts";
 import { actorBob, actorOffset, createGhosts, GHOST_LOOKS, DEFAULT_GHOST_LOOK, type GhostLook, type GhostState } from "./ghosts.ts";
 import { DEFAULT_STYLE_PARAMS, type StyleParams } from "./params.ts";
+import { placeColours as sgbPlaceColours, PLAIN_COLOURS, playerRamp } from "./place.ts";
 import { buildRegion, placeMaps, TILE_UNITS } from "./region.ts";
 import { createSpriteSet, faceCamera, SPRITE_RED, SPRITE_SEEL, type Facing, type SpriteActor } from "./sprites.ts";
 import { buildFlat, buildStyle, DEFAULT_STYLE, type StyleId } from "./styles.ts";
@@ -34,6 +35,11 @@ export interface LiveActor {
 }
 export interface LiveState {
   mapId: number;
+  /**
+   * wLastMap, the town or route last stepped out of: buildings take its colours. When absent,
+   * the last outdoor map this world saw stands in.
+   */
+  lastMap?: number;
   /** `transport` picks the player's sheet (walking, bike, surfing); walking when absent. */
   player: LiveActor & { transport?: "walk" | "bike" | "surf" };
   /**
@@ -63,6 +69,8 @@ export interface LiveWorldOptions {
   look?: LookLike;
   /** How friends' ghosts are drawn; see `GHOST_LOOKS`. */
   ghostLook?: GhostLook;
+  /** Colour places from their SGB palettes (./place.ts); false gives the plain base look. Default true. */
+  sgbColours?: boolean;
   /** Seconds on the performance clock; tests replace it. */
   clock?: () => number;
 }
@@ -108,8 +116,12 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   const target = new THREE.Vector3();
   const chunks = new Map<MapId, Chunk>();
   let current: MapId | null = null;
+  /** The town or route outside, for indoor maps' colours. */
+  let outside: MapId | undefined;
   let look = options.look;
   const clock = options.clock ?? (() => performance.now() / 1000);
+  const sgb = options.sgbColours ?? true;
+  const placeColours = (...args: Parameters<typeof sgbPlaceColours>) => (sgb ? sgbPlaceColours(...args) : PLAIN_COLOURS);
 
   // Placing maps: the first map anchors world space; connected maps are placed relative to it.
   const place = (id: MapId): Chunk | undefined => chunks.get(id);
@@ -217,7 +229,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     };
     const region = buildRegion(world, c.map.id, { marginBlocks: MARGIN_BLOCKS, drawBorder });
     const labelled = LABEL_TABLES[world.tilesets[c.map.tileset]!.name] !== undefined;
-    const group = labelled ? buildStyle(style, region, params) : buildFlat(region);
+    const group = labelled ? buildStyle(style, region, params, placeColours(world, c.map.id, outside)) : buildFlat(region);
     c.offset = { x: -region.rootX * TILE_UNITS, z: -region.rootY * TILE_UNITS };
     group.position.set(c.bx * 2 + c.offset.x, 0, c.by * 2 + c.offset.z);
     c.group = group;
@@ -229,6 +241,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   // Actors, interpolated one emulator frame behind the newest state.
   const sprites = createSpriteSet();
   const player = sprites.actor();
+  const playerColours = sgb ? playerRamp(world) : PLAIN_COLOURS.people;
   const playerSprite = player.mesh;
   root.add(playerSprite);
   const npcSprites = new Map<number, SpriteActor>();
@@ -282,8 +295,13 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     get chunks() {
       return new Map([...chunks].map(([id, c]) => [id, c.group ? "built" : "queued"] as const));
     },
+    get placeTint() {
+      return current === null ? null : placeColours(world, current, outside).tint;
+    },
     push(state, at = clock()) {
       const before = current;
+      if (state.lastMap !== undefined) outside = state.lastMap;
+      else if (state.mapId < FIRST_INDOOR_MAP) outside = state.mapId;
       enter(state.mapId);
       const c = current === null ? undefined : chunks.get(current);
       if (!c) return;
@@ -313,7 +331,8 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         const x = prev.x + (last.x - prev.x) * t;
         const z = prev.z + (last.z - prev.z) * t;
         playerSprite.position.set(x, bob(latest.player), z);
-        player.show(playerSheet(latest.player.transport), latest.player.facing ?? "down", latest.player.animFrame);
+        player.show(playerSheet(latest.player.transport), latest.player.facing ?? "down", latest.player.animFrame, playerColours);
+        const people = placeColours(world, here.map.id, outside).people;
         target.set(x, 0.5, z);
 
         const seen = new Set<number>();
@@ -326,7 +345,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
           }
           const d = drawn(npc, here);
           const sprite = npc.pictureId ?? here.map.npcs[npc.slot - 1]?.sprite;
-          s.show(sprite === undefined ? null : world.sprites[sprite], npc.facing ?? "down", npc.animFrame);
+          s.show(sprite === undefined ? null : world.sprites[sprite], npc.facing ?? "down", npc.animFrame, people);
           s.mesh.position.set(d.x, bob(npc), d.z);
           s.mesh.visible = npc.visible;
           seen.add(npc.slot);

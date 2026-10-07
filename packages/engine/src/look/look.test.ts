@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDayClock, stepDay, wrapNow, WRAP_FADE_SECONDS } from "./clock.ts";
 import { blendCycle } from "./cycle.ts";
-import { bakeLut, gradeColor, LUT_SIZE } from "./grade.ts";
+import { bakeLut, gradeColor, LUT_SIZE, normTint } from "./grade.ts";
 import { LOOK_SCHEMA, mergeLook } from "./params.ts";
 import { BUILT_IN_PRESETS, DEFAULT_LOOK } from "./presets.ts";
 import { sunDirection } from "./rig.ts";
@@ -24,6 +24,15 @@ describe("colour grade", () => {
     expect(lut.length).toBe(LUT_SIZE ** 3 * 4);
     expect([...lut.subarray(0, 4)]).toEqual([0, 0, 0, 255]);
     expect([...lut.subarray(lut.length - 4)]).toEqual([255, 255, 255, 255]);
+  });
+
+  it("leans midtones toward the place's colour and leaves black and white alone", () => {
+    const green = normTint("#ade75a");
+    const [r, g, b] = gradeColor({ ...neutral, placeTint: 0.5 }, [0.5, 0.5, 0.5], green);
+    expect(g).toBeGreaterThan(r);
+    expect(r).toBeGreaterThan(b);
+    expect(gradeColor({ ...neutral, placeTint: 0.5 }, [1, 1, 1], green)).toEqual([1, 1, 1]);
+    expect(gradeColor({ ...neutral, placeTint: 0.5 }, [0, 0, 0], green)).toEqual([0, 0, 0]);
   });
 
   it("warms with positive temperature", () => {

@@ -19,7 +19,7 @@ describe("spriteFrame", () => {
 });
 
 describe("live world sprites", () => {
-  it("draws each object with its own sheet and the player with Red's", () => {
+  it("draws each object with its own sheet and the player with Red's, in red", () => {
     const world = fakeWorld();
     const ball = { id: 0x3d, still: true, tiles: new Uint8Array(4 * 64) };
     world.sprites[0x3d] = ball;
@@ -38,7 +38,9 @@ describe("live world sprites", () => {
       .filter((o): o is THREE.Mesh => o instanceof THREE.Mesh && o.castShadow)
       .map((m) => (m.material as THREE.MeshStandardNodeMaterial).map as THREE.DataTexture | null);
     const [player, person, item, missing] = maps;
-    expect(player).toBe(person); // both sprite 1 in the fake world
+    // Both sprite 1 in the fake world, but the player wears red and people the place's colour.
+    expect(player).not.toBe(person);
+    expect(player?.image.width).toBe(person?.image.width);
     expect(item).not.toBe(person);
     expect(item?.image.width).toBe(96);
     expect(missing?.image.width).toBe(16); // no sheet: the placeholder

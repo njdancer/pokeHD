@@ -5,6 +5,7 @@ import { cutOut } from "./cutout.ts";
 import { grass, water } from "./effects.ts";
 import { colourRegion, commonTile, DMG_RAMP } from "./palette.ts";
 import type { StyleParams } from "./params.ts";
+import type { PlaceColours } from "./place.ts";
 import { building, cards, imageTexture, terrain, voxelProps, voxelTerrain } from "./parts.ts";
 import type { Region } from "./region.ts";
 
@@ -33,12 +34,12 @@ export const DEFAULT_STYLE: StyleId = "hybrid";
 
 const UNDER_PROPS: ReadonlySet<Label> = new Set(["tree", ...PROP_LABELS]);
 
-function common(region: Region) {
+function common(region: Region, ramps: PlaceColours["ramps"] | undefined) {
   const trees = findTrees(region);
   const props = findProps(region);
   const fillTile = commonTile(region, "lawn");
-  const full = colourRegion(region);
-  const ground = colourRegion(region, { replace: UNDER_PROPS, fillTile });
+  const full = colourRegion(region, { ramps });
+  const ground = colourRegion(region, { replace: UNDER_PROPS, fillTile, ramps });
   const cutout = cutOut(full, region, [...trees, ...props]);
   return { trees, props, full, ground, cutout, buildings: findBuildings(region) };
 }
@@ -55,10 +56,11 @@ export function buildFlat(region: Region): THREE.Group {
   return group;
 }
 
-export function buildStyle(id: StyleId, region: Region, params: StyleParams): THREE.Group {
+/** `colours`: the place's SGB colours (./place.ts); without them, the base label ramps. */
+export function buildStyle(id: StyleId, region: Region, params: StyleParams, colours?: PlaceColours): THREE.Group {
   const group = new THREE.Group();
   group.name = id;
-  const c = common(region);
+  const c = common(region, colours?.ramps);
   const treeScale = (p: StepProp) => (p.label === "tree" ? params.treeScale : 1);
 
   if (id === "voxel") {
