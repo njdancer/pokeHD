@@ -56,9 +56,12 @@ export type ServerMessage =
   | { type: "link"; from: string; message: LinkMessage }
   /**
    * `bad-message`: a frame that wasn't a valid message. `not-here`: a link message for someone
-   * who isn't connected (it was dropped; `to` says who).
+   * who isn't connected (it was dropped; `to` says who). `replaced`: the same player connected
+   * elsewhere; sent just before the room closes this socket with `CloseCode.replaced`, because
+   * a browser may not report that close until the TCP connection ends.
    */
   | { type: "error"; reason: "bad-message" }
+  | { type: "error"; reason: "replaced" }
   | { type: "error"; reason: "not-here"; to: string };
 
 /**
@@ -83,5 +86,43 @@ export function parseClientMessage(frame: string | ArrayBuffer): ClientMessage |
     return null;
   }
   const result = v.safeParse(ClientMessageSchema, json);
+  return result.success ? result.output : null;
+}
+
+// Server → client, for the room client (p3-rooms-client). The room builds these itself, so it
+// doesn't parse them; the client does, so a newer or broken server can't put junk in its store.
+
+const PlayerInfoSchema = v.object({
+  id: v.pipe(v.string(), v.maxLength(64)),
+  name: v.pipe(v.string(), v.maxLength(64)),
+});
+
+export const ServerMessageSchema = v.variant("type", [
+  v.object({
+    type: v.literal("welcome"),
+    you: PlayerInfoSchema,
+    players: v.array(v.object({ ...PlayerInfoSchema.entries, presence: v.nullable(PresenceSchema) })),
+  }),
+  v.object({ type: v.literal("joined"), player: PlayerInfoSchema }),
+  v.object({ type: v.literal("left"), id: v.string() }),
+  v.object({ type: v.literal("presence"), id: v.string(), presence: v.nullable(PresenceSchema) }),
+  v.object({ type: v.literal("link"), from: v.string(), message: LinkMessageSchema }),
+  v.variant("reason", [
+    v.object({ type: v.literal("error"), reason: v.literal("bad-message") }),
+    v.object({ type: v.literal("error"), reason: v.literal("replaced") }),
+    v.object({ type: v.literal("error"), reason: v.literal("not-here"), to: v.string() }),
+  ]),
+]);
+
+/** Parses a frame from the room, or null if it isn't a valid message. */
+export function parseServerMessage(frame: unknown): ServerMessage | null {
+  if (typeof frame !== "string") return null;
+  let json: unknown;
+  try {
+    json = JSON.parse(frame);
+  } catch {
+    return null;
+  }
+  const result = v.safeParse(ServerMessageSchema, json);
   return result.success ? result.output : null;
 }

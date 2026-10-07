@@ -1,15 +1,26 @@
 // Dev-only: the live world playing back a recorded (for now, scripted) state stream, Pallet Town
 // → Route 1 → Viridian City → its Pokémon Center, at the Game Boy's frame rate (p1-state-render).
 // Open /dev/live. URL options: ?size=1440 pins the drawing buffer to 2560×1440 for perf checks;
-// ?lookdev mounts the look panel.
+// ?lookdev mounts the look panel. Two friends' ghosts (p3-ghosts) replay the same walk, one behind
+// and one ahead; ?ghost=<look> picks how they're drawn (a GHOST_LOOKS key) and ?ghosts=0 hides them.
+// ?frame=N plays up to frame N and holds there, for screenshots.
 import { useEffect, useRef, useState } from "react";
 import { createEngine, type Engine } from "@pokehd/engine";
-import { createLiveWorld, GB_FRAME_SECONDS, palletToViridian, type LiveWorld } from "@pokehd/engine/world";
+import {
+  asGhost, createLiveWorld, GB_FRAME_SECONDS, GHOST_LOOKS, palletToViridian, type GhostLookId, type LiveWorld,
+} from "@pokehd/engine/world";
 import { parseWorld } from "@pokehd/rom";
 import { fetchDevRom } from "../dev-rom.ts";
 import { loadStoredRom } from "../rom-store.ts";
 
 const query = new URLSearchParams(location.search);
+const holdAt = query.has("frame") ? Number(query.get("frame")) : null;
+const ghostLook = GHOST_LOOKS[query.get("ghost") as GhostLookId] ?? undefined;
+/** Fake friends: the recording offset in time, in Game Boy frames. */
+const FRIENDS = query.get("ghosts") === "0" ? [] : [
+  { id: "behind", name: "Gary", offset: -48 },
+  { id: "ahead", name: "Leaf", offset: 48 },
+];
 
 interface Stats {
   frame: number;
@@ -18,6 +29,7 @@ interface Stats {
   worstMs: number;
   cpuMs: number;
   chunks: string;
+  ghosts: number;
   backend: string;
 }
 
@@ -40,7 +52,7 @@ export function LivePlayback() {
       if (!rom) return setError("No ROM: load one in the app first.");
       const world = parseWorld(rom);
       const stream = palletToViridian(world);
-      live = createLiveWorld(world);
+      live = createLiveWorld(world, { ghostLook });
       engine = await createEngine(canvas, { world: live });
       if (disposed) return engine.dispose();
       live.setLook(engine.look);
@@ -58,7 +70,8 @@ export function LivePlayback() {
         times.push(now - lastT);
         lastT = now;
         if (times.length > 240) times.shift();
-        const due = Math.floor((now / 1000 - start) / GB_FRAME_SECONDS);
+        let due = Math.floor((now / 1000 - start) / GB_FRAME_SECONDS);
+        if (holdAt !== null) due = Math.min(due, holdAt);
         if (due >= stream.length) {
           start = now / 1000;
           pushed = -1;
@@ -66,7 +79,13 @@ export function LivePlayback() {
         }
         while (pushed < due) {
           pushed++;
-          live!.push(stream[pushed]!, start + pushed * GB_FRAME_SECONDS);
+          const at = start + pushed * GB_FRAME_SECONDS;
+          live!.push(stream[pushed]!, at);
+          const ghosts = FRIENDS.flatMap((f) => {
+            const state = stream[pushed + f.offset];
+            return state ? [asGhost(f.id, f.name, state)] : [];
+          });
+          live!.setGhosts(ghosts, at);
         }
         if (now - shown > 250) {
           shown = now;
@@ -77,6 +96,7 @@ export function LivePlayback() {
             fps: 1000 / avg,
             worstMs: Math.max(...times),
             cpuMs: engine!.stats.cpuMs,
+            ghosts: [...live!.ghosts].filter(([, shown]) => shown).length,
             chunks: [...live!.chunks].map(([id, s]) => `${id}${s === "built" ? "" : "…"}`).join(" "),
             backend: engine!.backend,
           });
@@ -97,7 +117,7 @@ export function LivePlayback() {
     <div className="live-page" ref={holder}>
       <div className="hud">
         {error ?? (stats
-          ? `${stats.backend} · frame ${stats.frame}/${stats.frames} · ${stats.fps.toFixed(0)} fps · worst ${stats.worstMs.toFixed(1)} ms · cpu ${stats.cpuMs.toFixed(1)} ms · maps ${stats.chunks}`
+          ? `${stats.backend} · frame ${stats.frame}/${stats.frames} · ${stats.fps.toFixed(0)} fps · worst ${stats.worstMs.toFixed(1)} ms · cpu ${stats.cpuMs.toFixed(1)} ms · maps ${stats.chunks} · ghosts ${stats.ghosts}`
           : "Building…")}
       </div>
     </div>

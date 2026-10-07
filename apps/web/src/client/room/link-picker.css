@@ -1,0 +1,16 @@
+.link-picker {
+  position: fixed; z-index: 2; left: 50%; top: 50%; translate: -50% -50%;
+  width: min(22rem, calc(100vw - 32px)); padding: 1rem 1.25rem;
+  background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(12px);
+  border: 1px solid #ffffff1a; border-radius: 12px;
+}
+.link-picker h2 { margin: 0 0 .75rem; font-size: 1.1rem; }
+.link-picker p { color: var(--muted); }
+.link-picker ul { display: grid; gap: .4rem; margin: 0 0 .75rem; padding: 0; list-style: none; }
+.link-picker button {
+  font: inherit; color: var(--fg); background: #ffffff14; border: 1px solid #ffffff26;
+  border-radius: 6px; padding: .4rem .7rem; cursor: pointer;
+}
+.link-picker li button { width: 100%; text-align: left; }
+.link-picker li span { color: var(--accent); }
+.link-picker-close { float: right; }

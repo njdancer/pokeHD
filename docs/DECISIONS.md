@@ -201,3 +201,38 @@ served.
 
 Alternative: **Cloudflare Access** (one-time PIN email or Google login on an allowlist) would
 have given identity for free but put a login wall on every page and needed each friend's email.
+
+## D20. Gifts land through a PC hook on the overworld loop, calling the game's own routines (proposed)
+
+**Proposed, waiting for Nick.** Amends D12's "a small assembly patch adds a mailbox check to the
+overworld loop". Evidence and reproduction in `spikes/gifts/README.md`.
+
+`packages/emu` hooks `OverworldLoop` by symbol (no ROM change, CLAUDE.md level 1). When the
+player is standing still with no menu, text, script, battle or warp in progress, the hook makes
+the CPU call the game's own routines with the inputs its own callers use, then resume the loop:
+`AddBCDPredef` for money (as Pay Day does), `AddItemToInventory` for items (as NPC gifts do),
+and `AddEnemyMonToPlayerParty` for a Pokémon (the Trade Center's routine, so the friend's
+44-byte struct, OT and nickname land byte for byte). With a full party the Pokémon goes to the
+current box: there the game has no routine for a ready-made mon, so we append it in the PC's
+layout and set the Pokédex flags with the game's `FlagActionPredef`. A gift that doesn't fit
+(full bag, full party and box, money over ¥999,999) waits in the queue untouched.
+
+Why: the spike's ROM test gave money, items and Pokémon (party and box), saved with the game's
+own `SaveGameData`, rebooted from the battery save and found them all, and held gifts that
+didn't fit without changing anything. A mailbox patch would run its check at the same
+instruction and call the same routines, so it isn't safer; it adds a modified ROM, a second
+hash to pin, assembly for the idle check, and mailbox bytes in WRAM, to buy emulator
+independence D14 doesn't need. It stays the fallback if a future core can't hook.
+
+Rules that come with it:
+- A gift counts as delivered only once a save containing it is written; until then the server
+  keeps it pending and the client re-delivers it after a reboot, with a ledger of applied gift
+  IDs kept next to the save so it never lands twice.
+- The receiver checks a gifted Pokémon's species, level, moves and names before it reaches the
+  game.
+
+**Open for Nick:** (a) whether sending a gift makes the sender save first, as the Cable Club
+does before a trade (recommended: otherwise a friend who reloads an older save keeps what they
+gave away); (b) whether key items can be gifted (recommended: no, they'd skip story steps);
+(c) whether a Pokémon gift goes to the box when the party is full (recommended: yes, as the
+game's own gifts do).
