@@ -8,6 +8,8 @@
 //   from the map's top-left corner. A block is 2×2 steps.
 // Field names carry their unit where it isn't obvious (`widthBlocks`, `offsetBlocks`).
 
+import type { SgbPalette } from "../colour/sgb.ts";
+
 /** Map IDs are the game's own (0 = Pallet Town … 247). */
 export type MapId = number;
 /** Tileset IDs are the game's own (0 = OVERWORLD … 23 = PLATEAU). */
@@ -22,6 +24,8 @@ export interface WorldData {
   sprites: (SpriteSheet | null)[];
   /** The player's bike sheet, which the game loads directly rather than through the sprite table. */
   bikeSprite: SpriteSheet;
+  /** Super Game Boy palettes indexed by PAL_* constant; see `overworldPalette`. */
+  sgbPalettes: SgbPalette[];
 }
 
 /**

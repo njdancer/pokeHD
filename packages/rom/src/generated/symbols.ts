@@ -25,6 +25,7 @@ export const SYMBOLS = {
   Serial_ExchangeLinkMenuSelection: { bank: 0x00, address: 0x2247 },
   Serial_SyncAndExchangeNybble: { bank: 0x00, address: 0x227f },
   SpriteSheetPointerTable: { bank: 0x05, address: 0x7b27 },
+  SuperPalettes: { bank: 0x1c, address: 0x6660 },
   TextBoxGraphics: { bank: 0x04, address: 0x6288 },
   TextBoxGraphicsEnd: { bank: 0x04, address: 0x6488 },
   TilePairCollisionsLand: { bank: 0x00, address: 0x0c7e },
