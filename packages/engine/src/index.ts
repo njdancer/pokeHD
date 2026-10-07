@@ -1,6 +1,7 @@
 import * as THREE from "three/webgpu";
 import { fog, rangeFogFactor, uniform } from "three/tsl";
 import { createSky } from "./sky.ts";
+import { createDayClock, stepDay, wrapNow } from "./look/clock.ts";
 import { blendCycle, type DayCycle } from "./look/cycle.ts";
 import { mergeLook, STRUCTURAL, type LookParams } from "./look/params.ts";
 import { DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
@@ -20,11 +21,16 @@ export interface LookController {
   /** Call after editing `params` in place; `path` is e.g. "bloom.strength". */
   changed(path?: string): void;
   /**
-   * Blends three looks across the day (morning, midday, late afternoon), overwriting `params`
+   * Blends three looks across the day (morning, midday, evening), overwriting `params`
    * every frame except time, camera and render. Null returns to editing `params` directly.
    */
   setCycle(cycle: DayCycle | null): void;
   readonly cycle: DayCycle | null;
+  /**
+   * Jumps the clock to morning. Pass `instant` when the screen is already black (an in-game
+   * warp fade); otherwise the engine fades out and back in around the jump.
+   */
+  wrapToMorning(instant?: boolean): void;
 }
 
 export interface EngineStats {
@@ -119,23 +125,21 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   };
   rebuild();
 
-  // Time of day: an angle that advances while drifting, so drift resumes from the current phase.
-  let dayAngle = Math.acos(1 - 2 * params.time.phase);
-  const syncDayAngle = () => {
-    const a = Math.acos(1 - 2 * params.time.phase);
-    dayAngle = dayAngle > Math.PI ? Math.PI * 2 - a : a; // keep heading the same way
-  };
+  const clock = createDayClock(params.time);
   let cycle: DayCycle | null = null;
   const look: LookController = {
     params,
     get cycle() {
       return cycle;
     },
+    wrapToMorning(instant = false) {
+      wrapNow(params.time, clock, instant);
+    },
     setCycle(next) {
       cycle = next && {
         morning: mergeLook(DEFAULT_LOOK, next.morning),
         midday: mergeLook(DEFAULT_LOOK, next.midday),
-        afternoon: mergeLook(DEFAULT_LOOK, next.afternoon),
+        evening: mergeLook(DEFAULT_LOOK, next.evening),
       };
       if (cycle) blendCycle(cycle, params.time.phase, params);
       rebuild();
@@ -145,11 +149,9 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       const merged = mergeLook(DEFAULT_LOOK, next);
       cycle = null;
       for (const group of Object.keys(merged) as (keyof LookParams)[]) Object.assign(params[group], merged[group]);
-      syncDayAngle();
       rebuild();
     },
     changed(path) {
-      if (path === "time.phase") syncDayAngle();
       if (path === "render.maxPixelRatio") resize();
       if (path === undefined || STRUCTURAL.has(path)) {
         clearTimeout(rebuildTimer);
@@ -170,10 +172,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     if (params.time.animate) elapsed += dt;
     const p = params;
 
-    if (p.time.drift) {
-      dayAngle = (dayAngle + (dt / p.time.cycleSeconds) * Math.PI * 2) % (Math.PI * 2);
-      p.time.phase = 0.5 - 0.5 * Math.cos(dayAngle);
-    }
+    stepDay(p.time, clock, dt);
     if (cycle) blendCycle(cycle, p.time.phase, p);
     if (p.camera.orbit) p.camera.yaw = ((p.camera.yaw + dt * 8 + 180) % 360) - 180;
 
@@ -194,7 +193,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     sky.follow(camera);
     fogNear.value = p.fog.near;
     fogFar.value = p.fog.far;
-    post.update(p, camera.position.distanceTo(world.target));
+    post.update(p, camera.position.distanceTo(world.target), clock.fade);
     post.render();
     stats.cpuMs = performance.now() - t0;
 

@@ -1,7 +1,7 @@
 import { LOOK_SCHEMA, STRUCTURAL, type LookParams } from "./params.ts";
 
 // A day cycle blends three looks across the time of day: morning (phase 0), midday (0.5) and
-// late afternoon (1). Continuous values (numbers, colours) interpolate every frame. Switches,
+// evening (1). Continuous values (numbers, colours) interpolate every frame. Switches,
 // tone mapping and anything else that rebuilds the pipeline can't blend, so they come from the
 // midday look. Time, camera and render settings stay live: time drives the blend, and the
 // camera and render settings aren't part of a look.
@@ -9,7 +9,7 @@ import { LOOK_SCHEMA, STRUCTURAL, type LookParams } from "./params.ts";
 export interface DayCycle {
   morning: LookParams;
   midday: LookParams;
-  afternoon: LookParams;
+  evening: LookParams;
 }
 
 const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -31,7 +31,7 @@ const LIVE = new Set(["time", "camera", "render"]);
 /** Writes the blended look for `phase` into `out`, leaving the live groups untouched. */
 export function blendCycle(cycle: DayCycle, phase: number, out: LookParams): LookParams {
   const [a, b, t] =
-    phase < 0.5 ? [cycle.morning, cycle.midday, smooth(phase * 2)] : [cycle.midday, cycle.afternoon, smooth((phase - 0.5) * 2)];
+    phase < 0.5 ? [cycle.morning, cycle.midday, smooth(phase * 2)] : [cycle.midday, cycle.evening, smooth((phase - 0.5) * 2)];
   for (const [group, fields] of Object.entries(LOOK_SCHEMA)) {
     if (LIVE.has(group)) continue;
     const g = group as keyof LookParams;

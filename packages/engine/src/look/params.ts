@@ -7,11 +7,13 @@ export type AntialiasName = "none" | "fxaa" | "smaa";
 
 export interface LookParams {
   time: {
-    /** 0 = morning, 1 = late afternoon. Never night (D9). */
+    /** 0 = morning (sun low in the east), 1 = evening (low in the west). Never night (D16). */
     phase: number;
     drift: boolean;
-    /** Seconds for a full morning → afternoon → morning cycle. */
+    /** Seconds from morning to evening while drifting. */
     cycleSeconds: number;
+    /** Seconds the evening holds before the clock wraps to morning behind a fade. */
+    eveningHold: number;
     /** Pause the placeholder sprites to compare presets on an identical frame. */
     animate: boolean;
   };
@@ -19,19 +21,19 @@ export interface LookParams {
     intensity: number;
     /** Compass heading of the sun at midday, degrees. 180 = due south of the scene. */
     heading: number;
-    /** How far the sun swings either side of `heading` between morning and afternoon, degrees. */
+    /** How far the sun swings either side of `heading` between morning and evening, degrees. */
     swing: number;
     lowElevation: number;
     highElevation: number;
     morningColor: string;
     middayColor: string;
-    afternoonColor: string;
+    eveningColor: string;
   };
   sky: {
     zenithMorning: string;
-    zenithAfternoon: string;
+    zenithEvening: string;
     horizonMorning: string;
-    horizonAfternoon: string;
+    horizonEvening: string;
     /** Hemisphere light: sky-coloured fill from above, ground bounce from below. */
     skyLight: number;
     groundColor: string;
@@ -161,7 +163,13 @@ const b: FieldSpec = { kind: "boolean" };
 const c: FieldSpec = { kind: "color" };
 
 export const LOOK_SCHEMA: { [G in Group]: { [K in keyof LookParams[G]]: FieldSpec } } = {
-  time: { phase: n(0, 1, 0.001), drift: b, cycleSeconds: n(10, 1200, 1, "cycle (s)"), animate: b },
+  time: {
+    phase: n(0, 1, 0.001),
+    drift: b,
+    cycleSeconds: n(10, 1200, 1, "day (s)"),
+    eveningHold: n(0, 300, 1, "evening hold (s)"),
+    animate: b,
+  },
   sun: {
     intensity: n(0, 10, 0.01),
     heading: n(0, 360, 1),
@@ -170,13 +178,13 @@ export const LOOK_SCHEMA: { [G in Group]: { [K in keyof LookParams[G]]: FieldSpe
     highElevation: n(15, 85, 0.5),
     morningColor: c,
     middayColor: c,
-    afternoonColor: c,
+    eveningColor: c,
   },
   sky: {
     zenithMorning: c,
-    zenithAfternoon: c,
+    zenithEvening: c,
     horizonMorning: c,
-    horizonAfternoon: c,
+    horizonEvening: c,
     skyLight: n(0, 5, 0.01),
     groundColor: c,
     sunDiscSize: n(0, 5, 0.01),
