@@ -231,6 +231,9 @@ importers:
 
   packages/engine:
     dependencies:
+      '@pokehd/rom':
+        specifier: workspace:*
+        version: link:../rom
       '@tweakpane/plugin-essentials':
         specifier: ^0.2.1
         version: 0.2.1(tweakpane@4.0.5)

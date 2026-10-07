@@ -2,9 +2,10 @@
   "name": "@pokehd/engine",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": { ".": "./src/index.ts", "./world": "./src/world/index.ts" },
   "scripts": { "typecheck": "tsc -p ." },
   "dependencies": {
+    "@pokehd/rom": "workspace:*",
     "@tweakpane/plugin-essentials": "^0.2.1",
     "three": "^0.186.1",
     "tweakpane": "^4.0.5"
