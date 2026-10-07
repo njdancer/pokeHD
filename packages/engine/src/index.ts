@@ -3,14 +3,14 @@ import { fog, rangeFogFactor, uniform } from "three/tsl";
 import { createSky } from "./sky.ts";
 import { blendCycle, type DayCycle } from "./look/cycle.ts";
 import { mergeLook, STRUCTURAL, type LookParams } from "./look/params.ts";
-import { DEFAULT_LOOK } from "./look/presets.ts";
+import { DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 import { createPlaceholder } from "./look/placeholder.ts";
 import { createPost } from "./look/post.ts";
 import { createRig } from "./look/rig.ts";
 
 export type { DayCycle } from "./look/cycle.ts";
 export type { LookParams } from "./look/params.ts";
-export { BUILT_IN_PRESETS, DEFAULT_LOOK } from "./look/presets.ts";
+export { BUILT_IN_PRESETS, DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 
 export interface LookController {
   /** The live parameters. Edit in place, then call `changed(path)`. */
@@ -157,6 +157,8 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       }
     },
   };
+
+  look.setCycle(DEFAULT_CYCLE);
 
   const timer = new THREE.Timer();
   let elapsed = 0;

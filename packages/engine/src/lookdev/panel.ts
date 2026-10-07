@@ -3,7 +3,7 @@ import * as EssentialsPlugin from "@tweakpane/plugin-essentials";
 import type { FpsGraphBladeApi } from "@tweakpane/plugin-essentials";
 import type { Engine, LookParams } from "../index.ts";
 import { LOOK_SCHEMA, type FieldSpec } from "../look/params.ts";
-import { BUILT_IN_PRESETS, DEFAULT_LOOK } from "../look/presets.ts";
+import { BUILT_IN_PRESETS, DEFAULT_CYCLE_NAMES, DEFAULT_LOOK } from "../look/presets.ts";
 
 // Look-dev panel (mounted with `?lookdev`): every LookParams field, generated from the schema,
 // plus performance readouts and preset load/save. Saved presets live in localStorage and
@@ -70,7 +70,7 @@ export function mountLookdevPanel(engine: Engine, hooks: { before?: () => void; 
   // Presets.
   const presets = pane.addFolder({ title: "Presets" });
   let saved = loadSaved();
-  const state = { preset: "Diorama", name: "" };
+  const state = { preset: "Diorama", name: "" }; // the panel opens on the default day cycle
   const presetOptions = () =>
     Object.fromEntries([...Object.keys(BUILT_IN_PRESETS), ...Object.keys(saved).map((k) => `★ ${k}`)].map((k) => [k, k]));
   let picker = presets.addBinding(state, "preset", { options: presetOptions() });
@@ -126,12 +126,16 @@ export function mountLookdevPanel(engine: Engine, hooks: { before?: () => void; 
     };
     input.click();
   });
-  presets.addButton({ title: "Reset to default" }).on("click", () => apply(DEFAULT_LOOK));
+  presets.addButton({ title: "Reset to default" }).on("click", () => {
+    apply(DEFAULT_LOOK);
+    Object.assign(day, DEFAULT_CYCLE_NAMES, { on: true });
+    applyCycle();
+  });
 
   // Day cycle: blend three presets across the day. Panel edits to blended fields are
   // overwritten while it's on; turn it off to tweak a preset, save it, then pick it here.
   const dayFolder = pane.addFolder({ title: "Day cycle" });
-  const day = { on: false, morning: "Golden hour", midday: "Diorama", afternoon: "Golden hour" };
+  const day: { on: boolean; morning: string; midday: string; afternoon: string } = { on: look.cycle !== null, ...DEFAULT_CYCLE_NAMES };
   const applyCycle = () => {
     const [m, d, a] = [lookup(day.morning), lookup(day.midday), lookup(day.afternoon)];
     look.setCycle(day.on && m && d && a ? { morning: m, midday: d, afternoon: a } : null);

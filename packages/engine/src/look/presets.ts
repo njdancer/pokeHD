@@ -1,7 +1,8 @@
+import type { DayCycle } from "./cycle.ts";
 import { mergeLook, type LookParams } from "./params.ts";
 
 // Built-in presets. Each is the JSON the panel's "Copy JSON" produces (trimmed to the fields
-// that differ from DEFAULT_LOOK). Starting points for Nick to choose between, not final.
+// that differ from DEFAULT_LOOK). The shipped look is DEFAULT_CYCLE (see D14).
 
 export const DEFAULT_LOOK: LookParams = {
   time: { phase: 0.35, drift: true, cycleSeconds: 240, animate: true },
@@ -63,19 +64,6 @@ const preset = (patch: object): LookParams => mergeLook(DEFAULT_LOOK, patch);
 
 export const BUILT_IN_PRESETS: Record<string, LookParams> = {
   "Diorama": preset({ time: { phase: 0.35, drift: false } }),
-  "Clear day": preset({
-    time: { phase: 0.5, drift: false },
-    sun: { intensity: 3.6, middayColor: "#ffffff" },
-    sky: { skyLight: 1.3, sunDiscIntensity: 6 },
-    shadows: { softness: 1.2 },
-    fog: { skyTint: 0.3, near: 50, far: 160 },
-    ao: { intensity: 0.6 },
-    dof: { focalLength: 18, bokehScale: 1.2 },
-    tiltShift: { enabled: false },
-    bloom: { strength: 0.15, threshold: 1 },
-    grade: { toneMapping: "neutral", exposure: 0.95, contrast: 1.08, saturation: 1.02, temperature: -0.02, splitToneAmount: 0.06 },
-    vignette: { intensity: 0.2 },
-  }),
   "Golden hour": preset({
     time: { phase: 0.92, drift: false },
     sun: { intensity: 4.2, afternoonColor: "#ffa864" },
@@ -104,4 +92,13 @@ export const BUILT_IN_PRESETS: Record<string, LookParams> = {
     },
     vignette: { intensity: 0.25, smoothness: 0.9 },
   }),
+};
+
+/** The chosen look (D14): golden mornings and afternoons around a Diorama midday. */
+export const DEFAULT_CYCLE_NAMES = { morning: "Golden hour", midday: "Diorama", afternoon: "Golden hour" } as const;
+
+export const DEFAULT_CYCLE: DayCycle = {
+  morning: BUILT_IN_PRESETS[DEFAULT_CYCLE_NAMES.morning]!,
+  midday: BUILT_IN_PRESETS[DEFAULT_CYCLE_NAMES.midday]!,
+  afternoon: BUILT_IN_PRESETS[DEFAULT_CYCLE_NAMES.afternoon]!,
 };

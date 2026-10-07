@@ -93,3 +93,14 @@ point: a small assembly patch adds a mailbox check to the overworld loop.
 The HD camera sees far more than the Game Boy's 10×9-tile screen, so the overworld renders whole
 maps (and connected neighbours) from ROM data, positioned by WRAM state. Text boxes and menus
 are decoded from the window tilemap via the charmap and re-typeset with a modern font.
+
+## D14. The look: a day cycle of Golden hour → Diorama → Golden hour
+
+From the p0-lookdev presets (Diorama, Clear day, Golden hour, Storybook), Nick sat between
+Diorama and Golden hour, disliked Clear day, and left the call to Claude. The engine blends three
+looks across the day: Golden hour in the morning, Diorama at midday, Golden hour again in the late
+afternoon. Mornings still read paler than afternoons because the sun's own colour and angle
+follow the time of day. What this commits to: a filmic AgX tone curve, a strong tilt-shift
+miniature feel, soft shadows, light haze and gentle bloom. Clear day (flat, saturated, little
+blur) was dropped. Every value stays tunable in the `?lookdev` panel; refine within this
+direction rather than reopening it.
