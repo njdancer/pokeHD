@@ -87,7 +87,7 @@ an exchange takes ~1 ms, and with a 200 ms round trip the two sides' loops no lo
 
 The pipelining tolerates a frame or so of staleness, then data shifts by a byte and the game
 accepts it: a silently broken trade is the worst failure a player could get. Battles reach the
-first turn and then both sides wait forever on each other.
+start but stall partway and never finish (both still in battle after 25 simulated minutes).
 
 ### dual: each client runs both Game Boys; only joypad input crosses the network
 

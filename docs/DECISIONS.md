@@ -93,3 +93,21 @@ point: a small assembly patch adds a mailbox check to the overworld loop.
 The HD camera sees far more than the Game Boy's 10×9-tile screen, so the overworld renders whole
 maps (and connected neighbours) from ROM data, positioned by WRAM state. Text boxes and menus
 are decoded from the window tilemap via the charmap and re-typeset with a modern font.
+
+## D15 (proposed). Link play is input lockstep: each client runs both Game Boys
+
+Proposed after p3-link-spike; amends D12's "emulated serial over WebSockets". Evidence and
+reproduction in `spikes/link/README.md`.
+
+When two players link, each client snapshots its own Game Boy, they swap snapshots through the
+room, and from then on each client runs **both** Game Boys on a local, perfect cable. The room
+relays only joypad input (one byte per player per frame) in lockstep, applied a few frames late
+(input delay picked from the measured round trip). Leaving the Cable Club drops the replica;
+each player keeps their own core, checked once against the friend's replica by a WRAM hash.
+
+Why: the game's serial code assumes a byte crosses the cable in ~1 ms. Forwarding bytes and
+pausing the master per byte made a trade 3× slower at 50 ms one-way and deadlocked its closing
+handshake from 100 ms. Forwarding without pausing silently corrupted trades from 16 ms (the
+received mon became species 253). Input lockstep completed every trade and battle at 0–200 ms
+with both clients' replicas identical, at the cost of input lag and two cores per client while
+linked. D12's intent is unchanged: the game's own link code runs, untouched.
