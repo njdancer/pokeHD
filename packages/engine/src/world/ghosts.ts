@@ -17,7 +17,7 @@ export interface GhostState extends LiveActor {
   mapId: number;
 }
 
-/** How a ghost is told apart from the local player. Nick picks; these are the options. */
+/** How a ghost is told apart from the local player; the options Nick chose from (D21). */
 export interface GhostLook {
   /** `player`: the local player's colours. `friend`: a green palette swap. */
   palette: "player" | "friend";
@@ -35,7 +35,7 @@ export const GHOST_LOOKS = {
   "tint-tag": { palette: "friend", opacity: 1, tag: true },
 } as const satisfies Record<string, GhostLook>;
 export type GhostLookId = keyof typeof GHOST_LOOKS;
-/** Provisional until Nick picks. */
+/** Nick picked this (D21). */
 export const DEFAULT_GHOST_LOOK: GhostLookId = "tint-tag";
 
 /** Seconds a ghost is drawn behind its newest sample. About six Game Boy frames. */
