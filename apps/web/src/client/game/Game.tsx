@@ -10,7 +10,9 @@ import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../inpu
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { openSaveSlot, storeSave } from "../saves/save-store.ts";
 import { me } from "../room/account.ts";
-import { RoomClient, type RoomStatus } from "../room/client.ts";
+import { RoomClient, type Friend, type RoomStatus } from "../room/client.ts";
+import { RoomLink } from "../room/link.ts";
+import { LinkPicker } from "../room/LinkPicker.tsx";
 import { toGhosts, toPresence } from "./presence.ts";
 import { mapLoaded, screenLayout, type ScreenLayout } from "./screen.ts";
 import "./game.css";
@@ -73,7 +75,9 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [stats, setStats] = useState<Stats>();
   const [noHd, setNoHd] = useState(false);
   /** The shared world: how we're connected and how many friends are in it. */
-  const [room, setRoom] = useState<{ status: RoomStatus; friends: number } | null>(null);
+  const [room, setRoom] = useState<{ status: RoomStatus; friends: Friend[] } | null>(null);
+  /** The link cable over the room, once the room has said who we are. */
+  const [link, setLink] = useState<RoomLink | null>(null);
   const touch = useTouchDevice();
   // Bumped by a .sav import: restarts the emulator on the imported save.
   const [boot, setBoot] = useState(0);
@@ -110,6 +114,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     let host: EmulatorHost | null = null;
     let roomClient: RoomClient | null = null;
     let unsubscribeRoom = () => {};
+    let roomLink: RoomLink | null = null;
     let raf = 0;
     const joypad = new JoypadInput({
       onChange: (mask, source) => {
@@ -167,14 +172,20 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       void me().then(
         (player) => {
           if (disposed) return;
-          if (!player) return setRoom({ status: "signed-out", friends: 0 });
+          if (!player) return setRoom({ status: "signed-out", friends: [] });
           const client = new RoomClient();
           roomClient = client;
-          const show = ({ status, friends }: { status: RoomStatus; friends: Record<string, unknown> }) =>
-            setRoom({ status, friends: Object.keys(friends).length });
+          const show = ({ status, friends }: { status: RoomStatus; friends: Record<string, Friend> }) =>
+            setRoom({ status, friends: Object.values(friends) });
           unsubscribeRoom = client.store.subscribe((next, prev) => {
             if (next.friends !== prev.friends) live!.setGhosts(toGhosts(next.friends));
             if (next.status !== prev.status || next.friends !== prev.friends) show(next);
+            // The cable needs our player ID, which the first welcome brings.
+            if (next.you && !roomLink && host) {
+              const h = host;
+              roomLink = new RoomLink({ room: client, me: next.you.id, open: (o) => h.openLink(o) });
+              setLink(roomLink);
+            }
           });
           client.connect();
           show(client.store.getState());
@@ -241,6 +252,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       cancelAnimationFrame(raf);
       joypad.dispose();
       unsubscribeRoom();
+      roomLink?.dispose();
       roomClient?.close();
       host?.dispose();
       hostRef.current = null;
@@ -252,6 +264,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       setLayout("full");
       setNoHd(false);
       setRoom(null);
+      setLink(null);
       setSound(false);
     };
   }, [rom, romKey, boot]);
@@ -282,7 +295,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
         <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
         <button type="button" onClick={() => setSettings((v) => !v)} aria-expanded={settings}>Settings</button>
-        {room && <RoomBadge {...room} />}
+        {room && <RoomBadge status={room.status} friends={room.friends.length} />}
         {message && <span role="status">{message}</span>}
       </div>
       {settings && (
@@ -314,6 +327,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           {s ? `map ${s.mapId} (${s.player.x}, ${s.player.y}) ${s.player.facing} · ${s.mode} · fade ${s.fade.toFixed(2)}` : "no state"}
         </pre>
       )}
+      {link && room && <LinkPicker link={link} players={room.friends} />}
       {input && touch && <TouchPad onChange={onTouch} />}
     </div>
   );
