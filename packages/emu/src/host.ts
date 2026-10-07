@@ -1,6 +1,15 @@
 // Main-thread handle on an emulator running in a Web Worker.
 import { createAudioOutput } from "./audio.ts";
+import type { LinkMessage } from "@pokehd/protocol";
+import type { LinkPortOptions } from "./link.ts";
 import type { FrameMessage, FromWorker, ToWorker, Watch } from "./protocol.ts";
+
+/** The main thread's end of a LinkPort running in the worker. */
+export interface HostLink {
+  /** Delivers the friend's next message, in the order they were sent. */
+  receive(message: LinkMessage): void;
+  close(): void;
+}
 
 export interface EmulatorHostOptions {
   rom: Uint8Array;
@@ -22,6 +31,7 @@ export class EmulatorHost {
   #audioNode: AudioWorkletNode | undefined;
   #nextId = 1;
   readonly #pending = new Map<number, (state: Uint8Array) => void>();
+  #linkSend: ((message: LinkMessage) => void) | undefined;
 
   constructor(options: EmulatorHostOptions) {
     this.#audio = new AudioContext({ latencyHint: "interactive" });
@@ -37,6 +47,9 @@ export class EmulatorHost {
         case "state":
           this.#pending.get(data.id)?.(data.state);
           this.#pending.delete(data.id);
+          break;
+        case "link-send":
+          this.#linkSend?.(data.message);
           break;
         case "error":
           options.onError?.(data.message);
@@ -84,6 +97,23 @@ export class EmulatorHost {
 
   loadState(state: Uint8Array): void {
     this.#post({ type: "load-state", state });
+  }
+
+  /**
+   * Plugs in the link cable (D17): the game's link routines become messages. `send` receives
+   * each outbound message; pass the friend's to `receive`. Replaces any open link.
+   */
+  openLink(options: LinkPortOptions): HostLink {
+    const { send, ...rest } = options;
+    this.#linkSend = send;
+    this.#post({ type: "link-open", ...rest });
+    return {
+      receive: (message) => this.#post({ type: "link-receive", message }),
+      close: () => {
+        if (this.#linkSend === send) this.#linkSend = undefined;
+        this.#post({ type: "link-close" });
+      },
+    };
   }
 
   dispose(): void {
