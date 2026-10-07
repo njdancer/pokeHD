@@ -4,7 +4,8 @@
 // Needs the ROM at rom/pokeblue.gb (the dev server serves it). Takes several minutes of real
 // time, so it only runs when asked: POKEHD_PLAY=1 pnpm test:e2e play.
 // POKEHD_PLAY_HEADED=1 shows the browser (use it on a Mac for a WebGPU frame rate).
-// The report (log, frame rate per map, errors) and screenshots land in test-results/.
+// POKEHD_PLAY_VIDEO=1 records it. The report (log, frame rate per map, errors), screenshots
+// and video land in test-results/.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
@@ -195,6 +196,8 @@ test.skip(!process.env["POKEHD_PLAY"], "Long play-through: set POKEHD_PLAY=1 to 
 test.skip(!existsSync(ROM_PATH), "Needs rom/pokeblue.gb");
 test.use({
   viewport: { width: 1600, height: 900 },
+  // POKEHD_PLAY_VIDEO=1 records the run (it costs some frame rate, so not for perf numbers).
+  video: process.env["POKEHD_PLAY_VIDEO"] ? { mode: "on", size: { width: 1600, height: 900 } } : "off",
   launchOptions: {
     headless: !process.env["POKEHD_PLAY_HEADED"],
     // POKEHD_PLAY_NO_GPU=1: no renderer at all (the page falls back to the Game Boy screen), for
