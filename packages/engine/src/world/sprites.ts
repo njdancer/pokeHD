@@ -6,9 +6,10 @@ import { TILE_UNITS } from "./region.ts";
 // real sprite sheets come from the ROM in a later task.
 
 const BASE: Record<string, number> = { k: 0x1e1a24, s: 0xf3c9a0, p: 0x3a3a52, w: 0xf4f1ea };
-/** Cap and shirt colours: the player in red, everyone else in blue. */
+/** Cap and shirt colours: the player in red, everyone else in blue, friends' ghosts in green. */
 export const PERSON_COLOURS = {
   player: { h: 0xd8473e, b: 0x3f7fd0 },
+  friend: { h: 0x4fa35a, b: 0xe8c547 },
   npc: { h: 0x3f7fd0, b: 0xd8473e },
 } as const;
 const PERSON = [
