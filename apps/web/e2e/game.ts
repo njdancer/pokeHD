@@ -75,6 +75,8 @@ export class Player {
   readonly world: WorldData;
   readonly samples: { map: number; fps: number; worstMs: number; cpuMs: number }[] = [];
   readonly log: string[] = [];
+  /** When screenshots were taken, in page time (ms): Playwright stalls the page while it takes one. */
+  readonly shots: [number, number][] = [];
   #seenMaps = new Set<number>();
 
   constructor(page: Page, world: WorldData) {
@@ -106,8 +108,16 @@ export class Player {
     if (!this.#seenMaps.has(s.mapId) && s.mode === "overworld" && s.fade === 0 && !s.player.step) {
       this.#seenMaps.add(s.mapId);
       this.log.push(`${new Date().toISOString()} entered ${MAP_NAMES[s.mapId] ?? s.mapId}: ${text.replace(/\n/g, " | ")}`);
-      await this.page.screenshot({ path: test.info().outputPath(`map-${s.mapId.toString(16)}.png`) });
+      await this.screenshot(`map-${s.mapId.toString(16)}.png`);
     }
+  }
+
+  /** A screenshot into the test's output, with its time noted in `shots`. */
+  async screenshot(name: string): Promise<void> {
+    const now = () => this.page.evaluate(() => performance.now());
+    const start = await now();
+    await this.page.screenshot({ path: test.info().outputPath(name) });
+    this.shots.push([start, await now()]);
   }
 
   /** Presses `key` repeatedly while the game isn't on the overworld (A in battle, `key` otherwise). */

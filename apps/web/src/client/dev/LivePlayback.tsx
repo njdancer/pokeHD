@@ -3,7 +3,8 @@
 // Open /dev/live. URL options: ?size=1440 pins the drawing buffer to 2560×1440 for perf checks;
 // ?lookdev mounts the look panel. Two friends' ghosts (p3-ghosts) replay the same walk, one behind
 // and one ahead; ?ghost=<look> picks how they're drawn (a GHOST_LOOKS key) and ?ghosts=0 hides them.
-// ?frame=N plays up to frame N and holds there, for screenshots.
+// ?frame=N plays up to frame N and holds there, for screenshots. ?perf logs every frame slower
+// than 25 ms over the first pass, with the CPU split and any chunk build, to window.__perf.
 import { useEffect, useRef, useState } from "react";
 import { createEngine, type Engine } from "@pokehd/engine";
 import {
@@ -14,6 +15,7 @@ import { fetchDevRom } from "../dev-rom.ts";
 import { loadStoredRom } from "../rom-store.ts";
 
 const query = new URLSearchParams(location.search);
+const perf = query.has("perf");
 const holdAt = query.has("frame") ? Number(query.get("frame")) : null;
 const ghostLook = GHOST_LOOKS[query.get("ghost") as GhostLookId] ?? undefined;
 /** Fake friends: the recording offset in time, in Game Boy frames. */
@@ -64,15 +66,29 @@ export function LivePlayback() {
       let lastT = performance.now();
       let shown = 0;
       const times: number[] = [];
+      const slow: { frame: number; gapMs: number; updateMs: number; renderMs: number; build: string | null }[] = [];
+      let perfDone = false;
       const tick = () => {
         raf = requestAnimationFrame(tick);
         const now = performance.now();
         times.push(now - lastT);
         lastT = now;
         if (times.length > 240) times.shift();
+        if (perf && !perfDone && times.length > 1 && times.at(-1)! > 25) {
+          const s = engine!.stats;
+          const build = live!.builds.at(-1);
+          slow.push({
+            frame: pushed, gapMs: +times.at(-1)!.toFixed(1), updateMs: +s.updateMs.toFixed(1), renderMs: +s.renderMs.toFixed(1),
+            build: build && now - build.at < times.at(-1)! + 1 ? `${build.map} ${build.ms.toFixed(1)} ms` : null,
+          });
+        }
         let due = Math.floor((now / 1000 - start) / GB_FRAME_SECONDS);
         if (holdAt !== null) due = Math.min(due, holdAt);
         if (due >= stream.length) {
+          if (perf && !perfDone) {
+            perfDone = true;
+            (window as { __perf?: unknown }).__perf = { backend: engine!.backend, slow, builds: [...live!.builds] };
+          }
           start = now / 1000;
           pushed = -1;
           return;
