@@ -28,7 +28,10 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
 - `rom/pokeblue.gb` (gitignored). SHA-1 `d7037c83e1ae5b39bde3c30787637ba1d4c48ce2`.
 - `vendor/pokered` is the pret disassembly (git submodule). It builds a byte-identical ROM and
   `pokeblue.sym`, our source of truth for every routine and RAM/ROM address.
-  Build: `make -C vendor/pokered blue` (needs `rgbds` 1.0.4, `brew install rgbds`).
+  Init with `git submodule update --init vendor/pokered`; build with `pnpm rom:build-disasm`
+  (rgbds comes from `mise.toml`).
+- No ROM in your sandbox? `pnpm rom:fetch` downloads and verifies it using the
+  `POKEHD_DEV_ROM_TOKEN` environment variable. Never print, log or commit that token.
   Use the disassembly's source as documentation for data formats, but **extract data from the
   ROM bytes at runtime**, never by bundling files from `vendor/`.
 
@@ -68,7 +71,10 @@ gifts land only at safe moments; (3) bigger ROM patches, shipped as a patch appl
 - Pushes to `main` run CI (`.github/workflows/ci.yml`: lint, typecheck, test and build on the mise
   toolchain), then deploy to https://pokehd.nick-01a.workers.dev. Deploy needs the
   `CLOUDFLARE_API_TOKEN` repo secret.
-- Commit small and often with descriptive messages; push to `origin main` (private GitHub repo).
+- **Plan and decisions:** `docs/PLAN.md` (roadmap, task specs, tracks, coordination rules) and
+  `docs/DECISIONS.md` (settled decisions with reasons). Read both before starting work.
+- Commit small and often with descriptive messages. Work on a branch per task
+  (`claude/<task-id>`) and open a PR; don't push to `main` directly.
 - **Status dashboard**: https://claude.ai/artifact/UUefXDjuKGfRUNtF6SLNNQ (source in
   `dashboard/status.html`). Keep it current with the `ArtifactData` tool:
   `project/meta` (headline, phases, currentPhase, repo, updatedAt), `project/metrics`
@@ -76,6 +82,6 @@ gifts land only at safe moments; (3) bigger ROM patches, shipped as a patch appl
   phase, order, note?`), `devlog/<id>` (`ts` ISO, `title`, `body` with paragraphs, `- ` bullets,
   `code`, **bold** and links, `tags[]`, optional `images: [{url, caption}]` with urls from
   uploading screenshots as artifact assets). Post a dev log entry at every meaningful milestone
-  or decision, and update tasks as they change state.
+  or decision, and update tasks as they change state. Task document IDs match `docs/PLAN.md`.
 - The user is an experienced TS/3D developer acting as technical advisor: explain trade-offs,
   push back on bad ideas, show visual options side by side rather than picking silently.

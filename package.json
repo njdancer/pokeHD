@@ -9,7 +9,9 @@
     "deploy": "pnpm --filter @pokehd/web run deploy",
     "typecheck": "pnpm -r typecheck",
     "lint": "oxlint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "rom:fetch": "tools/fetch-dev-rom.sh",
+    "rom:build-disasm": "git submodule update --init vendor/pokered && make -C vendor/pokered -j8 blue"
   },
   "devDependencies": {
     "oxlint": "^1.81.0",

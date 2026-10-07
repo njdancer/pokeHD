@@ -1,0 +1,95 @@
+# Decisions
+
+Settled decisions and why. Don't reopen one without new information; if you do, add a new entry
+that supersedes the old one rather than editing history. Newest last.
+
+## D1. Run the real ROM in an emulator; never reimplement game logic
+
+Nick wants behaviour identical to the original (drop rates, stats, AI, glitches). Emulation gives
+that for free. A reimplementation (from pret/pokered data plus a new engine) was the alternative;
+it would have allowed true co-op questing but costs a full battle and script engine rewrite.
+Nick's multiplayer goals turned out to fit emulation: friends occupy the same world as
+"ghosts" (each player has their own game state), and they help each other through gifts
+(money, items, Pokémon) and link-cable trades and battles. **Known limitation:** friends can't
+join each other's battles, and each player sees their own story state (a friend may walk
+through a Snorlax that's still blocking the road in your game). Accepted.
+
+## D2. TypeScript and Three.js, not Rust/Bevy
+
+Nick was open to Rust/Bevy. Rejected because its strengths (ECS, raw performance) solve
+problems this project doesn't have (tiny maps, logic inside the emulator), while its costs
+(slow wasm compile, big binaries, API churn every release) land on visual iteration speed,
+which is the point of the project. Three.js's WebGPU renderer and TSL node materials give us
+the modern pipeline.
+
+## D3. Plain Three.js in a framework-free engine; React for UI chrome only
+
+`packages/engine` owns the canvas and frame loop; React mounts it once. No react-three-fiber:
+the scene is generated from ROM data and driven by emulator state at 60fps, the opposite of
+R3F's strength (declarative, hand-authored scenes). Engine→UI state via a vanilla Zustand store.
+
+## D4. Vite SPA + Hono on one Cloudflare Worker; no SSR framework
+
+Nick first suggested React Router, then proposed Hono as something simpler; we went with a
+plain Vite + React SPA and a Hono Worker. SSR adds nothing to a full-screen WebGPU canvas and fights client-only
+rendering. One Worker serves static assets (SPA fallback), `/api/*` via Hono, and later the
+room Durable Objects.
+
+## D5. Toolchain pinned with mise; pnpm workspaces
+
+Nick's preference. Everything (node, pnpm, rgbds) lives in `mise.toml`; nothing global.
+TypeScript 6 (not 7) because the Vite/Cloudflare tooling targets 6.
+
+## D6. CI on GitHub Actions using the mise toolchain
+
+Cloudflare Workers Builds was rejected because it can't read `mise.toml` (the toolchain would be
+defined twice). GitHub-hosted runners are blocked by an account billing issue, so Nick is moving
+jobs to self-hosted VMs on his Mac via his "Hearthstone" node (separate PR). Deploys use the
+account-owned `pokehd-github-actions` Cloudflare token stored as `CLOUDFLARE_API_TOKEN`.
+
+## D7. No Nintendo data in the repo or on servers, with one testing exception
+
+Players supply their own ROM; everything is derived from it client-side. Exception: Nick's ROM
+in the private R2 bucket behind a token (see CLAUDE.md). Agents fetch it with `pnpm rom:fetch`.
+
+## D8. Pixel art stays crisp; HD comes from everything around it
+
+No xBR/HQx-style smoothing. HD-2D (Octopath Traveler, the Dragon Quest III remake) keeps
+characters as pixel sprites and spends fidelity on geometry, lighting, materials, depth of
+field, bloom, fog and colour grading.
+
+## D9. Always daytime, drifting from morning to late afternoon
+
+Gen 1 has no clock. Nick wants atmosphere without night: the sky and lighting cycle between
+morning and late afternoon. If this project grows to later generations, their real clock can
+drive it.
+
+## D10. World art is generated from ROM data plus a reviewed label table
+
+Fully automatic semantics are impossible (the data doesn't say a tile is a roof or a fence),
+but most come for free: collision lists, door, ledge, warp, grass and water tiles, and
+bookshelf tiles are defined per tileset in the ROM. The remainder goes in a small
+committed label table (tileset, tile ID → semantic), which Nick reviews in a viewer. Nick does
+no hand art; he gives preferences between options.
+
+## D11. Colour: in-ROM SGB palettes first; vision-model palettes later
+
+The ROM carries Super Game Boy palettes (per town, per Pokémon). The baseline maps each 4-shade
+ramp to a richer ramp (hue-shifted shadows and highlights). Later (P4) an offline job can ask a
+vision-capable model for per-region colours of each sprite (it knows what each Pokémon looks
+like) and bake them into a reviewed palette file. Nothing generated ships without review.
+Alternative colourisations (e.g. pokered-gbc's palettes) can be optional, user-supplied skins.
+
+## D12. Multiplayer: link cable over the network for trades/battles; mailbox patch for gifts
+
+Trades and battles use the game's own link-cable code (emulated serial over WebSockets via a
+room Durable Object), so they behave exactly as the original. Pokémon Showdown's Gen 1 engine
+was the alternative; rejected because it differs subtly from the cartridge. **Main technical
+risk:** the serial protocol's latency tolerance. Gifts are written into WRAM only at a safe
+point: a small assembly patch adds a mailbox check to the overworld loop.
+
+## D13. Rendering is state-driven for the overworld, screen-driven for text
+
+The HD camera sees far more than the Game Boy's 10×9-tile screen, so the overworld renders whole
+maps (and connected neighbours) from ROM data, positioned by WRAM state. Text boxes and menus
+are decoded from the window tilemap via the charmap and re-typeset with a modern font.
