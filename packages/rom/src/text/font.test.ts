@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { FONT_CHARS, TEXT_BOX_CHARS } from "./charmap.ts";
-import { glyphTable, readGlyphs, tileKey } from "./font.ts";
+import { glyphTable, readGlyphs, tileKey, type Glyph } from "./font.ts";
 
 const ROM_PATH = new URL("../../../../rom/pokeblue.gb", import.meta.url);
 
@@ -15,7 +15,11 @@ describe("charmap", () => {
 });
 
 describe.skipIf(!existsSync(ROM_PATH))("readGlyphs", () => {
-  const glyphs = readGlyphs(new Uint8Array(readFileSync(ROM_PATH)));
+  // Read in beforeAll: a skipped describe still runs its body when collecting tests.
+  let glyphs: Glyph[];
+  beforeAll(() => {
+    glyphs = readGlyphs(new Uint8Array(readFileSync(ROM_PATH)));
+  });
   const byChar = (char: string) => glyphs.find((g) => g.char === char)!;
 
   it("tells every letter, digit and box piece apart", () => {
