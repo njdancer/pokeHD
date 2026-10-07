@@ -110,6 +110,7 @@ describe("room", () => {
     alex.inbox.length = 0;
     const sam2 = r.connect("sam");
     expect(sam1.closed).toBe(CloseCode.replaced);
+    expect(sam1.inbox.at(-1)).toEqual({ type: "error", reason: "replaced" });
     expect(sam2.inbox[0]).toMatchObject({ type: "welcome", players: [{ id: "alex" }] });
     leave(r.peers, sam1); // the old socket's close event arrives later
     expect(alex.inbox).toEqual([]);

@@ -1,4 +1,5 @@
 import { MAP_NAMES, type MapData, type MapId, type WorldData } from "@pokehd/rom";
+import type { GhostState } from "./ghosts.ts";
 import type { LiveActor, LiveState } from "./live.ts";
 import { buildRegion } from "./region.ts";
 
@@ -139,4 +140,10 @@ export function palletToViridian(world: WorldData): ScriptedState[] {
     start: { map: id("PALLET_TOWN"), x: 5, y: 6 },
     goal: { map: id("VIRIDIAN_CITY"), x: 23, y: 25 },
   });
+}
+
+/** A scripted state's player as a friend's ghost, for playing a recording back as a second player. */
+export function asGhost(id: string, name: string, state: ScriptedState): GhostState {
+  const { x, y, step, animFrame } = state.player;
+  return { id, name, mapId: state.mapId, x, y, step, animFrame };
 }
