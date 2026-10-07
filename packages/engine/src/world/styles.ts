@@ -28,6 +28,9 @@ export const STYLES = {
 
 export type StyleId = keyof typeof STYLES;
 
+/** Nick's pick (D18). The others stay buildable for comparison. */
+export const DEFAULT_STYLE: StyleId = "hybrid";
+
 const UNDER_PROPS: ReadonlySet<Label> = new Set(["tree", ...PROP_LABELS]);
 
 function common(region: Region) {
