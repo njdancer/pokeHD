@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Makes a friend invite code (D19): `pnpm invite "for Sam"`. The code works once, for 7 days.
-# Needs POKEHD_ADMIN_TOKEN, the Worker's ADMIN_TOKEN secret. Never print or commit the token.
+# Needs the Worker's ADMIN_TOKEN secret, from POKEHD_ADMIN_TOKEN or ~/.config/pokehd/admin-token
+# (where it was generated on Nick's Mac). Never print or commit the token.
 # POKEHD_URL picks the deployment (http://localhost:5173 for `pnpm dev`, with ADMIN_TOKEN in
 # apps/web/.dev.vars).
 set -euo pipefail
 
 URL="${POKEHD_URL:-https://pokehd.nick-01a.workers.dev}/api/admin/invites"
+TOKEN_FILE="$HOME/.config/pokehd/admin-token"
+if [[ -z "${POKEHD_ADMIN_TOKEN:-}" && -f "$TOKEN_FILE" ]]; then
+  POKEHD_ADMIN_TOKEN=$(<"$TOKEN_FILE")
+fi
 if [[ -z "${POKEHD_ADMIN_TOKEN:-}" ]]; then
-  echo "POKEHD_ADMIN_TOKEN is not set (it's the Worker's ADMIN_TOKEN secret)." >&2
+  echo "No admin token: set POKEHD_ADMIN_TOKEN or put it in $TOKEN_FILE." >&2
   exit 1
 fi
 
