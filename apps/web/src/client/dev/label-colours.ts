@@ -1,0 +1,25 @@
+import type { Label } from "@pokehd/rom";
+
+/** Review colours for each label, shared by the dev viewers. */
+export const COLOURS: Record<Label, string> = {
+  ground: "#c9a26b",
+  lawn: "#7cc96b",
+  "tall-grass": "#2f9e44",
+  flower: "#f783ac",
+  tree: "#1b6e3a",
+  cliff: "#8d6e63",
+  ledge: "#e8590c",
+  stairs: "#fab005",
+  water: "#228be6",
+  shore: "#74c0fc",
+  bridge: "#a0522d",
+  roof: "#e03131",
+  wall: "#adb5bd",
+  window: "#66d9e8",
+  door: "#7048e8",
+  lettering: "#f8f9fa",
+  fence: "#ffd43b",
+  sign: "#ff922b",
+  cave: "#212529",
+  unused: "#495057",
+};

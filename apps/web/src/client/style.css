@@ -35,3 +35,19 @@ html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(-
   font: inherit; color: var(--fg); background: #ffffff14; border: 1px solid #ffffff26;
   border-radius: 6px; padding: .25rem .6rem; cursor: pointer;
 }
+.map-viewer { height: 100%; overflow: auto; padding: 1rem; }
+.map-viewer header { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; margin-bottom: 1rem; color: var(--muted); }
+.map-viewer select { font: inherit; }
+.map-viewer canvas { display: block; image-rendering: pixelated; }
+.label-viewer { height: 100%; overflow: auto; padding: 1rem; color: var(--muted); }
+.label-viewer header { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+.label-viewer select { font: inherit; }
+.label-viewer canvas { display: block; image-rendering: pixelated; cursor: pointer; }
+.label-viewer h2 { font-size: 1rem; color: var(--fg); }
+.label-viewer h3 { margin: 1rem 0 .25rem; color: var(--fg); }
+.label-viewer .legend { display: flex; flex-wrap: wrap; gap: .25rem 1rem; padding: 0; list-style: none; font-size: .85rem; }
+.label-viewer .legend i { display: inline-block; width: .8rem; height: .8rem; border-radius: 2px; vertical-align: -1px; }
+.label-viewer .panes { display: flex; flex-wrap: wrap; gap: 2rem; }
+.label-viewer .panes section { flex: 1 1 32rem; min-width: 0; }
+.label-viewer .blocks { display: flex; flex-wrap: wrap; gap: .5rem; }
+.label-viewer figure { margin: 0; font-size: .7rem; text-align: center; }

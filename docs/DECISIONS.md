@@ -94,7 +94,56 @@ The HD camera sees far more than the Game Boy's 10×9-tile screen, so the overwo
 maps (and connected neighbours) from ROM data, positioned by WRAM state. Text boxes and menus
 are decoded from the window tilemap via the charmap and re-typeset with a modern font.
 
-## D15 (proposed). Link play is input lockstep: each client runs both Game Boys
+## D14. Emulator core: SameBoy, compiled to wasm
+
+Approved by Nick on 2026-10-07 after the p1-emu spike. Evidence and reproduction in
+`spikes/emu/README.md`. SameBoy also had far more recent upstream activity than binjgb (69 vs 14
+commits in the past year), though mostly from one author; we pin a commit either way.
+
+Use SameBoy's core (`Core/*.c`, Expat/MIT licence) built with Emscripten into `packages/emu`,
+pinned to a commit, with a thin C wrapper and the debugger, rewind and cheat modules compiled
+out. Run it in a Web Worker as a DMG (not SGB: D11 takes palettes from the ROM ourselves). Use
+SameBoy's own MIT boot ROM, built from its source with the rgbds we already pin; it isn't
+Nintendo data, so committing or serving it is fine.
+
+Why: all three candidates booted Blue to Red's room with the same input script and passed WRAM
+reads, PC hooks and save-state round trips. The differences are in what we'd have to own.
+SameBoy has upstream APIs for everything p1–p3 need: per-instruction execution callbacks (PC
+hooks by symbol, checked in C and only crossing into JS on a hit), read and write watch
+callbacks (useful for the gift mailbox), BESS save states, and bit-level link-cable callbacks
+that its author uses to link two instances in one process, which is p3-link-spike's first step.
+It's also the most accurate open core. Cost: 77 KB gzip and ~600 frames/s on a cloud Xeon
+(10× realtime), against binjgb's 29 KB and ~3,400 frames/s. Both are far past 59.73 Hz.
+
+Alternatives: **binjgb** (MIT, smallest and fast) has no link cable at all (serial always reads
+0xFF) and PC hooks only in a special build, so D12's main risk would sit in our own fork; it's
+the fallback if SameBoy's CPU cost bites on phones. **Gambatte** (gambatte-core fork) is rejected:
+GPLv2 would put `packages/emu` and the shipped wasm under the GPL once friends load it, its
+original repo went private, and its wasm is the largest (202 KB gzip). **mGBA** (MPL-2.0) was a
+reference point only; a GBA-first core with nothing extra for DMG.
+
+## D15. The look: a day cycle of Golden hour → Diorama → Golden hour
+
+From the p0-lookdev presets (Diorama, Clear day, Golden hour, Storybook), Nick sat between
+Diorama and Golden hour, disliked Clear day, and left the call to Claude. The engine blends three
+looks across the day: Golden hour in the morning, Diorama at midday, Golden hour again in the late
+afternoon. Mornings still read paler than afternoons because the sun's own colour and angle
+follow the time of day. What this commits to: a filmic AgX tone curve, a strong tilt-shift
+miniature feel, soft shadows, light haze and gentle bloom. Clear day (flat, saturated, little
+blur) was dropped. Every value stays tunable in the `?lookdev` panel; refine within this
+direction rather than reopening it.
+
+## D16. The day runs forwards into a low evening, and wraps to morning out of sight
+
+Supersedes D9's "drifting between morning and late afternoon". Ping-ponging the clock made the
+sun visibly reverse and shadows swing back, and Nick wanted an evening with long, low shadows.
+The sun now only moves east to west: morning (phase 0, low in the east) to evening (phase 1,
+about 9° above the western horizon). After an evening hold the clock wraps to morning. In-game
+the wrap happens inside one of Gen 1's own fades to black (doors, caves, route changes) through
+`look.wrapToMorning(true)`, so it's never seen; the look-dev preview fades out and back in
+instead. Still never night.
+
+## D17 (proposed). Link play is input lockstep: each client runs both Game Boys
 
 Proposed after p3-link-spike; amends D12's "emulated serial over WebSockets". Evidence and
 reproduction in `spikes/link/README.md`.

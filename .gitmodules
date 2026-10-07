@@ -1,3 +1,6 @@
 [submodule "vendor/pokered"]
 	path = vendor/pokered
 	url = https://github.com/pret/pokered.git
+[submodule "vendor/SameBoy"]
+	path = vendor/SameBoy
+	url = https://github.com/LIJI32/SameBoy.git
