@@ -59,7 +59,10 @@ gifts land only at safe moments; (3) bigger ROM patches, shipped as a patch appl
   (`mise exec -- pnpm …`); don't rely on globally installed tools or change global config.
 - pnpm workspaces. TypeScript 6 strict (`tsconfig.base.json`), oxlint, Vitest.
 - Commands: `pnpm dev` (client + Worker on :5173), `pnpm typecheck`, `pnpm test`, `pnpm lint`,
-  `pnpm build`, `pnpm deploy`. Pushes to `main` auto-deploy via Cloudflare Workers Builds.
+  `pnpm build`, `pnpm run deploy` (bare `pnpm deploy` is a pnpm builtin).
+- Pushes to `main` run CI (`.github/workflows/ci.yml`: lint, typecheck, test and build on the mise
+  toolchain), then deploy to https://pokehd.nick-01a.workers.dev. Deploy needs the
+  `CLOUDFLARE_API_TOKEN` repo secret.
 - Commit small and often with descriptive messages; push to `origin main` (private GitHub repo).
 - **Status dashboard**: https://claude.ai/artifact/UUefXDjuKGfRUNtF6SLNNQ (source in
   `dashboard/status.html`). Keep it current with the `ArtifactData` tool:
