@@ -33,6 +33,14 @@ export interface LookController {
   wrapToMorning(instant?: boolean): void;
 }
 
+/** What the engine renders and frames: the placeholder by default, or a world from `./world`. */
+export interface WorldContent {
+  root: THREE.Object3D;
+  /** Point the camera and the DoF focus follow. */
+  target: THREE.Vector3;
+  update(seconds: number, camera: THREE.Camera, sunDirection: THREE.Vector3, spriteShadows: boolean): void;
+}
+
 export interface EngineStats {
   /** CPU time spent building and submitting the last frame, ms. */
   cpuMs: number;
@@ -46,6 +54,8 @@ export interface Engine {
   stats: EngineStats;
   /** Pins the drawing buffer to an exact size (e.g. 2560×1440 for perf checks); null follows the canvas. */
   setFixedSize(size: { width: number; height: number } | null): void;
+  /** Swaps what's rendered. The caller owns (and disposes) the old content. */
+  setWorld(world: WorldContent): void;
   /** Renders one frame and returns it as a PNG. */
   capture(): Promise<Blob>;
   dispose(): void;
@@ -56,6 +66,8 @@ export interface EngineOptions {
   lookdev?: boolean;
   /** Forces the WebGL2 backend. Defaults to `?webgl` being in the page URL. */
   forceWebGL?: boolean;
+  /** Content to render instead of the look-dev placeholder. */
+  world?: WorldContent;
 }
 
 // The newest engine created on a canvas owns it. React StrictMode mounts, unmounts and
@@ -82,7 +94,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const camera = new THREE.PerspectiveCamera(params.camera.fov, 1, 0.5, 1200);
   const sky = createSky(scene);
   const rig = createRig(scene, sky);
-  const world = createPlaceholder();
+  let world: WorldContent = options.world ?? createPlaceholder();
   scene.add(world.root);
   const post = createPost(renderer, scene, camera);
 
@@ -215,6 +227,11 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     backend: isWebGPU ? "WebGPU" : "WebGL2",
     look,
     stats,
+    setWorld(next) {
+      scene.remove(world.root);
+      world = next;
+      scene.add(world.root);
+    },
     setFixedSize(size) {
       fixedSize = size;
       resize();
