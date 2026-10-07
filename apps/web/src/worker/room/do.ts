@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import type { PlayerInfo, Presence, ServerMessage } from "./protocol.ts";
+import type { PlayerInfo, Presence, ServerMessage } from "@pokehd/protocol";
 import { join, leave, receive, type Peer } from "./room.ts";
 
 /** Headers the Worker sets on the upgrade request it forwards, after checking the session. */
