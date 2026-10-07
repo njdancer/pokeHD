@@ -1,0 +1,3 @@
+# The runner image only needs mise.toml; keep everything else out of the build context.
+*
+!mise.toml

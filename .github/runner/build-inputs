@@ -1,0 +1,4 @@
+# The files the runner image is built from: a change to any of them gives a new image.
+.github/runner/**
+mise.toml
+.dockerignore

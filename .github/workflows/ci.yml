@@ -1,5 +1,7 @@
 name: CI
 
+# Every job runs on Nick's Mac, in throwaway VMs from the Hearthstone node; they wait while the
+# Mac is asleep.
 on:
   push:
     branches: [main]
@@ -11,7 +13,8 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: [fly-second, 'run-${{ github.run_id }}']
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       # Toolchain comes from mise.toml. rgbds is only needed to rebuild the disassembly locally.
@@ -27,7 +30,8 @@ jobs:
   deploy:
     needs: check
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: [fly-second, 'run-${{ github.run_id }}']
+    timeout-minutes: 15
     concurrency: deploy-production
     environment:
       name: production

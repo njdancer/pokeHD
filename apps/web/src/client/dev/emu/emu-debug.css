@@ -1,0 +1,13 @@
+.emu-debug { max-width: 680px; height: 100%; overflow: auto; margin: 0 auto; padding: 4vh 16px; }
+.emu-debug h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+.emu-debug canvas {
+  width: 100%;
+  max-width: 640px;
+  aspect-ratio: 160 / 144;
+  image-rendering: pixelated;
+  background: #000;
+  display: block;
+}
+.emu-debug .info { font-size: .85rem; min-height: 2.6em; margin: .75rem 0 0; }
+.emu-debug .status { color: var(--muted); }
+.emu-debug .actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
