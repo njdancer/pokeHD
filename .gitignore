@@ -16,3 +16,7 @@ dist/
 *.log
 .DS_Store
 .env*
+.wrangler/
+.dev.vars*
+!.dev.vars.example
+*.tsbuildinfo

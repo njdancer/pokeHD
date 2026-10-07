@@ -29,11 +29,19 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
 
 ## Architecture (TypeScript end to end)
 
+- `apps/web`: one Cloudflare Worker project, built by Vite + `@cloudflare/vite-plugin`.
+  - `src/client`: React 19 SPA for UI chrome only (ROM loader, lobby, gift/trade pickers,
+    settings, in-game overlays). Plain CSS with custom properties.
+  - `src/worker`: Hono app under `/api/*` (`run_worker_first`); everything else is static
+    assets with SPA fallback. Durable Objects (multiplayer rooms, hibernatable WebSockets)
+    arrive in the multiplayer phase.
+- `packages/engine`: plain Three.js (`three/webgpu` + TSL), framework-agnostic. Owns the canvas
+  and frame loop; React mounts it once via `createEngine(canvas)` and never re-renders per
+  frame. No react-three-fiber. Engine→UI state goes through a vanilla Zustand store (when needed).
 - `packages/rom`: isomorphic ROM parsing (maps, tilesets, blocksets, sprites, palettes, text
   charmap) addressed via generated symbols. Runs in Node (tools/tests) and the browser.
-- `apps/web`: Vite + Three.js (WebGPU renderer, TSL node materials) client.
-- Later: `packages/emu` (WASM Game Boy core + hooks), `apps/server` (Cloudflare Worker +
-  Durable Objects for rooms).
+- Later: `packages/emu` (WASM Game Boy core + hooks), `packages/protocol` (valibot-validated
+  client↔room messages).
 
 Rendering is **state-driven** for the overworld (read map ID and coordinates from WRAM, render
 the whole map plus its connections from ROM data, not the 160×144 screen), and **screen-driven**
@@ -47,7 +55,11 @@ gifts land only at safe moments; (3) bigger ROM patches, shipped as a patch appl
 
 ## Working conventions
 
-- pnpm workspace. Node 24. TypeScript strict.
+- Tool versions are pinned in `mise.toml` (node, pnpm, rgbds). Run commands through mise
+  (`mise exec -- pnpm …`); don't rely on globally installed tools or change global config.
+- pnpm workspaces. TypeScript 6 strict (`tsconfig.base.json`), oxlint, Vitest.
+- Commands: `pnpm dev` (client + Worker on :5173), `pnpm typecheck`, `pnpm test`, `pnpm lint`,
+  `pnpm build`, `pnpm deploy`. Pushes to `main` auto-deploy via Cloudflare Workers Builds.
 - Commit small and often with descriptive messages; push to `origin main` (private GitHub repo).
 - **Status dashboard**: https://claude.ai/artifact/UUefXDjuKGfRUNtF6SLNNQ (source in
   `dashboard/status.html`). Keep it current with the `ArtifactData` tool:
