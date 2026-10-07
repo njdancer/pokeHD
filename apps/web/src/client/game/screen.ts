@@ -10,11 +10,25 @@ import type { OverworldMode, OverworldWatched } from "@pokehd/emu";
 export type ScreenLayout = "full" | "dialog" | "corner" | "hidden";
 
 /**
- * Whether a map has loaded since the game started. The game clears WRAM on every (re)start,
- * so wCurMapHeight and wCurMapWidth stay 0 through the title screen and the new-game intro.
+ * Tracks whether the game is in the overworld, from each frame's watched bytes.
+ * Three things make a loaded map header misleading on its own:
+ * - before the game's init clears WRAM, it holds whatever the console powered up with;
+ * - the title screen and new-game intro run with the header still cleared (that part's fine);
+ * - with a save, the main menu loads it, map and all, to preview it.
+ * So the answer turns true only after WRAM has been seen cleared and then EnterMap has set its
+ * map-loaded flag (BIT_CUR_MAP_LOADED_2; the Continue screen sets only the first one), and it
+ * holds until the map header clears again (a reset).
  */
-export const mapLoaded = (watched: Pick<OverworldWatched, "mapHeader">) =>
-  (watched.mapHeader[1] ?? 0) > 0 && (watched.mapHeader[2] ?? 0) > 0;
+export function inWorldTracker() {
+  let cleared = false;
+  let inWorld = false;
+  return (watched: Pick<OverworldWatched, "mapHeader" | "mapScriptFlags">): boolean => {
+    const mapLoaded = (watched.mapHeader[1] ?? 0) > 0 && (watched.mapHeader[2] ?? 0) > 0;
+    if (!mapLoaded) cleared = true;
+    inWorld = cleared && mapLoaded && (inWorld || ((watched.mapScriptFlags[0] ?? 0) & 0b0100_0000) !== 0);
+    return inWorld;
+  };
+}
 
 /** `pip` is the player's choice for the overworld: the small screen in the corner, or none. */
 export function screenLayout(mode: OverworldMode, inWorld: boolean, pip: boolean): ScreenLayout {

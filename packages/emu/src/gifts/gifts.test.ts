@@ -47,17 +47,9 @@ const popcount = (b: number) => {
   return n;
 };
 
-/** A desk whose saves are tracked the way the worker does it. */
 function desk(gb: GameBoy, rom: Uint8Array) {
   const events: GiftEvent[] = [];
-  const d: GiftDesk = new GiftDesk(gb, {
-    rom,
-    emit: (e) => events.push(e),
-    flushSram: () => {
-      gb.clearSramDirty();
-      d.saved();
-    },
-  });
+  const d = new GiftDesk(gb, { rom, emit: (e) => events.push(e) });
   const settle = () => {
     for (let i = 0; i < 600 && d.pending > 0; i++) gb.runFrame();
   };
@@ -248,12 +240,15 @@ describe.skipIf(!existsSync(ROM_PATH))("gifts through the overworld idle point (
       { type: "rejected", id: "g1", reason: "species" },
     ]);
 
-    // Nothing is settled until the game saves.
+    // Nothing is settled until the game saves: handing over battery RAM alone (the game also
+    // decompresses pictures into it) doesn't count.
+    d.saved();
     expect(events.some((e) => e.type === "settled")).toBe(false);
     save(gb);
     d.saved(); // the worker does this when it hands the save over
     const settled = events.find((e) => e.type === "settled");
-    expect(settled).toEqual({ type: "settled", ids: ["m1", "i1", "i2", "i3", "p0", "p1", "p2", "p3", "p4", "p5", "p6"] });
+    // SaveMainData (money, bag, box) runs before SavePartyAndDexData.
+    expect(settled).toEqual({ type: "settled", ids: ["m1", "i1", "i2", "i3", "p6", "p0", "p1", "p2", "p3", "p4", "p5"] });
 
     const after = await reboot(gb);
     expect(money(after)).toBe(before + 1500);

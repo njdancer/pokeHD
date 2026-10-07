@@ -81,12 +81,21 @@ function tick() {
   setTimeout(tick, Math.max(0, nextFrameAt - performance.now()));
 }
 
-scope.onmessage = async ({ data }) => {
+// "start" awaits the core. Messages that need the Game Boy (a friend's gift, a read) wait for
+// it rather than find none; settings apply at once, so the first frame already has its watches.
+let started: Promise<void> = Promise.resolve();
+scope.onmessage = ({ data }) => {
+  if (data.type === "start") started = handle(data);
+  else if (data.type === "watch" || data.type === "pause") void handle(data);
+  else void started.then(() => handle(data));
+};
+
+async function handle(data: ToWorker) {
   try {
     switch (data.type) {
       case "start": {
         gb = await GameBoy.create({ rom: data.rom, sram: data.sram, sampleRate: data.sampleRate });
-        desk = new GiftDesk(gb, { rom: data.rom, emit: (event) => post({ type: "gift", event }), flushSram });
+        desk = new GiftDesk(gb, { rom: data.rom, emit: (event) => post({ type: "gift", event }) });
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();
         tick();
@@ -158,4 +167,4 @@ scope.onmessage = async ({ data }) => {
   } catch (err) {
     post({ type: "error", message: err instanceof Error ? err.message : String(err) });
   }
-};
+}

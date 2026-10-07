@@ -25,7 +25,7 @@ export interface GiftStorage {
 
 const range = (prefix: string) => IDBKeyRange.bound(prefix, `${prefix}￿`);
 
-export function giftStorage(slot: Pick<SaveSlot, "key" | "enqueue">): GiftStorage {
+export function giftStorage(slot: Pick<SaveSlot, "key" | "enqueue" | "backup">): GiftStorage {
   const out = `${slot.key}#gift-out:`;
   const ledger = `${slot.key}#gift-in:`;
   return {
@@ -34,7 +34,7 @@ export function giftStorage(slot: Pick<SaveSlot, "key" | "enqueue">): GiftStorag
         run("saves", "readwrite", (s) => {
           s.put(sram.slice().buffer, slot.key);
           return s.put(entry, out + entry.id);
-        }).then(() => undefined),
+        }).then(() => slot.backup?.onSram(sram)),
       ),
     outbox: () => run<OutboxEntry[]>("saves", "readonly", (s) => s.getAll(range(out)) as IDBRequest<OutboxEntry[]>),
     removeOutbox: (id) => slot.enqueue(() => run("saves", "readwrite", (s) => s.delete(out + id))),

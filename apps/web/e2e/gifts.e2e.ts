@@ -26,6 +26,12 @@ test.skip(!process.env.POKEHD_GIFTS || !token || !existsSync(ROM_PATH), "POKEHD_
 
 type Hooked = Window & { __pokehd?: { state: { mode: string } | null; inWorld: boolean } };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const press = async (page: Page, key: string) => {
+  await page.keyboard.down(key);
+  await sleep(50);
+  await page.keyboard.up(key);
+  await sleep(250);
+};
 const log = (...args: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...args);
 
 /**
@@ -56,7 +62,7 @@ async function makeSave(sender: boolean): Promise<Uint8Array> {
         ],
       });
     }
-    new GiftDesk(gb, { rom, emit: () => {}, flushSram: () => {} }).give("setup", { kind: "item", item: 0x14, quantity: 5 });
+    new GiftDesk(gb, { rom, emit: () => {} }).give("setup", { kind: "item", item: 0x14, quantity: 5 });
     run();
     ["SPARKY", "PIDGE"].forEach((name, i) =>
       encodeText(name).forEach((b, j) => gb.write(SYMBOLS.wPartyMonNicks.address + i * 11 + j, b)),
@@ -102,10 +108,7 @@ async function player(browser: Browser, name: string, sram: Uint8Array): Promise
       return !!p?.inWorld && p.state?.mode === "overworld";
     });
     if (ready && tick > 0) break;
-    await page.keyboard.down("z");
-    await sleep(50);
-    await page.keyboard.up("z");
-    await sleep(250);
+    await press(page, "z");
   }
   log(name, "in the overworld", await page.locator(".room-badge").textContent().catch(() => "no badge"));
   await expect(page.getByText(/friends? online/)).toBeVisible({ timeout: 20_000 });
@@ -148,14 +151,38 @@ test("friends send each other money, an item and a Pokémon", async ({ browser }
   await receiver.screenshot({ path: "test-results/gifts-receiver.png" });
 
   // Not saved yet, so a reload brings them again (the room still holds them).
+  const received = receiver.locator(".gift-notices").getByText(/sent you ¥500/);
+  await receiver.reload();
+  await expect(receiver.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
+  for (let tick = 0; tick < 600 && !(await received.isVisible()); tick++) await press(receiver, "z");
+  await expect(received).toBeVisible();
+  log("re-delivered after a reload");
+
+  // The receiver saves from the start menu (POKéMON, ITEM, name, SAVE): now they're delivered,
+  // and the next reload brings nothing.
+  await sleep(2000);
+  await press(receiver, "Enter");
+  for (let i = 0; i < 3; i++) await press(receiver, "ArrowDown");
+  await press(receiver, "z"); // SAVE
+  await sleep(1500);
+  await press(receiver, "z"); // YES
+  await sleep(4000);
+  await press(receiver, "x");
+  await press(receiver, "x");
+  await sleep(3000);
+  await receiver.screenshot({ path: "test-results/gifts-receiver-saved.png" });
+  log("saved");
   await receiver.reload();
   await expect(receiver.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   for (let tick = 0; tick < 600; tick++) {
-    if (await receiver.locator(".gift-notices").getByText(/sent you ¥500/).isVisible()) break;
-    await receiver.keyboard.down("z");
-    await sleep(50);
-    await receiver.keyboard.up("z");
-    await sleep(250);
+    const ready = await receiver.evaluate(() => {
+      const p = (window as Hooked).__pokehd;
+      return !!p?.inWorld && p.state?.mode === "overworld";
+    });
+    if (ready) break;
+    await press(receiver, "z");
   }
-  await expect(receiver.locator(".gift-notices").getByText(/sent you ¥500/)).toBeVisible();
+  await sleep(5000);
+  await expect(receiver.locator(".gift-notices").getByText(/sent you/)).toHaveCount(0);
+  await expect(receiver.getByTestId("stats")).toHaveAttribute("data-mode", "overworld");
 });

@@ -54,7 +54,7 @@ function fakeHost(taken?: TakenGift) {
 }
 
 async function courier(taken?: TakenGift) {
-  const slot = await openSaveSlot("rom");
+  const slot = await openSaveSlot("rom", null);
   const storage = giftStorage(slot);
   const room = fakeRoom();
   const host = fakeHost(taken);

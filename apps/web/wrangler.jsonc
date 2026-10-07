@@ -9,7 +9,11 @@
   },
   // Private bucket holding Nick's test ROM, served only to requests carrying DEV_ROM_TOKEN
   // (a Worker secret). The single deliberate exception to "no Nintendo data on servers".
-  "r2_buckets": [{ "binding": "PRIVATE", "bucket_name": "pokehd-private" }],
+  // SAVES: players' battery-save backups (p1-saves-cloud), keyed by player ID and ROM SHA-1.
+  "r2_buckets": [
+    { "binding": "PRIVATE", "bucket_name": "pokehd-private" },
+    { "binding": "SAVES", "bucket_name": "pokehd-saves" }
+  ],
   "vars": { "DEV_ROM_KEY": "rom-a122f2e20e25a654c17a615c.gb" },
   "observability": { "enabled": true },
   "upload_source_maps": true,

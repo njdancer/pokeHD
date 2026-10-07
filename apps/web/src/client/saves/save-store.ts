@@ -2,6 +2,7 @@
 // files. A .sav is the raw SRAM image, the same format other emulators read and write.
 import { sha1Hex, type RomHeader } from "@pokehd/rom";
 import { run } from "../idb.ts";
+import { cloudBackup } from "./cloud-save.ts";
 
 /** Saves are keyed by the ROM's SHA-1, so a different dump never picks up the wrong save. */
 export const romKey = (rom: Uint8Array) => sha1Hex(rom);
@@ -35,11 +36,18 @@ export function savFileName(header: RomHeader): string {
   return `${header.title.replace(/^POKEMON /, "POKE").toLowerCase().replace(/[^a-z0-9]+/g, "") || "game"}.sav`;
 }
 
+/** Somewhere each stored save is also sent, such as the cloud backup. */
+export interface SaveBackup {
+  onSram(sram: Uint8Array): void;
+}
+
 /**
  * Wiring for an `EmulatorHost`: pass `sram` as its starting SRAM and `persist` as `onSram`.
- * Writes are queued so they commit in the order the emulator produced them.
+ * Writes are queued so they commit in the order the emulator produced them, and each stored
+ * save goes on to `backup` (in a browser, the player's cloud backup, which does nothing while
+ * signed out).
  */
-export async function openSaveSlot(key: string) {
+export async function openSaveSlot(key: string, backup: SaveBackup | null = defaultBackup(key)) {
   let queue: Promise<unknown> = Promise.resolve();
   /** Runs `op` after every write queued before it. */
   const enqueue = <T>(op: () => Promise<T>): Promise<T> => {
@@ -51,9 +59,14 @@ export async function openSaveSlot(key: string) {
     key,
     sram: (await loadSave(key)) ?? undefined,
     persist(sram: Uint8Array): Promise<void> {
-      return enqueue(() => storeSave(key, sram)).then(() => undefined);
+      return enqueue(() => storeSave(key, sram)).then(() => backup?.onSram(sram));
     },
     enqueue,
+    backup,
   };
 }
 export type SaveSlot = Awaited<ReturnType<typeof openSaveSlot>>;
+
+function defaultBackup(key: string): SaveBackup | null {
+  return typeof window === "undefined" ? null : cloudBackup(key);
+}

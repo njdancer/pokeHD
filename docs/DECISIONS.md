@@ -235,3 +235,15 @@ Rules that come with it:
   a friend who reloads an older save can't keep what they gave away.
 - Key items can't be gifted: they would skip story steps.
 - A Pokémon gift goes to the current box when the party is full, as the game's own gifts do.
+
+## D21. Friends' ghosts: a green palette swap with a name tag
+
+Nick picked "tint-tag" on 2026-10-07 from the p3-ghosts comparison (`/dev/live?ghost=<look>`,
+PR #24). A friend's ghost uses the player's billboard with a green cap and yellow shirt, and a
+small name label above the head. Ghosts trail their newest presence by 100 ms so network jitter
+doesn't show.
+
+Alternatives (Claude's notes, not Nick's words): **plain** (the player's own colours) can't be
+told apart from you; **translucent** looks faded and loses detail under the tilt-shift blur;
+**tint** or **tag** alone each work, but together they're clearest. Name tags soften with the depth of
+field away from the focus; drawing them after post-processing is a later refinement if needed.

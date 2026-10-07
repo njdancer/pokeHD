@@ -1,15 +1,17 @@
 import { useRef, useState } from "react";
 import type { RomHeader } from "@pokehd/rom";
+import { CloudSaveStatus } from "./CloudSaveStatus.tsx";
+import { cloudBackup } from "./cloud-save.ts";
 import { checkSav, loadSave, savFileName, storeSave } from "./save-store.ts";
 
 interface Props {
   romKey: string;
   header: RomHeader;
-  /** Called after a .sav replaces the stored save, so a running emulator can restart on it. */
+  /** Called after a .sav or the cloud copy replaces the stored save, so a running emulator can restart on it. */
   onImported?(sram: Uint8Array): void;
 }
 
-/** Export and import of the battery save as a .sav file. */
+/** Export and import of the battery save as a .sav file, and its cloud backup. */
 export function SaveControls({ romKey, header, onImported }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<string>();
@@ -31,6 +33,7 @@ export function SaveControls({ romKey, header, onImported }: Props) {
     if (!check.ok) return setMessage(check.reason);
     if ((await loadSave(romKey)) && !confirm("Replace the save in this browser with this file? Export it first if you want to keep it.")) return;
     await storeSave(romKey, check.sram);
+    cloudBackup(romKey).onSram(check.sram);
     setMessage("Save imported.");
     onImported?.(check.sram);
   };
@@ -40,6 +43,7 @@ export function SaveControls({ romKey, header, onImported }: Props) {
       <button type="button" onClick={exportSav}>Export save</button>
       <button type="button" onClick={() => inputRef.current?.click()}>Import save</button>
       <input ref={inputRef} type="file" accept=".sav,.srm,application/octet-stream" hidden onChange={(e) => importSav(e.target.files?.[0])} />
+      <CloudSaveStatus romKey={romKey} onRestored={(sram) => { setMessage("Save restored from the cloud."); onImported?.(sram); }} />
       {message && <span role="status">{message}</span>}
     </>
   );

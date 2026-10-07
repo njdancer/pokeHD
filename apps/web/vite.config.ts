@@ -49,4 +49,10 @@ function devShots(): Plugin {
 
 export default defineConfig({
   plugins: [devRom(), devShots(), react(), cloudflare()],
+  environments: {
+    // The Worker reaches valibot through @pokehd/protocol (workspace source, which Vite doesn't
+    // scan), so it found it on the first request and re-bundled mid-request: a 500 from /api/me
+    // on every fresh dev-server start. Bundle it up front.
+    pokehd: { optimizeDeps: { include: ["@pokehd/protocol > valibot"] } },
+  },
 });
