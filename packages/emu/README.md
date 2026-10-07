@@ -32,3 +32,10 @@ New capabilities (the link cable's serial callbacks, for p3-link) go in `native/
 `emu_*` exports, typed in `src/generated/sameboy.d.mts` and wrapped on `GameBoy`. SameBoy's
 `GB_set_serial_transfer_bit_start_callback` / `..._bit_end_callback` are the entry points for
 the link.
+
+## Overworld state
+
+`src/state/` turns watched WRAM into an `OverworldState` (map, player, NPCs, mode, fade) for the
+live world renderer. Pass `OVERWORLD_WATCHES` to `EmulatorHost.watch`, then decode each
+`FrameMessage.watched` with `decodeOverworldState`. Positions are in step cells (16 px) with
+the step in progress alongside, so the renderer interpolates between frames.
