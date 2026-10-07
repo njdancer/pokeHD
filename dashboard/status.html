@@ -1,0 +1,227 @@
+<title>pokeHD Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a mission-control sheet. Phase rail across the top, metrics strip, then tasks | dev log. */
+:root {
+  --bg: #edf0ec;
+  --surface: #f8faf7;
+  --line: #d3d9d2;
+  --fg: #19201d;
+  --muted: #5b6660;
+  --accent: #2f5fc4;
+  --accent-soft: #dfe7f8;
+  --ok: #2c7a4b; --ok-soft: #dcefe2;
+  --warn: #9a6a07; --warn-soft: #f6ead0;
+  --bad: #b23a2e; --bad-soft: #f6dcd8;
+  --font-display: "Silkscreen", ui-monospace, monospace;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e1318; --surface: #151c23; --line: #26313b; --fg: #e2e8ee; --muted: #8d9aa6;
+  --accent: #82a8ff; --accent-soft: #1c2a45;
+  --ok: #6fcf93; --ok-soft: #173325; --warn: #e2b553; --warn-soft: #3a2e12; --bad: #f08a7e; --bad-soft: #3d1d19;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #0e1318; --surface: #151c23; --line: #26313b; --fg: #e2e8ee; --muted: #8d9aa6;
+  --accent: #82a8ff; --accent-soft: #1c2a45;
+  --ok: #6fcf93; --ok-soft: #173325; --warn: #e2b553; --warn-soft: #3a2e12; --bad: #f08a7e; --bad-soft: #3d1d19;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-inline: 20px; padding-block: 28px 64px; display: grid; gap: 28px; }
+h1, h2, .label { font-family: var(--font-display); font-weight: 400; letter-spacing: .04em; }
+h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0; line-height: 1.1; }
+h2 { font-size: .95rem; margin: 0; text-transform: uppercase; color: var(--muted); }
+.label { font-size: .72rem; text-transform: uppercase; color: var(--muted); }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 24px; }
+header .sub { color: var(--muted); margin: 6px 0 0; max-width: 62ch; text-wrap: pretty; }
+.stamp { font-family: var(--font-data); font-size: .8rem; color: var(--muted); text-align: right; }
+.stamp a { color: var(--accent); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: 1px; }
+.dot.live { background: var(--ok); }
+
+/* Phase rail */
+.rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.phase { padding: 14px 16px; border-right: 1px solid var(--line); display: grid; gap: 4px; min-width: 0; }
+.phase:last-child { border-right: 0; }
+.phase .n { font-family: var(--font-data); font-size: .75rem; color: var(--muted); }
+.phase .t { font-weight: 600; font-size: .92rem; line-height: 1.3; }
+.phase .bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+.phase .bar i { display: block; height: 100%; background: var(--accent); }
+.phase.current { background: var(--accent-soft); }
+.phase.current .n { color: var(--accent); }
+.phase.done .bar i { background: var(--ok); }
+
+/* Metrics */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.metric { padding: 12px 14px; border-left: 2px solid var(--line); display: grid; gap: 2px; min-width: 0; }
+.metric .v { font-family: var(--font-data); font-size: 1.5rem; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 1.2; overflow-wrap: anywhere; }
+.metric .v small { font-size: .8rem; color: var(--muted); margin-left: 3px; }
+.metric .h { font-size: .8rem; color: var(--muted); }
+
+/* Main grid */
+main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 32px; align-items: start; }
+@media (max-width: 860px) { main { grid-template-columns: minmax(0, 1fr); } }
+section { display: grid; gap: 14px; min-width: 0; }
+.sechead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
+.count { font-family: var(--font-data); font-size: .8rem; color: var(--muted); }
+
+.group { display: grid; gap: 6px; }
+.group > .label { margin-top: 6px; }
+.task { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.task .box { width: 14px; height: 14px; margin-top: 4px; border: 1.5px solid var(--muted); border-radius: 3px; }
+.task.doing .box { border-color: var(--warn); background: linear-gradient(90deg, var(--warn) 50%, transparent 50%); }
+.task.done .box { border-color: var(--ok); background: var(--ok); }
+.task.blocked .box { border-color: var(--bad); background: var(--bad-soft); }
+.task.done .tt { color: var(--muted); }
+.task .note { font-size: .82rem; color: var(--muted); margin-top: 2px; }
+.pill { font-family: var(--font-data); font-size: .7rem; padding: 1px 7px; border-radius: 99px; background: var(--bg); color: var(--muted); border: 1px solid var(--line); white-space: nowrap; }
+details.donegroup > summary { cursor: pointer; list-style: none; }
+details.donegroup > summary::-webkit-details-marker { display: none; }
+details.donegroup > summary::before { content: "▸ "; color: var(--muted); }
+details.donegroup[open] > summary::before { content: "▾ "; }
+details.donegroup .group { margin-top: 6px; }
+
+/* Dev log */
+.entry { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 18px; padding-block: 14px; border-bottom: 1px solid var(--line); }
+.entry:last-child { border-bottom: 0; }
+.entry time { font-family: var(--font-data); font-size: .78rem; color: var(--muted); padding-top: 3px; line-height: 1.4; }
+.entry h3 { margin: 0 0 4px; font-size: 1.02rem; font-weight: 600; text-wrap: balance; }
+.entry .body { max-width: 68ch; }
+.entry .body p { margin: 0 0 8px; }
+.entry .body ul { margin: 0 0 8px; padding-left: 20px; }
+.entry .body code { font-family: var(--font-data); font-size: .85em; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.entry .body a { color: var(--accent); }
+.entry .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.entry figure { margin: 10px 0 4px; }
+.entry figure img { border-radius: var(--r); border: 1px solid var(--line); display: block; image-rendering: auto; }
+.entry figcaption { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+@media (max-width: 520px) { .entry { grid-template-columns: minmax(0, 1fr); } }
+
+.empty { color: var(--muted); padding: 18px; border: 1px dashed var(--line); border-radius: var(--r); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="label">Project status</div>
+      <h1>pokeHD</h1>
+      <p class="sub" id="headline">An HD-2D, multiplayer-ready web remaster of Pokémon Blue, generated from the original ROM.</p>
+    </div>
+    <div class="stamp">
+      <div><span class="dot" id="livedot"></span><span id="livestate">Connecting…</span></div>
+      <div id="updated">Not updated yet</div>
+      <div id="repo"></div>
+    </div>
+  </header>
+
+  <div class="rail" id="rail" aria-label="Project phases"></div>
+  <div class="metrics" id="metrics"></div>
+
+  <main>
+    <section aria-labelledby="tasks-h">
+      <div class="sechead"><h2 id="tasks-h">Tasks</h2><span class="count" id="taskcount"></span></div>
+      <div id="tasks"><div class="empty">Tasks appear here as Claude plans the work.</div></div>
+    </section>
+    <section aria-labelledby="log-h">
+      <div class="sechead"><h2 id="log-h">Dev log</h2><span class="count" id="logcount"></span></div>
+      <div id="log"><div class="empty">Progress updates, decisions and screenshots will be posted here.</div></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// Tiny, safe formatter: paragraphs, "- " bullets, `code`, **bold**, [text](https://url)
+function fmt(text) {
+  const inline = (s) => esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return String(text ?? "").split(/\n{2,}/).map((block) => {
+    const lines = block.split("\n");
+    if (lines.every((l) => /^\s*- /.test(l))) return "<ul>" + lines.map((l) => "<li>" + inline(l.replace(/^\s*- /, "")) + "</li>").join("") + "</ul>";
+    return "<p>" + lines.map(inline).join("<br>") + "</p>";
+  }).join("");
+}
+const when = (iso) => {
+  const d = new Date(iso);
+  if (isNaN(d)) return "";
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" }) + "<br>" + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+};
+
+const state = { meta: null, tasks: [], metrics: null, log: [] };
+
+function renderMeta() {
+  const m = state.meta;
+  if (!m) return;
+  if (m.headline) $("headline").textContent = m.headline;
+  if (m.updatedAt) $("updated").textContent = "Updated " + new Date(m.updatedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  if (m.repo) $("repo").innerHTML = '<a href="' + esc(m.repo) + '" target="_blank" rel="noopener">' + esc(m.repo.replace(/^https:\/\/github.com\//, "")) + "</a>";
+  const phases = Array.isArray(m.phases) ? m.phases : [];
+  $("rail").innerHTML = phases.map((p) => {
+    const pct = Math.max(0, Math.min(100, Number(p.progress) || 0));
+    const cls = p.id === m.currentPhase ? "current" : pct >= 100 ? "done" : "";
+    return '<div class="phase ' + cls + '"><span class="n">' + esc(p.id) + (p.id === m.currentPhase ? " · now" : "") + '</span><span class="t">' + esc(p.title) + '</span><div class="bar" role="progressbar" aria-valuenow="' + pct + '" aria-valuemin="0" aria-valuemax="100"><i style="width:' + pct + '%"></i></div></div>';
+  }).join("");
+}
+
+function renderMetrics() {
+  const items = state.metrics && Array.isArray(state.metrics.items) ? state.metrics.items : [];
+  $("metrics").innerHTML = items.map((it) =>
+    '<div class="metric"><span class="label">' + esc(it.label) + '</span><span class="v">' + esc(it.value) + (it.unit ? "<small>" + esc(it.unit) + "</small>" : "") + "</span>" + (it.hint ? '<span class="h">' + esc(it.hint) + "</span>" : "") + "</div>"
+  ).join("");
+}
+
+function taskRow(t) {
+  return '<div class="task ' + esc(t.status) + '"><span class="box" aria-hidden="true"></span><div><div class="tt">' + esc(t.title) + "</div>" + (t.note ? '<div class="note">' + esc(t.note) + "</div>" : "") + "</div>" + (t.phase ? '<span class="pill">' + esc(t.phase) + "</span>" : "") + "</div>";
+}
+function renderTasks() {
+  const ts = state.tasks.slice().sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+  if (!ts.length) return;
+  const by = (s) => ts.filter((t) => t.status === s);
+  const groups = [["doing", "In progress"], ["blocked", "Blocked"], ["todo", "Up next"]];
+  let html = groups.map(([s, label]) => {
+    const list = by(s);
+    return list.length ? '<div class="group"><span class="label">' + label + " · " + list.length + "</span>" + list.map(taskRow).join("") + "</div>" : "";
+  }).join("");
+  const done = by("done");
+  if (done.length) html += '<details class="donegroup"><summary class="label">Done · ' + done.length + '</summary><div class="group">' + done.map(taskRow).join("") + "</div></details>";
+  const keepOpen = document.querySelector("details.donegroup")?.open;
+  $("tasks").innerHTML = html;
+  if (keepOpen) document.querySelector("details.donegroup").open = true;
+  $("taskcount").textContent = done.length + " / " + ts.length + " done";
+}
+
+function renderLog() {
+  const es = state.log.slice().sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+  if (!es.length) return;
+  $("logcount").textContent = es.length + (es.length === 1 ? " entry" : " entries");
+  $("log").innerHTML = es.map((e) => {
+    const imgs = Array.isArray(e.images) ? e.images : [];
+    return '<article class="entry"><time datetime="' + esc(e.ts) + '">' + when(e.ts) + "</time><div><h3>" + esc(e.title) + '</h3><div class="body">' + fmt(e.body) + "</div>" +
+      imgs.map((im) => '<figure><img src="' + esc(im.url) + '" alt="' + esc(im.caption || e.title) + '" loading="lazy">' + (im.caption ? "<figcaption>" + esc(im.caption) + "</figcaption>" : "") + "</figure>").join("") +
+      (Array.isArray(e.tags) && e.tags.length ? '<div class="tags">' + e.tags.map((t) => '<span class="pill">' + esc(t) + "</span>").join("") + "</div>" : "") + "</div></article>";
+  }).join("");
+}
+
+(async () => {
+  const db = await window.claude?.use?.("db");
+  if (!db) { $("livestate").textContent = "Offline view"; return; }
+  $("livestate").textContent = "Live"; $("livedot").classList.add("live");
+  const fail = () => { $("livestate").textContent = "Reconnect by reloading"; $("livedot").classList.remove("live"); };
+  db.doc("project/meta").onSnapshot((s) => { state.meta = s.exists ? s.data() : null; renderMeta(); }, fail);
+  db.doc("project/metrics").onSnapshot((s) => { state.metrics = s.exists ? s.data() : null; renderMetrics(); }, fail);
+  db.collection("tasks").onSnapshot((q) => { state.tasks = q.docs.map((d) => ({ id: d.id, ...d.data() })); renderTasks(); }, fail);
+  db.collection("devlog").onSnapshot((q) => { state.log = q.docs.map((d) => ({ id: d.id, ...d.data() })); renderLog(); }, fail);
+})();
+</script>

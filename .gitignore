@@ -1,0 +1,18 @@
+# Nintendo data never enters version control
+*.gb
+*.gbc
+*.sgb
+*.sav
+*.srm
+*.state
+
+# Extracted/derived game assets (regenerated from the user's ROM)
+/generated/
+**/public/rom-cache/
+
+node_modules/
+dist/
+.vite/
+*.log
+.DS_Store
+.env*
