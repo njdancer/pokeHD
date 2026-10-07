@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { blendCycle } from "./cycle.ts";
 import { bakeLut, gradeColor, LUT_SIZE } from "./grade.ts";
 import { LOOK_SCHEMA, mergeLook } from "./params.ts";
 import { BUILT_IN_PRESETS, DEFAULT_LOOK } from "./presets.ts";
@@ -63,5 +64,27 @@ describe("presets", () => {
     expect(mergeLook(DEFAULT_LOOK, json)).toEqual(BUILT_IN_PRESETS["Golden hour"]);
     const merged = mergeLook(DEFAULT_LOOK, { bloom: { strength: "lots", bogus: 1 }, nope: {} });
     expect(merged).toEqual(DEFAULT_LOOK);
+  });
+});
+
+describe("day cycle", () => {
+  const cycle = { morning: BUILT_IN_PRESETS["Golden hour"]!, midday: BUILT_IN_PRESETS["Diorama"]!, afternoon: BUILT_IN_PRESETS["Storybook"]! };
+
+  it("hits each look exactly at its keyframe and keeps time and camera live", () => {
+    const live = structuredClone(DEFAULT_LOOK);
+    live.camera.yaw = 42;
+    expect(blendCycle(cycle, 0, live).grade.exposure).toBeCloseTo(cycle.morning.grade.exposure);
+    expect(blendCycle(cycle, 0.5, live).fog.color).toBe(cycle.midday.fog.color);
+    expect(blendCycle(cycle, 1, live).grade.lift).toBeCloseTo(cycle.afternoon.grade.lift);
+    expect(live.camera.yaw).toBe(42);
+    expect(live.time).toEqual(DEFAULT_LOOK.time);
+  });
+
+  it("takes pipeline switches from midday and blends numbers in between", () => {
+    const out = blendCycle(cycle, 0.25, structuredClone(DEFAULT_LOOK));
+    expect(out.tiltShift.blur).toBe(cycle.midday.tiltShift.blur);
+    const [lo, hi] = [cycle.morning.grade.exposure, cycle.midday.grade.exposure].sort((x, y) => x - y);
+    expect(out.grade.exposure).toBeGreaterThan(lo!);
+    expect(out.grade.exposure).toBeLessThan(hi!);
   });
 });

@@ -1,12 +1,14 @@
 import * as THREE from "three/webgpu";
 import { fog, rangeFogFactor, uniform } from "three/tsl";
 import { createSky } from "./sky.ts";
+import { blendCycle, type DayCycle } from "./look/cycle.ts";
 import { mergeLook, STRUCTURAL, type LookParams } from "./look/params.ts";
 import { DEFAULT_LOOK } from "./look/presets.ts";
 import { createPlaceholder } from "./look/placeholder.ts";
 import { createPost } from "./look/post.ts";
 import { createRig } from "./look/rig.ts";
 
+export type { DayCycle } from "./look/cycle.ts";
 export type { LookParams } from "./look/params.ts";
 export { BUILT_IN_PRESETS, DEFAULT_LOOK } from "./look/presets.ts";
 
@@ -17,6 +19,12 @@ export interface LookController {
   set(next: unknown): void;
   /** Call after editing `params` in place; `path` is e.g. "bloom.strength". */
   changed(path?: string): void;
+  /**
+   * Blends three looks across the day (morning, midday, late afternoon), overwriting `params`
+   * every frame except time, camera and render. Null returns to editing `params` directly.
+   */
+  setCycle(cycle: DayCycle | null): void;
+  readonly cycle: DayCycle | null;
 }
 
 export interface EngineStats {
@@ -117,11 +125,25 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     const a = Math.acos(1 - 2 * params.time.phase);
     dayAngle = dayAngle > Math.PI ? Math.PI * 2 - a : a; // keep heading the same way
   };
+  let cycle: DayCycle | null = null;
   const look: LookController = {
     params,
+    get cycle() {
+      return cycle;
+    },
+    setCycle(next) {
+      cycle = next && {
+        morning: mergeLook(DEFAULT_LOOK, next.morning),
+        midday: mergeLook(DEFAULT_LOOK, next.midday),
+        afternoon: mergeLook(DEFAULT_LOOK, next.afternoon),
+      };
+      if (cycle) blendCycle(cycle, params.time.phase, params);
+      rebuild();
+    },
     set(next) {
       // Copy into the existing group objects: the panel holds references to them.
       const merged = mergeLook(DEFAULT_LOOK, next);
+      cycle = null;
       for (const group of Object.keys(merged) as (keyof LookParams)[]) Object.assign(params[group], merged[group]);
       syncDayAngle();
       rebuild();
@@ -150,6 +172,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       dayAngle = (dayAngle + (dt / p.time.cycleSeconds) * Math.PI * 2) % (Math.PI * 2);
       p.time.phase = 0.5 - 0.5 * Math.cos(dayAngle);
     }
+    if (cycle) blendCycle(cycle, p.time.phase, p);
     if (p.camera.orbit) p.camera.yaw = ((p.camera.yaw + dt * 8 + 180) % 360) - 180;
 
     world.update(elapsed, camera, rig.sunDirection, p.shadows.spriteShadows);
