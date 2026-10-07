@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
@@ -24,6 +24,29 @@ function devRom(): Plugin {
   };
 }
 
+/** Dev server only: dev pages POST renders here so agents can grab full-resolution PNGs. */
+function devShots(): Plugin {
+  const dir = new URL("../../shots/", import.meta.url);
+  return {
+    name: "pokehd-dev-shots",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use("/__dev/shot", async (req, res) => {
+        const name = new URL(req.url ?? "", "http://x").searchParams.get("name") ?? "";
+        if (req.method !== "POST" || !/^[\w-]+$/.test(name)) {
+          res.statusCode = 400;
+          return res.end();
+        }
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        await mkdir(dir, { recursive: true });
+        await writeFile(new URL(`${name}.png`, dir), Buffer.concat(chunks));
+        res.end();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [devRom(), react(), cloudflare()],
+  plugins: [devRom(), devShots(), react(), cloudflare()],
 });
