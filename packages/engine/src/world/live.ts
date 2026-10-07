@@ -12,7 +12,10 @@ import { buildFlat, buildStyle, DEFAULT_STYLE, type StyleId } from "./styles.ts"
 // game state. Each map is a chunk built from ROM data and positioned by its connections, so
 // walking across a route edge needs no rebuild. Chunks two connections away are built ahead,
 // one per frame and only while the player is well inside a map, so a build never lands on the
-// frame a route edge is crossed.
+// frame a route edge is crossed. Chunks left behind (by a warp, or by walking more than two
+// connections away) are kept, unrendered, for a while: going back outside from a house reuses
+// them rather than building them again, and keeps their shaders compiled (the first frame that
+// draws freshly built chunks can take 80–160 ms in WebGPU and seconds in WebGL2).
 // World units: 1 unit = 1 step, as everywhere in ./world.
 
 /**
@@ -43,6 +46,8 @@ const MARGIN_BLOCKS = 3;
 const KEEP_HOPS = 2;
 /** Far chunks wait until the player is this many steps inside the current map. */
 const BUILD_CLEARANCE = 4;
+/** Built chunks kept, unrendered, after they leave the loaded set. */
+const SPARE_CHUNKS = 10;
 
 export interface LiveWorldOptions {
   style?: StyleId;
@@ -85,6 +90,8 @@ interface Chunk {
   bx: number;
   by: number;
   group: THREE.Group | null;
+  /** Where the group sits relative to the map origin, in world units. */
+  offset: { x: number; z: number };
 }
 
 export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}): LiveWorld {
@@ -109,11 +116,11 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     let here = place(id);
     if (!here) {
       // Not connected to what's loaded: a warp. Start over around the new map.
-      for (const c of chunks.values()) drop(c);
-      chunks.clear();
       const map = world.maps[id];
       if (!map) return;
-      here = { map, bx: 0, by: 0, hops: 0, group: null };
+      for (const c of chunks.values()) retire(c);
+      chunks.clear();
+      here = revive(map, 0, 0, 0);
       chunks.set(id, here);
     }
     current = id;
@@ -127,8 +134,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         for (const n of neighbours(c)) {
           if (keep.has(n.map.id)) continue;
           keep.add(n.map.id);
-          const existing = chunks.get(n.map.id);
-          const chunk = existing ?? { ...n, hops, group: null };
+          const chunk = chunks.get(n.map.id) ?? revive(n.map, n.bx, n.by, hops);
           chunk.hops = hops;
           chunks.set(n.map.id, chunk);
           next.push(chunk);
@@ -138,10 +144,34 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     }
     for (const [cid, c] of chunks) {
       if (!keep.has(cid)) {
-        drop(c);
+        retire(c);
         chunks.delete(cid);
       }
     }
+  };
+
+  /** Built chunks out of the loaded set, oldest first. Their maps' borders don't depend on placement. */
+  const spare = new Map<MapId, Chunk>();
+  const retire = (c: Chunk) => {
+    if (!c.group) return;
+    root.remove(c.group);
+    spare.delete(c.map.id);
+    spare.set(c.map.id, c);
+    for (const [id, old] of spare) {
+      if (spare.size <= SPARE_CHUNKS) break;
+      spare.delete(id);
+      drop(old);
+    }
+  };
+  /** A chunk for `map` at a new placement: a spare one if there is one, else one to build. */
+  const revive = (map: MapData, bx: number, by: number, hops: number): Chunk => {
+    const old = spare.get(map.id);
+    if (!old?.group) return { map, bx, by, hops, group: null, offset: { x: 0, z: 0 } };
+    spare.delete(map.id);
+    const c = { ...old, bx, by, hops };
+    c.group!.position.set(bx * 2 + c.offset.x, 0, by * 2 + c.offset.z);
+    root.add(c.group!);
+    return c;
   };
 
   const drop = (c: Chunk) => {
@@ -181,7 +211,8 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     const region = buildRegion(world, c.map.id, { marginBlocks: MARGIN_BLOCKS, drawBorder });
     const labelled = LABEL_TABLES[world.tilesets[c.map.tileset]!.name] !== undefined;
     const group = labelled ? buildStyle(style, region, params) : buildFlat(region);
-    group.position.set(c.bx * 2 - region.rootX * TILE_UNITS, 0, c.by * 2 - region.rootY * TILE_UNITS);
+    c.offset = { x: -region.rootX * TILE_UNITS, z: -region.rootY * TILE_UNITS };
+    group.position.set(c.bx * 2 + c.offset.x, 0, c.by * 2 + c.offset.z);
     c.group = group;
     root.add(group);
     builds.push({ map: c.map.id, ms: performance.now() - t0, at: t0 });
@@ -312,8 +343,9 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       fadeQuad.quaternion.copy(camera.quaternion);
     },
     dispose() {
-      for (const c of chunks.values()) drop(c);
+      for (const c of [...chunks.values(), ...spare.values()]) drop(c);
       chunks.clear();
+      spare.clear();
       fadeQuad.geometry.dispose();
       fadeMaterial.dispose();
       ghosts.dispose();
