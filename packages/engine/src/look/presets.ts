@@ -5,22 +5,22 @@ import { mergeLook, type LookParams } from "./params.ts";
 // that differ from DEFAULT_LOOK). The shipped look is DEFAULT_CYCLE (see D15).
 
 export const DEFAULT_LOOK: LookParams = {
-  time: { phase: 0.35, drift: true, cycleSeconds: 240, animate: true },
+  time: { phase: 0.35, drift: true, cycleSeconds: 240, eveningHold: 20, animate: true },
   sun: {
     intensity: 3.2,
-    heading: 160,
-    swing: 70,
-    lowElevation: 18,
+    heading: 170,
+    swing: 85,
+    lowElevation: 9,
     highElevation: 52,
     morningColor: "#ffd8ad",
     middayColor: "#fff4e3",
-    afternoonColor: "#ffb877",
+    eveningColor: "#ffb877",
   },
   sky: {
     zenithMorning: "#5d8fd6",
-    zenithAfternoon: "#4a76c4",
+    zenithEvening: "#4a76c4",
     horizonMorning: "#f3d9b8",
-    horizonAfternoon: "#f5b97a",
+    horizonEvening: "#f5b97a",
     skyLight: 1.1,
     groundColor: "#7a6a4f",
     sunDiscSize: 1.2,
@@ -66,8 +66,8 @@ export const BUILT_IN_PRESETS: Record<string, LookParams> = {
   "Diorama": preset({ time: { phase: 0.35, drift: false } }),
   "Golden hour": preset({
     time: { phase: 0.92, drift: false },
-    sun: { intensity: 4.2, afternoonColor: "#ffa864" },
-    sky: { horizonAfternoon: "#f7a868", skyLight: 1.1, sunDiscIntensity: 20 },
+    sun: { intensity: 4.2, eveningColor: "#ffa864" },
+    sky: { horizonEvening: "#f7a868", skyLight: 1.1, sunDiscIntensity: 20 },
     shadows: { softness: 3.5 },
     fog: { color: "#f2c9a0", skyTint: 0.6, near: 28, far: 120 },
     dof: { focalLength: 7, bokehScale: 3 },
@@ -94,11 +94,11 @@ export const BUILT_IN_PRESETS: Record<string, LookParams> = {
   }),
 };
 
-/** The chosen look (D15): golden mornings and afternoons around a Diorama midday. */
-export const DEFAULT_CYCLE_NAMES = { morning: "Golden hour", midday: "Diorama", afternoon: "Golden hour" } as const;
+/** The chosen look (D15): golden mornings and evenings around a Diorama midday. */
+export const DEFAULT_CYCLE_NAMES = { morning: "Golden hour", midday: "Diorama", evening: "Golden hour" } as const;
 
 export const DEFAULT_CYCLE: DayCycle = {
   morning: BUILT_IN_PRESETS[DEFAULT_CYCLE_NAMES.morning]!,
   midday: BUILT_IN_PRESETS[DEFAULT_CYCLE_NAMES.midday]!,
-  afternoon: BUILT_IN_PRESETS[DEFAULT_CYCLE_NAMES.afternoon]!,
+  evening: BUILT_IN_PRESETS[DEFAULT_CYCLE_NAMES.evening]!,
 };

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createDayClock, stepDay, wrapNow, WRAP_FADE_SECONDS } from "./clock.ts";
 import { blendCycle } from "./cycle.ts";
 import { bakeLut, gradeColor, LUT_SIZE } from "./grade.ts";
 import { LOOK_SCHEMA, mergeLook } from "./params.ts";
@@ -35,9 +36,9 @@ describe("time of day", () => {
   it("rises in the east, peaks at midday and sets towards the west, never below the horizon", () => {
     const morning = sunDirection(DEFAULT_LOOK.sun, 0);
     const midday = sunDirection(DEFAULT_LOOK.sun, 0.5);
-    const afternoon = sunDirection(DEFAULT_LOOK.sun, 1);
+    const evening = sunDirection(DEFAULT_LOOK.sun, 1);
     expect(morning.x).toBeGreaterThan(0);
-    expect(afternoon.x).toBeLessThan(0);
+    expect(evening.x).toBeLessThan(0);
     expect(midday.y).toBeGreaterThan(morning.y);
     for (let p = 0; p <= 1; p += 0.05) expect(sunDirection(DEFAULT_LOOK.sun, p).y).toBeGreaterThan(0);
   });
@@ -68,14 +69,14 @@ describe("presets", () => {
 });
 
 describe("day cycle", () => {
-  const cycle = { morning: BUILT_IN_PRESETS["Golden hour"]!, midday: BUILT_IN_PRESETS["Diorama"]!, afternoon: BUILT_IN_PRESETS["Storybook"]! };
+  const cycle = { morning: BUILT_IN_PRESETS["Golden hour"]!, midday: BUILT_IN_PRESETS["Diorama"]!, evening: BUILT_IN_PRESETS["Storybook"]! };
 
   it("hits each look exactly at its keyframe and keeps time and camera live", () => {
     const live = structuredClone(DEFAULT_LOOK);
     live.camera.yaw = 42;
     expect(blendCycle(cycle, 0, live).grade.exposure).toBeCloseTo(cycle.morning.grade.exposure);
     expect(blendCycle(cycle, 0.5, live).fog.color).toBe(cycle.midday.fog.color);
-    expect(blendCycle(cycle, 1, live).grade.lift).toBeCloseTo(cycle.afternoon.grade.lift);
+    expect(blendCycle(cycle, 1, live).grade.lift).toBeCloseTo(cycle.evening.grade.lift);
     expect(live.camera.yaw).toBe(42);
     expect(live.time).toEqual(DEFAULT_LOOK.time);
   });
@@ -86,5 +87,44 @@ describe("day cycle", () => {
     const [lo, hi] = [cycle.morning.grade.exposure, cycle.midday.grade.exposure].sort((x, y) => x - y);
     expect(out.grade.exposure).toBeGreaterThan(lo!);
     expect(out.grade.exposure).toBeLessThan(hi!);
+  });
+});
+
+describe("day clock", () => {
+  const time = () => ({ ...DEFAULT_LOOK.time, phase: 0, drift: true, cycleSeconds: 10, eveningHold: 2 });
+
+  it("only runs forwards, holds the evening, then wraps to morning behind a fade", () => {
+    const t = time();
+    const clock = createDayClock(t);
+    const phases: number[] = [];
+    for (let i = 0; i < 100; i++) {
+      stepDay(t, clock, 0.1);
+      phases.push(t.phase);
+    }
+    expect(phases[99]).toBe(1); // 10 s of day
+    for (let i = 1; i < phases.length; i++) expect(phases[i]!).toBeGreaterThanOrEqual(phases[i - 1]!);
+    for (let i = 0; i < 20; i++) stepDay(t, clock, 0.1); // evening hold
+    expect(t.phase).toBe(1);
+    expect(clock.fading).toBe(1);
+    for (let s = 0; s < WRAP_FADE_SECONDS; s += 0.1) stepDay(t, clock, 0.1);
+    stepDay(t, clock, 0.1);
+    expect(t.phase).toBe(0); // wrapped while black
+    expect(clock.fade).toBeGreaterThan(0.5);
+    for (let s = 0; s < WRAP_FADE_SECONDS + 0.2; s += 0.1) stepDay(t, clock, 0.1);
+    expect(clock.fade).toBe(0);
+  });
+
+  it("wraps instantly when the screen is already black", () => {
+    const t = { ...time(), phase: 0.9 };
+    const clock = createDayClock(t);
+    wrapNow(t, clock, true);
+    expect(t.phase).toBe(0);
+    expect(clock.fade).toBe(0);
+  });
+
+  it("puts the evening sun low in the west for long shadows", () => {
+    const dir = sunDirection(DEFAULT_LOOK.sun, 1);
+    expect(Math.asin(dir.y) * (180 / Math.PI)).toBeLessThan(12);
+    expect(dir.x).toBeLessThan(-0.5);
   });
 });

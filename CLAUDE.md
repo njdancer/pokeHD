@@ -21,7 +21,7 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
 - **Keep it private.** The GitHub repo is private. Don't name public things "Pokémon".
 - **Visuals are the point.** Pixel art stays crisp (no xBR/HQx smoothing on sprites); the
   HD treatment comes from 3D geometry, lighting, materials and post-processing. It's always
-  daytime, but time of day drifts between morning and late afternoon for atmosphere.
+  daytime, but time of day runs forward from morning to a low evening for atmosphere (D16).
 
 ## Reference ROM
 

@@ -132,3 +132,13 @@ follow the time of day. What this commits to: a filmic AgX tone curve, a strong 
 miniature feel, soft shadows, light haze and gentle bloom. Clear day (flat, saturated, little
 blur) was dropped. Every value stays tunable in the `?lookdev` panel; refine within this
 direction rather than reopening it.
+
+## D16. The day runs forwards into a low evening, and wraps to morning out of sight
+
+Supersedes D9's "drifting between morning and late afternoon". Ping-ponging the clock made the
+sun visibly reverse and shadows swing back, and Nick wanted an evening with long, low shadows.
+The sun now only moves east to west: morning (phase 0, low in the east) to evening (phase 1,
+about 9° above the western horizon). After an evening hold the clock wraps to morning. In-game
+the wrap happens inside one of Gen 1's own fades to black (doors, caves, route changes) through
+`look.wrapToMorning(true)`, so it's never seen; the look-dev preview fades out and back in
+instead. Still never night.
