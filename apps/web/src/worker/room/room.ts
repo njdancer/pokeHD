@@ -20,7 +20,10 @@ export interface Peer {
 export function join(peers: readonly Peer[], newcomer: Peer): void {
   const others = peers.filter((p) => p !== newcomer);
   const previous = others.filter((p) => p.player.id === newcomer.player.id);
-  for (const old of previous) old.close(CloseCode.replaced, "Connected elsewhere");
+  for (const old of previous) {
+    old.send({ type: "error", reason: "replaced" });
+    old.close(CloseCode.replaced, "Connected elsewhere");
+  }
   const present = others.filter((p) => p.player.id !== newcomer.player.id);
 
   newcomer.send({
