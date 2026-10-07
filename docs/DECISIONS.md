@@ -179,3 +179,25 @@ Alternatives: **Extruded diorama** (the same buildings, with trees and props as 
 cards) was cleaner but flatter from low angles. **Voxel** (every pixel a column) gave great ground
 texture but turned buildings into slabs, because the Game Boy draws walls as if seen from above.
 Every dimension stays a tunable `StyleParams` value; refine within this direction.
+
+## D19. Friends join with invite codes; a player is a name and a session cookie
+
+Nick chose invite codes over Cloudflare Access on 2026-10-07. Nick makes a code (`pnpm invite`,
+authorised by the `ADMIN_TOKEN` Worker secret) and sends it to a friend; the friend enters it
+with a display name and becomes a player. Codes are 12 Crockford base32 characters
+(`XXXX-XXXX-XXXX`, 60 bits), work once and expire after 7 days. Joining sets a long-lived
+`__Host-` session cookie (HttpOnly, Secure, SameSite=Strict); that cookie is the identity the
+room, gifts and cloud saves use. A signed-in player can make a one-hour device code to sign the
+same player in on another device. Nick can list players and remove one, which ends their
+sessions. Only SHA-256 hashes of codes and session tokens are stored, in a `Directory` Durable
+Object (SQLite); no D1 database or other setup is needed beyond the secret.
+
+Why: friends don't need a Cloudflare or Google account, or an email on an allowlist, and
+joining is one code typed on a phone. The cost is that we own the account logic (small, and
+covered by tests), and that a lost cookie on a player's only device loses the player unless
+Nick removes them and sends a new invite. Since the API and room are the only things behind
+the gate, the static site stays public; a ROM is still needed to play, and no game data is
+served.
+
+Alternative: **Cloudflare Access** (one-time PIN email or Google login on an allowlist) would
+have given identity for free but put a login wall on every page and needed each friend's email.
