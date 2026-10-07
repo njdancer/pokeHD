@@ -40,12 +40,25 @@ export interface Engine {
 export interface EngineOptions {
   /** Mounts the look-dev panel. Defaults to `?lookdev` being in the page URL. */
   lookdev?: boolean;
+  /** Forces the WebGL2 backend. Defaults to `?webgl` being in the page URL. */
+  forceWebGL?: boolean;
 }
+
+// The newest engine created on a canvas owns it. React StrictMode mounts, unmounts and
+// remounts, so a throwaway engine can still be initialising when its successor starts on the
+// same canvas. A superseded engine never renders and leaves the shared GPU context alone:
+// disposing a WebGL2 renderer calls loseContext(), which would kill its successor too.
+const canvasOwner = new WeakMap<HTMLCanvasElement, symbol>();
 
 /** Owns the canvas and the frame loop. Framework-agnostic: React only mounts it. */
 export async function createEngine(canvas: HTMLCanvasElement, options: EngineOptions = {}): Promise<Engine> {
-  const lookdev = options.lookdev ?? new URLSearchParams(location.search).has("lookdev");
-  const renderer = new THREE.WebGPURenderer({ canvas, antialias: false });
+  const token = Symbol("engine");
+  canvasOwner.set(canvas, token);
+  const superseded = () => canvasOwner.get(canvas) !== token;
+  const query = new URLSearchParams(location.search);
+  const lookdev = options.lookdev ?? query.has("lookdev");
+  const forceWebGL = options.forceWebGL ?? query.has("webgl");
+  const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, forceWebGL });
   await renderer.init();
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // PCF honours shadow.radius for softness
@@ -163,6 +176,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   };
 
   renderer.setAnimationLoop((t) => {
+    if (superseded()) return renderer.setAnimationLoop(null);
     timer.update(t);
     frameHooks.before?.();
     // The first delta can be negative (rAF time vs. the timer's clock); clamp long stalls too.
@@ -193,12 +207,14 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       clearTimeout(rebuildTimer);
       disposePanel?.();
       observer.disconnect();
+      if (superseded()) return;
+      canvasOwner.delete(canvas);
       post.dispose();
       renderer.dispose();
     },
   };
 
-  if (lookdev) {
+  if (lookdev && !superseded()) {
     const { mountLookdevPanel } = await import("./lookdev/panel.ts");
     disposePanel = mountLookdevPanel(engine, frameHooks);
   }

@@ -46,7 +46,9 @@ export function mountLookdevPanel(engine: Engine, hooks: { before?: () => void; 
   const pane = new Pane({ title: "Look-dev" });
   pane.registerPlugin(EssentialsPlugin);
   const host = pane.element.parentElement!;
-  Object.assign(host.style, { width: "320px", maxHeight: "calc(100vh - 16px)", overflowY: "auto", zIndex: "20" });
+  Object.assign(host.style, { width: "min(320px, calc(100vw - 16px))", maxHeight: "calc(100vh - 16px)", overflowY: "auto", zIndex: "20" });
+  // On a phone the panel would cover the scene; start it folded (tap the title to open).
+  if (innerWidth < 700) pane.expanded = false;
 
   // Performance.
   const perf = pane.addFolder({ title: "Performance" });
