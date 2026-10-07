@@ -4,10 +4,13 @@ import { Cartridge } from "./Cartridge.tsx";
 import { GameView } from "./GameView.tsx";
 import { fetchDevRom } from "./dev-rom.ts";
 import { forgetRom, loadStoredRom, storeRom } from "./rom-store.ts";
-import { SaveControls } from "./saves/SaveControls.tsx";
+import { Game } from "./game/Game.tsx";
 import { romKey } from "./saves/save-store.ts";
 
-type State = { kind: "loading" } | { kind: "needs-rom"; error?: string } | { kind: "ready"; header: RomHeader; romKey: string };
+type State =
+  | { kind: "loading" }
+  | { kind: "needs-rom"; error?: string }
+  | { kind: "ready"; rom: Uint8Array; header: RomHeader; romKey: string };
 
 export function App() {
   const [state, setState] = useState<State>({ kind: "loading" });
@@ -16,7 +19,7 @@ export function App() {
     const check = await checkRom(rom);
     if (!check.ok) return setState({ kind: "needs-rom", error: check.reason });
     await storeRom(rom);
-    setState({ kind: "ready", header: check.header, romKey: await romKey(rom) });
+    setState({ kind: "ready", rom, header: check.header, romKey: await romKey(rom) });
   };
 
   useEffect(() => {
@@ -26,7 +29,7 @@ export function App() {
       const rom = await loadStoredRom();
       const check = rom && (await checkRom(rom));
       if (!rom || !check || !check.ok) return setState({ kind: "needs-rom" });
-      setState({ kind: "ready", header: check.header, romKey: await romKey(rom) });
+      setState({ kind: "ready", rom, header: check.header, romKey: await romKey(rom) });
     })();
   }, []);
 
@@ -35,17 +38,15 @@ export function App() {
     setState({ kind: "needs-rom" });
   };
 
+  if (state.kind === "ready") {
+    return <Game rom={state.rom} romKey={state.romKey} header={state.header} onForget={forget} />;
+  }
+  if (state.kind === "loading") return null;
+  // The look-dev scene stands behind the ROM loader until there's a game to play.
   return (
     <>
       <GameView />
-      {state.kind === "needs-rom" && <Cartridge error={state.error} onRom={accept} />}
-      {state.kind === "ready" && (
-        <div className="hud">
-          <span>{state.header.title} loaded</span>
-          <button type="button" onClick={forget}>Forget ROM</button>
-          <SaveControls romKey={state.romKey} header={state.header} />
-        </div>
-      )}
+      <Cartridge error={state.error} onRom={accept} />
     </>
   );
 }
