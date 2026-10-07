@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { OUT_PATH, SYM_PATH, parseSym, renderSymbols } from "../../../tools/gen-symbols.ts";
+import { SYM_PATH, parseSym, renderAll, renderSymbols } from "../../../tools/gen-symbols.ts";
 import { checkRom } from "./rom.ts";
 import { SYMBOLS, romOffset, wramAddress } from "./symbols.ts";
 
@@ -46,8 +46,8 @@ describe("generated symbols", () => {
     expect(() => renderSymbols("00:0000 NULL\n", ["Missing"])).toThrow(/Missing/);
   });
 
-  it.skipIf(!existsSync(SYM_PATH))("matches a fresh render of pokeblue.sym", () => {
-    expect(renderSymbols(readFileSync(SYM_PATH, "utf8"))).toBe(readFileSync(OUT_PATH, "utf8"));
+  it.skipIf(!existsSync(SYM_PATH))("matches a fresh render of the disassembly", () => {
+    for (const [path, rendered] of renderAll()) expect(rendered).toBe(readFileSync(path, "utf8"));
   });
 });
 
