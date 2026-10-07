@@ -8,7 +8,8 @@
     "preview": "vite build && vite preview",
     "deploy": "pnpm run build && wrangler deploy",
     "typecheck": "wrangler types && tsc -b",
-    "cf-typegen": "wrangler types"
+    "cf-typegen": "wrangler types",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@pokehd/emu": "workspace:*",
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.62.5",
+    "@playwright/test": "~1.56.1",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",

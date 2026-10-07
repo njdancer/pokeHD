@@ -23,3 +23,5 @@ dist/
 
 # Dev page renders (POST /__dev/shot)
 shots/
+test-results/
+playwright-report/

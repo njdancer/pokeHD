@@ -1,0 +1,8 @@
+{
+  "name": "@pokehd/protocol",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc -p ." },
+  "dependencies": { "valibot": "^1.5.0" }
+}
