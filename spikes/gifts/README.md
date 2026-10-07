@@ -1,6 +1,8 @@
 # p3-gifts-spike: can gifts land without a ROM patch?
 
 Throwaway. Nothing here is imported by the app. No ROM, save or screenshot is committed.
+The real feature (p3-gifts) lives in `packages/emu/src/gifts`; it settles a gift on the game's
+save routines rather than on any battery RAM write ("What can go wrong" 1 below).
 
 **Answer: yes.** A PC hook on `OverworldLoop` (D14) is enough. When the player is standing
 still with no menu, text, script, battle or warp in progress, the hook makes the CPU *call the
