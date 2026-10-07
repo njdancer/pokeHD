@@ -40,6 +40,11 @@ export interface WorldContent {
   /** Point the camera and the DoF focus follow. */
   target: THREE.Vector3;
   update(seconds: number, camera: THREE.Camera, sunDirection: THREE.Vector3, spriteShadows: boolean): void;
+  /**
+   * Called with the renderer's shader precompiler once this content is rendered (null when it no
+   * longer is). Content that adds objects while running can compile them first, off the frame.
+   */
+  setCompiler?(compile: ((object: THREE.Object3D) => Promise<void>) | null): void;
 }
 
 export interface EngineStats {
@@ -91,6 +96,12 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const forceWebGL = options.forceWebGL ?? (query.has("webgl") || !(await webgpuViewsWork()));
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, forceWebGL });
   await renderer.init();
+  // three.js puts a small InstancedMesh's matrices in a uniform array sized by its instance count
+  // and named after the buffer, so every one gets its own shader: dozens per map chunk, each
+  // compiled on first draw (seconds of stalls in WebGL2). With no uniform-buffer room they all use
+  // instanced attributes and share their shaders.
+  const capabilities = (renderer.backend as unknown as { capabilities: { getUniformBufferLimit(): number } }).capabilities;
+  capabilities.getUniformBufferLimit = () => 0;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // PCF honours shadow.radius for softness
 
@@ -102,6 +113,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   let world: WorldContent = options.world ?? createPlaceholder();
   scene.add(world.root);
   const post = createPost(renderer, scene, camera);
+  const compile = (object: THREE.Object3D) => post.compile(object);
 
   const fogNear = uniform(30);
   const fogFar = uniform(100);
@@ -141,6 +153,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     resize();
   };
   rebuild();
+  world.setCompiler?.(compile);
 
   const clock = createDayClock(params.time);
   let cycle: DayCycle | null = null;
@@ -237,8 +250,10 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     stats,
     setWorld(next) {
       scene.remove(world.root);
+      world.setCompiler?.(null);
       world = next;
       scene.add(world.root);
+      world.setCompiler?.(compile);
     },
     setFixedSize(size) {
       fixedSize = size;
@@ -252,6 +267,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       );
     },
     dispose() {
+      world.setCompiler?.(null);
       renderer.setAnimationLoop(null);
       clearTimeout(rebuildTimer);
       disposePanel?.();
