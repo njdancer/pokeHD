@@ -1,0 +1,19 @@
+.join { overflow: auto; max-height: 88vh; }
+.join form { display: grid; gap: .9rem; margin-top: 1rem; }
+.join label { display: grid; gap: .3rem; font-size: .9rem; }
+.join label small { color: var(--muted); }
+.join input {
+  font: inherit; font-size: 1.1rem; color: var(--fg); background: #ffffff0d; border: 1px solid #ffffff26;
+  border-radius: 8px; padding: .6rem .7rem; min-width: 0;
+}
+.join input[name="code"] { font-family: ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+.join input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.join button, .join .button {
+  font: inherit; color: var(--fg); background: #ffffff14; border: 1px solid #ffffff26; border-radius: 8px;
+  padding: .55rem 1rem; cursor: pointer; text-decoration: none; text-align: center;
+}
+.join button[type="submit"], .join .button.primary { background: var(--accent); border-color: var(--accent); color: #0d1117; font-weight: 600; }
+.join button:disabled { opacity: .6; cursor: default; }
+.join .actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.join .who { color: var(--fg); }
+.join .device-code strong { font-family: ui-monospace, monospace; color: var(--fg); letter-spacing: .06em; }
