@@ -1,11 +1,12 @@
-// Dev-only: Pallet Town and Route 1 in each candidate world style, side by side, each in its own
-// engine with the locked look (p0-styles). Open /dev/styles (deployed: /dev/styles#dev=<token>). Drag to orbit,
-// scroll to zoom; every view follows. URL options: ?styles=diorama,hybrid&view=low&focus=ROUTE_1&phase=0.5
+// Dev-only: Pallet Town and Route 1 in the world style (Hybrid, D18), or several styles side by
+// side for comparison, each in its own engine with the locked look. Open /dev/styles (deployed: /dev/styles#dev=<token>). Drag to orbit,
+// scroll to zoom; every view follows. URL options: ?styles=diorama,voxel,hybrid (or all)&view=low&focus=ROUTE_1&phase=0.5
 import { useEffect, useRef, useState } from "react";
 import { createEngine, type Engine } from "@pokehd/engine";
 import {
   buildRegion,
   createStyledWorld,
+  DEFAULT_STYLE,
   DEFAULT_STYLE_PARAMS,
   regionFocuses,
   STYLES,
@@ -23,7 +24,9 @@ import { loadStoredRom } from "../rom-store.ts";
 
 const ALL = Object.keys(STYLES) as StyleId[];
 const query = new URLSearchParams(location.search);
-const STYLE_IDS = query.get("styles")?.split(",").filter((s): s is StyleId => s in STYLES) ?? ALL;
+const STYLES_PARAM = query.get("styles");
+const STYLE_IDS: StyleId[] =
+  STYLES_PARAM === "all" ? ALL : (STYLES_PARAM?.split(",").filter((s): s is StyleId => s in STYLES) ?? [DEFAULT_STYLE]);
 const VIEW_PARAM = query.get("view");
 const INITIAL_VIEW: ViewPreset = VIEW_PARAM && VIEW_PARAM in VIEW_PRESETS ? (VIEW_PARAM as ViewPreset) : "hd2d";
 const INITIAL_PHASE = Number(query.get("phase") ?? 0.5);
