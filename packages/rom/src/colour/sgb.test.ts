@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { MAP_NAMES, TILESET_NAMES } from "../generated/names.ts";
 import { overworldPalette, readSgbPalettes, SGB_PAL } from "./sgb.ts";
 
@@ -9,7 +9,10 @@ const OVERWORLD = TILESET_NAMES.indexOf("OVERWORLD");
 const HOUSE = TILESET_NAMES.indexOf("HOUSE");
 
 describe.skipIf(!existsSync(ROM_PATH))("readSgbPalettes", () => {
-  const palettes = readSgbPalettes(new Uint8Array(readFileSync(ROM_PATH)));
+  let palettes: ReturnType<typeof readSgbPalettes>;
+  beforeAll(() => {
+    palettes = readSgbPalettes(new Uint8Array(readFileSync(ROM_PATH)));
+  });
 
   it("reads SuperPalettes (data/sgb/sgb_palettes.asm)", () => {
     // RGB 31,29,31, 25,28,27, 20,26,31, 03,02,02 ; PAL_PALLET
