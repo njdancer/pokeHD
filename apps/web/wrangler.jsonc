@@ -3,6 +3,9 @@
   "name": "pokehd",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-10-01",
+  // The game's address (D29). workers.dev stays on so installed copies keep working.
+  "routes": [{ "pattern": "pokehd.dncr.me", "custom_domain": true }],
+  "workers_dev": true,
   "assets": {
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]

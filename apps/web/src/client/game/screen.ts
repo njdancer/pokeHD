@@ -1,13 +1,21 @@
 // Where the Game Boy's own screen goes on the game page. The HD view shows the overworld; the
-// 2D screen is the only place text, menus and battles appear until they get HD versions (p2-text).
+// 2D screen shows battles, and the text and menus the HD text layer can't draw (p2-text).
 import type { OverworldMode, OverworldWatched } from "@pokehd/emu";
 
 /**
- * `full`: centred and large, the HD view only behind it (title screen, intro, battles).
+ * `full`: centred and large, the HD view only behind it (title screen, intro, full-screen menus).
+ * `battle`: over the HD battle like a dialog, with the scene and HUD cells cut out.
  * `dialog`: large along the bottom, so text boxes and menus can be read over the HD view.
  * `corner`: picture-in-picture. `hidden`: the HD view alone.
  */
-export type ScreenLayout = "full" | "dialog" | "corner" | "hidden";
+export type ScreenLayout = "full" | "battle" | "dialog" | "corner" | "hidden";
+
+/**
+ * What a battle shows, for the layout: `scene`, the battle screen (drawn in HD, with text and
+ * menus over it); `transition`, the way into a battle, before the battle screen appears (the
+ * HD view plays it); `menu`, a full-screen menu (party, Pokédex, evolution).
+ */
+export type BattleScene = "scene" | "transition" | "menu";
 
 /**
  * Tracks whether the game is in the overworld, from each frame's watched bytes.
@@ -31,9 +39,15 @@ export function inWorldTracker(resumed = false) {
   };
 }
 
-/** `pip` is the player's choice for the overworld: the small screen in the corner, or none. */
-export function screenLayout(mode: OverworldMode, inWorld: boolean, pip: boolean): ScreenLayout {
+/**
+ * `pip` is the player's choice for the overworld: the small screen in the corner, or none.
+ * `hdText` is true while the HD text layer shows the game's text and menus (p2-text), so the
+ * screen needn't come up for them. `battle` is what a battle shows, when there's an HD view to
+ * show it in (p2-battles).
+ */
+export function screenLayout(mode: OverworldMode, inWorld: boolean, pip: boolean, hdText = false, battle?: BattleScene): ScreenLayout {
+  if (inWorld && mode === "battle" && battle) return battle === "scene" ? "battle" : battle === "transition" ? "hidden" : "full";
   if (!inWorld || mode === "battle") return "full";
-  if (mode === "dialog") return "dialog";
+  if (mode === "dialog" && !hdText) return "dialog";
   return pip ? "corner" : "hidden";
 }

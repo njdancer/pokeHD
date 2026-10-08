@@ -1,6 +1,8 @@
 import * as THREE from "three/webgpu";
 import { FIRST_INDOOR_MAP, type MapData, type MapId, type WorldData } from "@pokehd/rom";
-import type { LookController, WorldContent } from "../index.ts";
+import type { CameraView, LookController, WorldContent } from "../index.ts";
+import { arenaPlacement } from "../battle/placement.ts";
+import { createBattleLayer, type ArenaStyle, type BattleLayer, type BattleView } from "../battle/layer.ts";
 import type { BlockRect } from "./chunk.ts";
 import { createChunkBuilder, type ChunkBuilder, type ChunkResult } from "./chunk-builder.ts";
 import { disposeTree } from "./content.ts";
@@ -64,6 +66,10 @@ const KEEP_HOPS = 2;
 const BUILD_CLEARANCE = 4;
 /** Built chunks kept, unrendered, after they leave the loaded set. */
 const SPARE_CHUNKS = 10;
+/** Seconds the camera takes to swing into a battle and back out. */
+const BATTLE_SWING = 1.1;
+/** The look's camera when there's no look to read it from. */
+const DEFAULT_VIEW: CameraView = { pitch: 38, yaw: 0, distance: 30, fov: 24 };
 
 export interface LiveWorldOptions {
   style?: StyleId;
@@ -74,6 +80,8 @@ export interface LiveWorldOptions {
   ghostLook?: GhostLook;
   /** Colour places from their SGB palettes (./place.ts); false gives the plain base look. Default true. */
   sgbColours?: boolean;
+  /** How battles look; see `ARENA_STYLES`. */
+  arena?: ArenaStyle;
   /** Seconds on the performance clock; tests replace it. */
   clock?: () => number;
   /** Where chunks get built; defaults to a worker where there is one. */
@@ -105,6 +113,14 @@ export interface LiveWorld extends WorldContent {
   readonly builds: readonly ChunkBuild[];
   /** Map ID → chunk build status, for debugging. */
   readonly chunks: ReadonlyMap<MapId, "queued" | "built">;
+  /**
+   * The battle screen after each emulator frame while a battle is on, null otherwise. The
+   * battle is staged where the player stands; the camera swings round to it and back after.
+   */
+  setBattle(view: BattleView | null): void;
+  setArenaStyle(style: ArenaStyle): void;
+  /** The battle camera while one is on screen (or swinging back). */
+  readonly view: CameraView | null;
   dispose(): void;
 }
 
@@ -323,9 +339,48 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     return c?.group ? { x: c.bx * 2, z: c.by * 2 } : undefined;
   };
 
+  // Battles: a layer staged where the player stood when the battle began.
+  let battle: BattleLayer | null = null;
+  let arenaStyle = options.arena ?? "field";
+  let inBattle = false;
+  /** 0 overworld … 1 battle, eased by the update. */
+  let swing = 0;
+  let swungAt = clock();
+  let view: CameraView | null = null;
+  const walkTarget = new THREE.Vector3();
+  const startBattle = () => {
+    const here = current === null ? undefined : chunks.get(current);
+    const p = latest?.player;
+    if (!here || !p) return;
+    battle ??= createBattleLayer(arenaStyle);
+    if (!battle.root.parent) root.add(battle.root);
+    const placed = arenaPlacement(world, here.map, { x: p.x, y: p.y, facing: p.facing ?? "down" }, p.transport === "surf");
+    const ox = here.bx * 2;
+    const oz = here.by * 2;
+    battle.place({
+      player: { x: ox + placed.player.x, z: oz + placed.player.z },
+      enemy: { x: ox + placed.enemy.x, z: oz + placed.enemy.z },
+      ground: placed.ground,
+    });
+  };
+  const ease = (t: number) => t * t * (3 - 2 * t);
+  const mixAngle = (a: number, b: number, t: number) => a + ((((b - a) % 360) + 540) % 360 - 180) * t;
+
   return {
     root,
     target,
+    get view() {
+      return view;
+    },
+    setBattle(next) {
+      if (next && !inBattle) startBattle();
+      inBattle = next !== null && battle !== null;
+      if (next) battle?.push(next);
+    },
+    setArenaStyle(style) {
+      arenaStyle = style;
+      battle?.setStyle(style);
+    },
     setLook(next) {
       look = next;
     },
@@ -418,6 +473,36 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         if (fade < 1) wrapped = false;
       }
 
+      // Battles: swing the camera between the walk and the battle, and hide the walk while it's on.
+      const now = clock();
+      const dt = Math.min(Math.max(now - swungAt, 0), 0.1);
+      swungAt = now;
+      swing = Math.min(Math.max(swing + (inBattle ? dt : -dt) / BATTLE_SWING, 0), 1);
+      const s = ease(swing);
+      walkTarget.copy(target);
+      const staged = battle !== null && swing > 0;
+      if (battle) {
+        battle.root.visible = inBattle;
+        if (staged) {
+          battle.update(camera);
+          target.lerpVectors(walkTarget, battle.target, s);
+          const base = look?.params.camera ?? DEFAULT_VIEW;
+          const b = battle.view;
+          view = {
+            pitch: base.pitch + (b.pitch - base.pitch) * s,
+            yaw: mixAngle(base.yaw, b.yaw, s),
+            distance: base.distance + (b.distance - base.distance) * s,
+            fov: base.fov + (b.fov - base.fov) * s,
+          };
+        } else view = null;
+      }
+      const away = staged && s > 0.5;
+      playerSprite.visible = !away;
+      for (const sprite of npcSprites.values()) if (away) sprite.mesh.visible = false;
+      ghosts.group.visible = !away;
+      const hideWorld = away && inBattle && battle!.hidesWorld;
+      for (const c of chunks.values()) if (c.group) c.group.visible = !hideWorld;
+
       ghosts.update(clock(), camera, locate);
       faceCamera(playerSprite, camera);
       for (const s of npcSprites.values()) faceCamera(s.mesh, camera);
@@ -436,6 +521,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       fadeMaterial.dispose();
       ghosts.dispose();
       sprites.dispose();
+      battle?.dispose();
     },
   };
 }

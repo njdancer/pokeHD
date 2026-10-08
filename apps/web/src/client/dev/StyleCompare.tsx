@@ -1,6 +1,7 @@
 // Dev-only: Pallet Town and Route 1 in the world style (Hybrid, D18), or several styles side by
 // side for comparison, each in its own engine with the locked look. Open /dev/styles (deployed: /dev/styles#dev=<token>). Drag to orbit,
 // scroll to zoom; every view follows. URL options: ?styles=diorama,voxel,hybrid (or all)&view=low&focus=ROUTE_1&phase=0.5
+// &map=VIRIDIAN_FOREST shows that map (and its connections) instead
 import { useEffect, useRef, useState } from "react";
 import { createEngine, type Engine } from "@pokehd/engine";
 import {
@@ -30,6 +31,7 @@ const STYLE_IDS: StyleId[] =
 const VIEW_PARAM = query.get("view");
 const INITIAL_VIEW: ViewPreset = VIEW_PARAM && VIEW_PARAM in VIEW_PRESETS ? (VIEW_PARAM as ViewPreset) : "hd2d";
 const INITIAL_PHASE = Number(query.get("phase") ?? 0.5);
+const MAP_NAME = query.get("map");
 
 const SLIDERS: { key: keyof StyleParams; label: string; min: number; max: number; step: number }[] = [
   { key: "wallScale", label: "wall height", min: 0.5, max: 2.5, step: 0.05 },
@@ -84,10 +86,14 @@ export function StyleCompare() {
     (async () => {
       const rom = (await fetchDevRom()) ?? (await loadStoredRom());
       if (!rom) return setError("No ROM: load one in the app first.");
-      const region = buildRegion(parseWorld(rom), MAP_NAMES.indexOf("PALLET_TOWN"), {
-        include: [MAP_NAMES.indexOf("ROUTE_1")],
-        marginBlocks: 3,
-      });
+      const map = MAP_NAME ? MAP_NAMES.indexOf(MAP_NAME) : -1;
+      const region =
+        map >= 0
+          ? buildRegion(parseWorld(rom), map, { marginBlocks: 3 })
+          : buildRegion(parseWorld(rom), MAP_NAMES.indexOf("PALLET_TOWN"), {
+              include: [MAP_NAMES.indexOf("ROUTE_1")],
+              marginBlocks: 3,
+            });
       const focuses = regionFocuses(region);
       const focus = focuses.find((f) => f.name === query.get("focus")) ?? focuses[0]!;
       const params = structuredClone(DEFAULT_STYLE_PARAMS);

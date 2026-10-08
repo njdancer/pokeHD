@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node ../../tools/check-bundle.ts",
     "preview": "vite build && vite preview",
     "deploy": "pnpm run build && wrangler deploy",
     "typecheck": "wrangler types && tsc -b",
@@ -12,6 +12,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@fontsource/nunito": "^5.3.0",
+    "@fontsource/spectral": "^5.3.0",
     "@pokehd/emu": "workspace:*",
     "@pokehd/engine": "workspace:*",
     "@pokehd/protocol": "workspace:*",

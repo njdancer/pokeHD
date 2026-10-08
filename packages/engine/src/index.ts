@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
 import { fog, rangeFogFactor, uniform } from "three/tsl";
+import { sceneTime } from "./scene-time.ts";
 import { createSky } from "./sky.ts";
 import { createDayClock, stepDay, wrapNow } from "./look/clock.ts";
 import { blendCycle, type DayCycle } from "./look/cycle.ts";
@@ -54,6 +55,16 @@ export interface WorldContent {
    * longer is). Content that adds objects while running can compile them first, off the frame.
    */
   setCompiler?(compile: ((object: THREE.Object3D) => Promise<void>) | null): void;
+  /** A framing that overrides the look's camera while set (a battle). */
+  readonly view?: CameraView | null;
+}
+
+/** Camera framing: degrees, world units. */
+export interface CameraView {
+  pitch: number;
+  yaw: number;
+  distance: number;
+  fov: number;
 }
 
 export interface EngineStats {
@@ -259,6 +270,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     if (stats.width === 0 || stats.height === 0) return false; // not laid out yet
     const t0 = performance.now();
     if (params.time.animate) elapsed += dt;
+    sceneTime.value = elapsed;
     const p = params;
 
     stepDay(p.time, clock, dt);
@@ -267,15 +279,16 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
 
     world.update(elapsed, camera, rig.sunDirection, p.shadows.spriteShadows);
     stats.updateMs = performance.now() - t0;
-    const pitch = p.camera.pitch * (Math.PI / 180);
-    const yaw = p.camera.yaw * (Math.PI / 180);
+    const framing = world.view ?? p.camera;
+    const pitch = framing.pitch * (Math.PI / 180);
+    const yaw = framing.yaw * (Math.PI / 180);
     camera.position
       .set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch))
-      .multiplyScalar(p.camera.distance)
+      .multiplyScalar(framing.distance)
       .add(world.target);
     camera.lookAt(world.target);
-    if (camera.fov !== p.camera.fov) {
-      camera.fov = p.camera.fov;
+    if (camera.fov !== framing.fov) {
+      camera.fov = framing.fov;
       camera.updateProjectionMatrix();
     }
 
