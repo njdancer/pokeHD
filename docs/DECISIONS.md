@@ -393,3 +393,17 @@ by email, and he can take it back.
 Alternative: friends always bring their own ROM (the original rule). Kept as an option on the
 same screen, and the default for anyone Nick stops sharing with.
 
+## D27. Phones get a mobile quality tier, and everyone gets dynamic resolution
+
+Touch-only devices (coarse pointer, no hover) render with a patch over every look: ambient
+occlusion at quarter resolution and FXAA instead of SMAA (`?quality=full|mobile` overrides).
+On every device, dynamic resolution lowers the render scale in steps down to 50% while frames
+miss 60 fps, then drops depth of field as the last step, and climbs back when there's headroom
+(`?dynres=0` turns it off). Details in `docs/PERF.md`.
+
+Why: the iPhone 13 Pro ran under 60 fps. Nick (2026-10-08) prefers a slight blur to a low frame
+rate, but not blur where it isn't needed, so resolution drops only on a device and in a scene
+that need it, and a fast machine stays sharp.
+
+Alternative: a fixed 1.5 pixel-ratio cap on phones (the first version of this tier). Simpler,
+but blurs every phone all the time, including ones with headroom.

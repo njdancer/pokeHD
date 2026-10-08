@@ -8,11 +8,14 @@ import { DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 import { createPlaceholder } from "./look/placeholder.ts";
 import { NEUTRAL_TINT, normTint } from "./look/grade.ts";
 import { createPost } from "./look/post.ts";
+import { defaultQuality, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
+import { createGovernor, RUNGS } from "./look/governor.ts";
 import { createRig } from "./look/rig.ts";
 import { webgpuViewsWork } from "./webgpu-probe.ts";
 
 export type { DayCycle } from "./look/cycle.ts";
 export type { LookParams } from "./look/params.ts";
+export { QUALITY_PATCHES, type Quality } from "./look/quality.ts";
 export { BUILT_IN_PRESETS, DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 
 export interface LookController {
@@ -60,13 +63,30 @@ export interface EngineStats {
   updateMs: number;
   /** Of that, rendering and post-processing (pipeline compiles and uploads land here), ms. */
   renderMs: number;
+  /** Dynamic resolution: the render scale (1 is full), and whether depth of field is on. */
+  scale: number;
+  dof: boolean;
   width: number;
   height: number;
+}
+
+export interface BenchResult {
+  /** Wall time per frame until the GPU finished: the frame's real cost when GPU-bound, ms. */
+  frameMs: number;
+  /** CPU time per frame to build and submit it, ms. */
+  cpuMs: number;
+  /** Render passes (scene, shadow and post-processing passes) in one frame. */
+  passes: number;
+  drawCalls: number;
+  triangles: number;
 }
 
 export interface Engine {
   backend: "WebGPU" | "WebGL2";
   look: LookController;
+  /** The quality tier laid over every look; see `QUALITY_PATCHES`. */
+  readonly quality: Quality;
+  setQuality(quality: Quality): void;
   stats: EngineStats;
   /** Pins the drawing buffer to an exact size (e.g. 2560×1440 for perf checks); null follows the canvas. */
   setFixedSize(size: { width: number; height: number } | null): void;
@@ -74,6 +94,11 @@ export interface Engine {
   setWorld(world: WorldContent): void;
   /** Renders one frame and returns it as a PNG. */
   capture(): Promise<Blob>;
+  /**
+   * Renders `frames` frames back to back, then waits for the GPU to finish them, so the cost
+   * isn't hidden by vsync (the /dev/bench page). Time stands still while it runs.
+   */
+  benchmark(frames: number): Promise<BenchResult>;
   dispose(): void;
 }
 
@@ -84,6 +109,13 @@ export interface EngineOptions {
   forceWebGL?: boolean;
   /** Content to render instead of the look-dev placeholder. */
   world?: WorldContent;
+  /** Defaults to `?quality=`, else mobile on touch-only devices. */
+  quality?: Quality;
+  /**
+   * Lowers the render resolution (and, last, depth of field) while frames miss 60 fps, and raises
+   * it again when they don't. Defaults to on unless the page URL has `?dynres=0`.
+   */
+  dynamicResolution?: boolean;
 }
 
 // The newest engine created on a canvas owns it. React StrictMode mounts, unmounts and
@@ -128,13 +160,15 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const fogColor = uniform(rig.fogColor);
 
   let fixedSize: { width: number; height: number } | null = null;
-  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, width: 0, height: 0 };
+  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, scale: 1, dof: true, width: 0, height: 0 };
+  const governor = (options.dynamicResolution ?? query.get("dynres") !== "0") ? createGovernor() : null;
+  let rung = RUNGS[0]!;
   const resize = () => {
     if (fixedSize) {
       renderer.setPixelRatio(1);
       renderer.setSize(fixedSize.width, fixedSize.height, false);
     } else {
-      renderer.setPixelRatio(Math.min(devicePixelRatio, params.render.maxPixelRatio));
+      renderer.setPixelRatio(Math.min(devicePixelRatio, params.render.maxPixelRatio) * rung.scale);
       renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     }
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -164,6 +198,20 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   world.setCompiler?.(compile);
 
   const clock = createDayClock(params.time);
+  let quality = options.quality ?? defaultQuality();
+  /** The look as loaded, before the quality patch: what setQuality re-applies to. */
+  let source: { cycle: DayCycle } | { look: unknown } = { cycle: DEFAULT_CYCLE };
+  const tiered = (look: unknown) => {
+    const out = mergeLook(mergeLook(DEFAULT_LOOK, look), QUALITY_PATCHES[quality]);
+    if (!rung.dof) out.dof.enabled = false;
+    return out;
+  };
+  /** Lays the quality tier and the governor's rung over the loaded look again. */
+  const reapply = () => {
+    Object.assign(params.render, tiered({ render: DEFAULT_LOOK.render }).render);
+    if ("cycle" in source) look.setCycle(source.cycle);
+    else look.set({ ...(source.look as object), time: params.time, camera: params.camera });
+  };
   let cycle: DayCycle | null = null;
   const look: LookController = {
     params,
@@ -174,17 +222,15 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       wrapNow(params.time, clock, instant);
     },
     setCycle(next) {
-      cycle = next && {
-        morning: mergeLook(DEFAULT_LOOK, next.morning),
-        midday: mergeLook(DEFAULT_LOOK, next.midday),
-        evening: mergeLook(DEFAULT_LOOK, next.evening),
-      };
+      source = next ? { cycle: next } : { look: structuredClone(params) };
+      cycle = next && { morning: tiered(next.morning), midday: tiered(next.midday), evening: tiered(next.evening) };
       if (cycle) blendCycle(cycle, params.time.phase, params);
       rebuild();
     },
     set(next) {
+      source = { look: next };
       // Copy into the existing group objects: the panel holds references to them.
-      const merged = mergeLook(DEFAULT_LOOK, next);
+      const merged = tiered(next);
       cycle = null;
       for (const group of Object.keys(merged) as (keyof LookParams)[]) Object.assign(params[group], merged[group]);
       rebuild();
@@ -198,6 +244,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     },
   };
 
+  Object.assign(params.render, tiered({ render: DEFAULT_LOOK.render }).render);
   look.setCycle(DEFAULT_CYCLE);
 
   const placeTint: [number, number, number] = [...NEUTRAL_TINT];
@@ -248,19 +295,49 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   renderer.setAnimationLoop((t) => {
     if (superseded()) return renderer.setAnimationLoop(null);
     timer.update(t);
+    const delta = timer.getDelta();
+    // The raw interval, vsync and all, is what the governor judges.
+    const changed = governor && !fixedSize ? governor.sample(delta * 1000, t / 1000) : null;
+    if (changed !== null) {
+      const next = RUNGS[changed]!;
+      const dofChanged = next.dof !== rung.dof;
+      rung = next;
+      stats.scale = rung.scale;
+      stats.dof = rung.dof;
+      if (dofChanged) reapply();
+      else resize();
+    }
     frameHooks.before?.();
     // The first delta can be negative (rAF time vs. the timer's clock); clamp long stalls too.
-    renderFrame(Math.min(Math.max(timer.getDelta(), 0), 0.1));
+    renderFrame(Math.min(Math.max(delta, 0), 0.1));
     frameHooks.after?.();
   });
 
   const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
+  /** Resolves once the GPU has finished everything submitted so far. */
+  const gpuIdle = async () => {
+    const backend = renderer.backend as unknown as { device?: { queue: { onSubmittedWorkDone(): Promise<void> } }; gl?: WebGL2RenderingContext };
+    if (isWebGPU) return backend.device!.queue.onSubmittedWorkDone();
+    // WebGL2: a fence, polled between tasks (browsers only update sync status then).
+    const gl = backend.gl!;
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)!;
+    gl.flush();
+    while (gl.clientWaitSync(sync, 0, 0) === gl.TIMEOUT_EXPIRED) await new Promise((r) => setTimeout(r, 0));
+    gl.deleteSync(sync);
+  };
   let disposePanel: (() => void) | undefined;
 
   const engine: Engine = {
     backend: isWebGPU ? "WebGPU" : "WebGL2",
     look,
     stats,
+    get quality() {
+      return quality;
+    },
+    setQuality(next) {
+      quality = next;
+      reapply();
+    },
     setWorld(next) {
       scene.remove(world.root);
       world.setCompiler?.(null);
@@ -278,6 +355,24 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       return new Promise((resolve, reject) =>
         canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("capture failed"))), "image/png"),
       );
+    },
+    async benchmark(frames) {
+      await gpuIdle();
+      const t0 = performance.now();
+      // Passes render once per node frame, which only the animation loop advances; step it here
+      // too, or every frame after the first would skip the scene and post-processing.
+      const nodeFrame = (renderer as unknown as { _nodes: { nodeFrame: { update(): void; frameId: number } } })._nodes.nodeFrame;
+      for (let i = 0; i < frames; i++) {
+        nodeFrame.update();
+        (renderer.info as { frame: number }).frame = nodeFrame.frameId;
+        if (i === frames - 1) renderer.info.reset();
+        renderFrame(0);
+      }
+      const cpuMs = (performance.now() - t0) / frames;
+      await gpuIdle();
+      const frameMs = (performance.now() - t0) / frames;
+      const { frameCalls, drawCalls, triangles } = renderer.info.render;
+      return { frameMs, cpuMs, passes: frameCalls, drawCalls, triangles };
     },
     dispose() {
       world.setCompiler?.(null);

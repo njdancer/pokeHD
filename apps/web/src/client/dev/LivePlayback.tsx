@@ -36,6 +36,7 @@ interface Stats {
   fps: number;
   worstMs: number;
   cpuMs: number;
+  scale: number;
   chunks: string;
   ghosts: number;
   backend: string;
@@ -121,6 +122,7 @@ export function LivePlayback() {
             fps: 1000 / avg,
             worstMs: Math.max(...times),
             cpuMs: engine!.stats.cpuMs,
+            scale: engine!.stats.scale,
             ghosts: [...live!.ghosts].filter(([, shown]) => shown).length,
             chunks: [...live!.chunks].map(([id, s]) => `${id}${s === "built" ? "" : "…"}`).join(" "),
             backend: engine!.backend,
@@ -142,7 +144,7 @@ export function LivePlayback() {
     <div className="live-page" ref={holder}>
       <div className="hud">
         {error ?? (stats
-          ? `${stats.backend} · frame ${stats.frame}/${stats.frames} · ${stats.fps.toFixed(0)} fps · worst ${stats.worstMs.toFixed(1)} ms · cpu ${stats.cpuMs.toFixed(1)} ms · maps ${stats.chunks} · ghosts ${stats.ghosts}`
+          ? `${stats.backend} · frame ${stats.frame}/${stats.frames} · ${stats.fps.toFixed(0)} fps · worst ${stats.worstMs.toFixed(1)} ms · cpu ${stats.cpuMs.toFixed(1)} ms · res ${Math.round(stats.scale * 100)}% · maps ${stats.chunks} · ghosts ${stats.ghosts}`
           : "Building…")}
       </div>
     </div>

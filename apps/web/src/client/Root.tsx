@@ -6,6 +6,7 @@ const Login = lazy(() => import("./room/Login.tsx").then((m) => ({ default: m.Lo
 const EmuDebug = lazy(() => import("./dev/emu/EmuDebug.tsx").then((m) => ({ default: m.EmuDebug })));
 const LivePlayback = lazy(() => import("./dev/LivePlayback.tsx").then((m) => ({ default: m.LivePlayback })));
 const TextDebug = lazy(() => import("./dev/TextDebug.tsx").then((m) => ({ default: m.TextDebug })));
+const Bench = lazy(() => import("./dev/Bench.tsx").then((m) => ({ default: m.Bench })));
 const StyleCompare = lazy(() => import("./dev/StyleCompare.tsx").then((m) => ({ default: m.StyleCompare })));
 // Dev-only tools, left out of production builds.
 const MapViewer = import.meta.env.DEV
@@ -22,6 +23,7 @@ export function Root() {
   if (path === "/dev/emu") return <Suspense><EmuDebug /></Suspense>;
   if (path === "/dev/live") return <Suspense><LivePlayback /></Suspense>;
   if (path === "/dev/text") return <Suspense><TextDebug /></Suspense>;
+  if (path === "/dev/bench") return <Suspense><Bench /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;
   if (MapViewer && location.hash === "#maps") return <Suspense><MapViewer /></Suspense>;
   if (LabelViewer && location.hash === "#labels") return <Suspense><LabelViewer /></Suspense>;
