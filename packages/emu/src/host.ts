@@ -66,6 +66,7 @@ export class EmulatorHost {
   readonly started: Promise<Started>;
   readonly #audio: AudioContext;
   #audioNode: AudioWorkletNode | undefined;
+  #audioSetup: Promise<void> | undefined;
   #nextId = 1;
   readonly #pending = new Map<number, (state: Uint8Array) => void>();
   readonly #reads = new Map<number, (bytes: Uint8Array[]) => void>();
@@ -156,13 +157,28 @@ export class EmulatorHost {
     });
   }
 
-  /** Resumes audio output. Call from a user gesture (click, key press). Safe to call again. */
+  /**
+   * Resumes audio output. Call from a user gesture (click, key release). Safe to call again,
+   * including while an earlier call is still waiting: there is only ever one worklet.
+   */
   async enableAudio(): Promise<void> {
+    // resume() first, while the gesture still counts. On iOS one outside a gesture (a touch's
+    // pointerdown) can stay pending until a later gesture resumes the context.
     await this.#audio.resume();
-    if (this.#audioNode) return;
-    const { port, node } = await createAudioOutput(this.#audio);
-    this.#audioNode = node;
-    this.#post({ type: "audio", port }, [port]);
+    // Checked and set with no await in between, so calls that were all waiting on resume() make
+    // one worklet. Two worklets both reporting what they consumed would make the worker run the
+    // game twice as fast to keep up, and the one being fed would drop half its sound.
+    this.#audioSetup ??= createAudioOutput(this.#audio).then(({ port, node }) => {
+      this.#audioNode = node;
+      this.#post({ type: "audio", port }, [port]);
+    });
+    const setup = this.#audioSetup;
+    try {
+      await setup;
+    } catch (err) {
+      if (this.#audioSetup === setup) this.#audioSetup = undefined; // the next gesture tries again
+      throw err;
+    }
   }
 
   get audioEnabled(): boolean {
