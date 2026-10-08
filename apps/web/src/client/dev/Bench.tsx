@@ -33,7 +33,7 @@ const ALL_POST_OFF = {
   render: { antialias: "none" },
 };
 
-export const VARIANTS: Variant[] = [
+const VARIANTS: Variant[] = [
   { id: "shipped", label: "Shipped look" },
   { id: "no-smaa", label: "− SMAA (no AA)", patch: { render: { antialias: "none" } } },
   { id: "fxaa", label: "SMAA → FXAA", patch: { render: { antialias: "fxaa" } } },
