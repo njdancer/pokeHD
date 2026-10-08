@@ -130,15 +130,22 @@ async function handle(data: ToWorker) {
         tick();
         break;
       }
-      case "audio":
-        audio = data.port;
+      case "audio": {
+        // Only the newest worklet paces the game: an old one that kept reporting would make it
+        // run fast (see EmulatorHost.enableAudio).
+        if (audio) audio.onmessage = null;
+        audio?.close();
+        const port = data.port;
+        audio = port;
         queuedSamples = 0;
-        audio.onmessage = ({ data: msg }: MessageEvent<FromWorklet>) => {
+        port.onmessage = ({ data: msg }: MessageEvent<FromWorklet>) => {
+          if (audio !== port) return;
           queuedSamples = Math.max(0, queuedSamples - msg.consumed);
           fillAudio();
         };
         fillAudio();
         break;
+      }
       case "buttons":
         if (guard) guard.setButtons(data.mask);
         else gb?.setButtons(data.mask);

@@ -144,9 +144,23 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const sceneRef = useRef<{ mode: OverworldState["mode"]; inWorld: boolean }>({ mode: "overworld", inWorld: false });
 
   const enableSound = async () => {
-    await hostRef.current?.enableAudio();
+    await hostRef.current?.enableAudio().catch(() => {}); // not a gesture the browser accepts
     setSound(hostRef.current?.audioEnabled ?? false);
   };
+
+  // iOS only starts audio on a gesture's end (touchend, pointerup, click) or a key, not on the
+  // pointerdown a touch press arrives as. It also suspends audio when the app is backgrounded,
+  // and the game is paced by the audio clock, so any later tap must be able to restart it.
+  useEffect(() => {
+    const onGesture = () => {
+      if (hostRef.current && !hostRef.current.audioEnabled) void enableSound();
+    };
+    const types = ["pointerup", "touchend", "click", "keydown"] as const;
+    for (const type of types) window.addEventListener(type, onGesture, { capture: true, passive: true });
+    return () => {
+      for (const type of types) window.removeEventListener(type, onGesture, { capture: true });
+    };
+  }, []);
 
   const togglePip = () => {
     pipRef.current = !pipRef.current;
