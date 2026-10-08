@@ -5,12 +5,15 @@
 // and one ahead; ?ghost=<look> picks how they're drawn (a GHOST_LOOKS key) and ?ghosts=0 hides them.
 // ?frame=N plays up to frame N and holds there, for screenshots. ?perf logs every frame slower
 // than 25 ms over the first pass, with the CPU split and any chunk build, to window.__perf.
+// ?map=CERULEAN_CITY stands still in that map instead (?at=x,y picks the spot, in steps), and
+// ?phase=0.5 holds the time of day, for looking at a place's colours (p1-colour); ?sgb=0 turns
+// those colours off for comparison.
 import { useEffect, useRef, useState } from "react";
 import { createEngine, type Engine } from "@pokehd/engine";
 import {
-  asGhost, createLiveWorld, GB_FRAME_SECONDS, GHOST_LOOKS, palletToViridian, type GhostLookId, type LiveWorld,
+  asGhost, createLiveWorld, GB_FRAME_SECONDS, GHOST_LOOKS, palletToViridian, standingState, type GhostLookId, type LiveWorld,
 } from "@pokehd/engine/world";
-import { parseWorld } from "@pokehd/rom";
+import { MAP_NAMES, parseWorld } from "@pokehd/rom";
 import { fetchDevRom } from "../dev-rom.ts";
 import { loadStoredRom } from "../rom-store.ts";
 
@@ -18,8 +21,11 @@ const query = new URLSearchParams(location.search);
 const perf = query.has("perf");
 const holdAt = query.has("frame") ? Number(query.get("frame")) : null;
 const ghostLook = GHOST_LOOKS[query.get("ghost") as GhostLookId] ?? undefined;
+const standIn = query.has("map") ? MAP_NAMES.indexOf(query.get("map")!.toUpperCase()) : null;
+const standAt = query.get("at")?.split(",").map(Number);
+const phase = query.has("phase") ? Number(query.get("phase")) : null;
 /** Fake friends: the recording offset in time, in Game Boy frames. */
-const FRIENDS = query.get("ghosts") === "0" ? [] : [
+const FRIENDS = query.get("ghosts") === "0" || standIn !== null ? [] : [
   { id: "behind", name: "Gary", offset: -48 },
   { id: "ahead", name: "Leaf", offset: 48 },
 ];
@@ -53,11 +59,14 @@ export function LivePlayback() {
       const rom = (await fetchDevRom()) ?? (await loadStoredRom());
       if (!rom) return setError("No ROM: load one in the app first.");
       const world = parseWorld(rom);
-      const stream = palletToViridian(world);
-      live = createLiveWorld(world, { ghostLook });
+      const stream = standIn === null || standIn < 0
+        ? palletToViridian(world)
+        : Array.from({ length: 60 }, () => standingState(world, standIn, standAt && { x: standAt[0]!, y: standAt[1]! }));
+      live = createLiveWorld(world, { ghostLook, sgbColours: query.get("sgb") !== "0" });
       engine = await createEngine(canvas, { world: live });
       if (disposed) return engine.dispose();
       live.setLook(engine.look);
+      if (phase !== null) Object.assign(engine.look.params.time, { drift: false, phase });
       if (query.get("size") === "1440") engine.setFixedSize({ width: 2560, height: 1440 });
 
       // Push one state per Game Boy frame, looping; measure display frame times alongside.

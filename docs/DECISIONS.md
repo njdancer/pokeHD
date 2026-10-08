@@ -247,3 +247,24 @@ Alternatives (Claude's notes, not Nick's words): **plain** (the player's own col
 told apart from you; **translucent** looks faded and loses detail under the tilt-shift blur;
 **tint** or **tag** alone each work, but together they're clearest. Name tags soften with the depth of
 field away from the focus; drawing them after post-processing is a later refinement if needed.
+
+## D22. Place colour: each town's SGB colour on its roofs, its people and a light grade
+
+Claude's call while Nick was away (p1-colour, 2026-10-07), flagged for his review. Implements
+D11's baseline. On a Super Game Boy the overworld is one palette per town (routes share one):
+near-white, the town's colour, a pale blue and near-black, sprites included. Painting the HD world
+with those four colours would flatten it, so the town colour goes where it reads as identity:
+
+- **Roofs** take the town colour as a hue-shifted ramp (Viridian green, Cerulean blue, Vermilion
+  orange, Lavender purple, Celadon mint…). Everything else keeps the base label ramps.
+- **People** wear it, as on the Super Game Boy. The player is always red (PAL_REDMON), restoring
+  a colour lost when ROM sprite sheets replaced the placeholder (PR #36).
+- **The grade** leans midtones toward it (`grade.placeTint`, 0.15), eased over about a second
+  as the player crosses into a town. Black and white stay put.
+- Buildings take the palette of the town or route outside (wLastMap), as the game does.
+- Pallet Town's colour is almost white, so its roofs stay the base red and its grade neutral;
+  its people wear the palette's pale blue so no one is grey.
+
+Alternatives: the literal four-colour SGB palette (authentic, but every surface turns one hue
+plus pale blue, and it fights the lighting); tinting the ground per map (seams at map edges,
+which a post grade avoids). `/dev/live?map=CERULEAN_CITY&sgb=0` shows the base look for comparison.

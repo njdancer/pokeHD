@@ -1,9 +1,9 @@
 import { LABELS, type Label } from "@pokehd/rom";
 import { NO_LABEL, type Region } from "./region.ts";
 
-// Placeholder colour: one four-shade ramp per label, lightest first (DMG shade 0 → 3). The real
-// colour comes from the ROM's SGB palettes (p1-colour, D11); until then this keeps the styles
-// comparable. Ramps are hue-shifted rather than plain tints so shading reads warm and cool.
+// Base colour: one four-shade ramp per label, lightest first (DMG shade 0 → 3). Ramps are
+// hue-shifted rather than plain tints so shading reads warm and cool. Each place's SGB palette
+// (./place.ts) replaces some of them, roofs for now.
 export type Ramp = readonly [number, number, number, number];
 
 export const LABEL_RAMPS: Record<Label, Ramp> = {
@@ -62,18 +62,27 @@ export interface Image {
  */
 export function colourRegion(
   region: Region,
-  opts: { replace?: ReadonlySet<Label>; fillTile?: number; fillLabel?: Label; ramp?: Ramp } = {},
+  opts: {
+    replace?: ReadonlySet<Label>;
+    fillTile?: number;
+    fillLabel?: Label;
+    ramp?: Ramp;
+    /** Per-label ramps that override `LABEL_RAMPS` (a place's colours). */
+    ramps?: Partial<Record<Label, Ramp>>;
+  } = {},
 ): Image {
   const width = region.widthTiles * 8;
   const height = region.heightTiles * 8;
   const data = new Uint8Array(width * height * 4);
   const replace = new Set([...(opts.replace ?? [])].map((l) => LABELS.indexOf(l)));
-  const fillRamp = LABEL_RAMPS[opts.fillLabel ?? "lawn"];
+  const fillLabel = opts.fillLabel ?? "lawn";
+  const fillRamp = opts.ramps?.[fillLabel] ?? LABEL_RAMPS[fillLabel];
+  const byLabel = LABELS.map((l) => opts.ramps?.[l] ?? LABEL_RAMPS[l]);
   for (let ty = 0; ty < region.heightTiles; ty++) {
     for (let tx = 0; tx < region.widthTiles; tx++) {
       const label = region.labels[ty * region.widthTiles + tx]!;
       const swap = replace.has(label) && opts.fillTile !== undefined;
-      const ramp = opts.ramp ?? (swap ? fillRamp : rampFor(label));
+      const ramp = opts.ramp ?? (swap ? fillRamp : (byLabel[label] ?? UNLABELLED));
       for (let p = 0; p < 64; p++) {
         const x = tx * 8 + (p & 7);
         const y = ty * 8 + (p >> 3);

@@ -38,6 +38,8 @@ export const ALLOWLIST: readonly string[] = [
   // Overworld sprite sheets (p1-npc-sprites); the player's bike sheet isn't in the table
   "RedBikeSprite",
   "SpriteSheetPointerTable",
+  // Super Game Boy palettes (p1-colour, D11)
+  "SuperPalettes",
   // Overworld state in WRAM and HRAM (p1-emu, p1-state-read)
   "hWY",
   "wCurMap",

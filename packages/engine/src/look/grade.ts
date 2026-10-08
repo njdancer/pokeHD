@@ -19,14 +19,20 @@ const luma = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.07
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
 /** Luminance-normalised tint, so tinting shifts hue without brightening or darkening. */
-function normTint(hex: string): RGB {
+export function normTint(hex: string): RGB {
   const [r, g, b] = hexToRgb(hex);
   const l = Math.max(luma(r, g, b), 1e-3);
   return [r / l, g / l, b / l];
 }
 
-/** Applies the grade to one display-referred colour. Exposed for tests. */
-export function gradeColor(g: Grade, input: RGB): RGB {
+/** A place tint that changes nothing. */
+export const NEUTRAL_TINT: Readonly<RGB> = [1, 1, 1];
+
+/**
+ * Applies the grade to one display-referred colour. Exposed for tests. `place` is the place's
+ * colour as a `normTint`, leaned toward by `g.placeTint` in the midtones.
+ */
+export function gradeColor(g: Grade, input: RGB, place: Readonly<RGB> = NEUTRAL_TINT): RGB {
   let [r, gr, b] = input;
   // White balance as channel gains.
   r *= 1 + 0.12 * g.temperature;
@@ -57,17 +63,25 @@ export function gradeColor(g: Grade, input: RGB): RGB {
     gr *= 1 + ws * (s[1] - 1) + wh * (h[1] - 1);
     b *= 1 + ws * (s[2] - 1) + wh * (h[2] - 1);
   }
+  // The place's own colour, strongest in the midtones so whites and blacks stay put.
+  if (g.placeTint > 0) {
+    const lc = clamp01(l);
+    const w = g.placeTint * 4 * lc * (1 - lc);
+    r *= 1 + w * (place[0] - 1);
+    gr *= 1 + w * (place[1] - 1);
+    b *= 1 + w * (place[2] - 1);
+  }
   return [clamp01(r), clamp01(gr), clamp01(b)];
 }
 
 /** Bakes the grade into RGBA8 texels, red fastest, then green, then blue (3D texture order). */
-export function bakeLut(g: Grade, size = LUT_SIZE, out = new Uint8Array(size * size * size * 4)) {
+export function bakeLut(g: Grade, size = LUT_SIZE, out = new Uint8Array(size * size * size * 4), place: Readonly<RGB> = NEUTRAL_TINT) {
   const max = size - 1;
   let i = 0;
   for (let z = 0; z < size; z++) {
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
-        const [r, gr, b] = gradeColor(g, [x / max, y / max, z / max]);
+        const [r, gr, b] = gradeColor(g, [x / max, y / max, z / max], place);
         out[i++] = Math.round(r * 255);
         out[i++] = Math.round(gr * 255);
         out[i++] = Math.round(b * 255);

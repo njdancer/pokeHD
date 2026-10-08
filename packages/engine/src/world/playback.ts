@@ -149,3 +149,22 @@ export function asGhost(id: string, name: string, state: ScriptedState): GhostSt
   const { x, y, step, animFrame } = state.player;
   return { id, name, mapId: state.mapId, x, y, step, animFrame };
 }
+
+/**
+ * One frame standing still in `map`, in front of its first door unless `at` says where, with
+ * every object where the map data places it. For looking around a map without walking there.
+ */
+export function standingState(world: WorldData, map: MapId, at?: { x: number; y: number }): ScriptedState {
+  const data = world.maps[map];
+  if (!data) throw new Error(`no map ${map}`);
+  const door = data.warps[0];
+  const spot = at ?? (door ? { x: door.x, y: door.y + 1 } : { x: data.widthBlocks, y: data.heightBlocks });
+  return {
+    mapId: map,
+    player: { ...spot, step: null, animFrame: 0, facing: "down" },
+    npcs: data.npcs.map((n, i) => ({
+      slot: i + 1, x: n.x, y: n.y, step: null, animFrame: 0, visible: true, facing: initialFacing(n.movement),
+    })),
+    fade: 0,
+  };
+}

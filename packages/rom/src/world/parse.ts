@@ -1,5 +1,6 @@
 // Parses the overworld from ROM bytes into WorldData. Formats: vendor/pokered
 // macros/scripts/maps.asm (map headers, connections, objects) and data/tilesets/*.asm.
+import { readSgbPalettes } from "../colour/sgb.ts";
 import { MAP_NAMES, TILESET_NAMES } from "../generated/names.ts";
 import { SYMBOLS, romOffset, type SymbolName } from "../symbols.ts";
 import type {
@@ -315,5 +316,6 @@ export function parseWorld(rom: Uint8Array): WorldData {
     tilesets: parseTilesets(r),
     sprites: parseSprites(r),
     bikeSprite: spriteSheet(r, 0, r.sym("RedBikeSprite"), STANDING_BYTES * 2, false),
+    sgbPalettes: readSgbPalettes(rom),
   };
 }

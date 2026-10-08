@@ -5,6 +5,7 @@ import { toGhosts, toPresence } from "./presence.ts";
 const state: OverworldState = {
   mode: "overworld",
   mapId: 12,
+  lastMap: 0,
   player: { x: 10, y: 20, facing: "up", step: { dx: 0, dy: -1, progress: 0.5 }, animFrame: 1, transport: "walk" },
   npcs: [],
   fade: 0,

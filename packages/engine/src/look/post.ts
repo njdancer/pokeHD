@@ -7,7 +7,7 @@ import { fxaa } from "three/addons/tsl/display/FXAANode.js";
 import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { lut3D } from "three/addons/tsl/display/Lut3DNode.js";
 import { smaa } from "three/addons/tsl/display/SMAANode.js";
-import { bakeLut, LUT_SIZE } from "./grade.ts";
+import { bakeLut, LUT_SIZE, NEUTRAL_TINT } from "./grade.ts";
 import type { LookParams, ToneMappingName } from "./params.ts";
 
 // Post-processing chain, in order:
@@ -119,8 +119,11 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
   return {
     pipeline,
     build,
-    /** Per-frame uniform updates. `focusDistance` is the camera-to-target distance; `fade` 1 is black. */
-    update(p: LookParams, focusDistance: number, fade: number) {
+    /**
+     * Per-frame uniform updates. `focusDistance` is the camera-to-target distance; `fade` 1 is
+     * black; `place` is the place tint (a `normTint`).
+     */
+    update(p: LookParams, focusDistance: number, fade: number, place: Readonly<[number, number, number]> = NEUTRAL_TINT) {
       u.fade.value = fade;
       renderer.toneMappingExposure = p.grade.exposure;
       u.aoIntensity.value = p.ao.intensity;
@@ -145,10 +148,10 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
       u.vignetteRadius.value = p.vignette.radius;
       u.vignetteSmoothness.value = p.vignette.smoothness;
 
-      const key = JSON.stringify(p.grade);
+      const key = JSON.stringify(p.grade) + place.map((v) => v.toFixed(3)).join();
       if (key !== lutKey) {
         lutKey = key;
-        bakeLut(p.grade, LUT_SIZE, lutData);
+        bakeLut(p.grade, LUT_SIZE, lutData, place);
         lut.needsUpdate = true;
       }
     },
