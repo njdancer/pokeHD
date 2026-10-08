@@ -12,6 +12,7 @@ import { cloudBackup } from "../saves/cloud-save.ts";
 import { openSaveSlot, storeSave } from "../saves/save-store.ts";
 import { giftStorage } from "../saves/gift-store.ts";
 import { me } from "../room/account.ts";
+import { Friends } from "../room/Friends.tsx";
 import { RoomClient, type Friend, type RoomStatus } from "../room/client.ts";
 import { RoomLink } from "../room/link.ts";
 import { LinkPicker } from "../room/LinkPicker.tsx";
@@ -90,6 +91,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [input, setInput] = useState<JoypadInput>();
   const [sound, setSound] = useState(false);
   const [settings, setSettings] = useState(false);
+  /** Nick: the friends list shows in Settings. */
+  const [admin, setAdmin] = useState(false);
   const [message, setMessage] = useState<string>("Starting…");
   const [stats, setStats] = useState<Stats>();
   const [noHd, setNoHd] = useState(false);
@@ -196,11 +199,12 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       host.setButtons(joypad.mask);
       hostRef.current = host;
 
-      // Friends, for players signed in with an invite (D19); everyone else plays alone.
+      // Friends, for players signed in by email (D23); everyone else plays alone.
       void me().then(
-        (player) => {
+        (account) => {
           if (disposed) return;
-          if (!player) return setRoom({ status: "signed-out", friends: [] });
+          if (!account) return setRoom({ status: "signed-out", friends: [] });
+          setAdmin(account.admin);
           const client = new RoomClient();
           roomClient = client;
           // Before connecting, so the first welcome resends anything still in the outbox.
@@ -368,6 +372,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             </div>
           </section>
           {input && <KeyBindingsPanel input={input} />}
+          {admin && <Friends />}
         </div>
       )}
       {showStats && stats && (
@@ -402,7 +407,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
 }
 
 function RoomBadge({ status, friends }: { status: RoomStatus; friends: number }) {
-  if (status === "signed-out") return <a className="room-badge" href="/join">Play with friends</a>;
+  if (status === "signed-out") return <a className="room-badge" href="/login">Play with friends</a>;
   const text: Record<RoomStatus, string> = {
     connecting: "Connecting…",
     open: friends === 1 ? "1 friend online" : `${friends} friends online`,

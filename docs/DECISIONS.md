@@ -180,7 +180,7 @@ cards) was cleaner but flatter from low angles. **Voxel** (every pixel a column)
 texture but turned buildings into slabs, because the Game Boy draws walls as if seen from above.
 Every dimension stays a tunable `StyleParams` value; refine within this direction.
 
-## D19. Friends join with invite codes; a player is a name and a session cookie
+## D19. Friends join with invite codes; a player is a name and a session cookie (superseded by D23)
 
 Nick chose invite codes over Cloudflare Access on 2026-10-07. Nick makes a code (`pnpm invite`,
 authorised by the `ADMIN_TOKEN` Worker secret) and sends it to a friend; the friend enters it
@@ -268,3 +268,38 @@ with those four colours would flatten it, so the town colour goes where it reads
 Alternatives: the literal four-colour SGB palette (authentic, but every surface turns one hue
 plus pale blue, and it fights the lighting); tinting the ground per map (seams at map edges,
 which a post grade avoids). `/dev/live?map=CERULEAN_CITY&sgb=0` shows the base look for comparison.
+
+## D23. Friends sign in by email; Nick is the admin, set in the repo
+
+Nick's call on 2026-10-08. Supersedes D19's invite and device codes and the `#dev=<token>` link.
+A player is an email address. One mechanism, two ways in:
+
+- **By email.** `/login` asks for an email; if it belongs to a player, Cloudflare Email Service
+  (the `EMAIL` binding, sending from `pokehd@hearth.dncr.me`) sends a six-digit code that works
+  for 15 minutes. Wrong guesses count against all of a player's emailed codes (5, then they
+  stop), and a player gets at most one code a minute and five an hour. The answer never says
+  whether an address is on the list.
+- **By link.** Nick adds a friend by email and name from Settings, Friends (in the game) or
+  `/login`, then copies a sign-in link to send himself or has it emailed. The link carries the
+  email and a 12-character code in its fragment, works once, for 7 days. After that the friend
+  signs in by email.
+
+Either way the result is D19's long-lived `__Host-` session cookie, now pushed out to the
+400-day maximum on every visit, so a player who keeps playing never signs in again. Nick is
+`ADMIN_EMAIL` in `wrangler.jsonc`: his player is made the first time he asks for a code (taking
+over a D19 player of the same name, with its saves), he sees the friends list, and his session
+opens `/api/dev-rom`, so any link works on a browser where he's signed in. `ADMIN_TOKEN` and
+`DEV_ROM_TOKEN` stay for scripts, tests and the cloud sandbox. D19 players keep their sessions;
+Nick gives them an email from the friends list. Codes and tokens are still stored only as
+SHA-256 hashes.
+
+On an iPhone home-screen app, which keeps its own cookies, a friend signs in inside the app with
+their email and the emailed code; the code is in the subject and body, so it can be typed
+without leaving the app. A link opens in Safari and signs Safari in, not the app.
+
+Why: Nick shouldn't have to keep a token, and friends shouldn't have to keep a code. Email is
+the recovery path D19 lacked: a lost cookie no longer loses the player.
+
+Alternative: **Cloudflare Access** (reconsidered). Its sign-in page can't be ours (only logo and
+colours), sessions last at most a month, and sign-in leaves for `*.cloudflareaccess.com`, which
+breaks out of an iPhone home-screen app.

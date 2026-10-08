@@ -1,14 +1,15 @@
 // Cloud saves across devices on the real game page (p1-saves-cloud): one player saves in the game
 // on one device, signs in a second device with a device code, restores the cloud save there and
 // continues from the same spot. Two browser contexts stand in for the two devices.
-// Needs the ROM, and an admin token to make the invite: run the dev server with ADMIN_TOKEN in
+// Needs the ROM, and an admin token to add the player: run the dev server with ADMIN_TOKEN in
 // apps/web/.dev.vars and the same value in POKEHD_ADMIN_TOKEN.
 // POKEHD_PLAY=1 POKEHD_ADMIN_TOKEN=… pnpm test:e2e cloud-save
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { SYMBOLS } from "@pokehd/rom";
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+import { addFriend, friendLink, signInWith } from "./friends.ts";
 import { hasRom, loadWorld, Player, PLAY_USE, REDS_HOUSE_2F, sleep } from "./game.ts";
 
 const ADMIN_TOKEN = process.env["POKEHD_ADMIN_TOKEN"];
@@ -16,13 +17,8 @@ const ROM_PATH = fileURLToPath(new URL("../../../rom/pokeblue.gb", import.meta.u
 
 test.skip(!process.env["POKEHD_PLAY"], "Long play-through: set POKEHD_PLAY=1 to run it");
 test.skip(!hasRom, "Needs rom/pokeblue.gb");
-test.skip(!ADMIN_TOKEN, "Needs POKEHD_ADMIN_TOKEN (and the dev server's ADMIN_TOKEN) to make an invite");
+test.skip(!ADMIN_TOKEN, "Needs POKEHD_ADMIN_TOKEN (and the dev server's ADMIN_TOKEN) to add a player");
 test.use(PLAY_USE);
-
-async function joinWith(request: APIRequestContext, code: string, name: string) {
-  const res = await request.post("/api/join", { data: { code, name } });
-  expect(res.ok(), await res.text()).toBe(true);
-}
 
 /**
  * The map and position in a .sav: wCurMap, wYCoord and wXCoord as the save's main data holds
@@ -64,16 +60,10 @@ test("a save made on one device continues on another", async ({ browser, baseURL
   const world = loadWorld();
   const key = createHash("sha1").update(readFileSync(ROM_PATH)).digest("hex");
 
-  // Device A: a new player from an invite, a new game, a few steps, a save.
-  const invite = await (await browser.newContext({ baseURL })).request.post("/api/admin/invites", {
-    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
-    data: { note: "e2e cloud save" },
-  });
-  expect(invite.ok(), await invite.text()).toBe(true);
-  const { code } = (await invite.json()) as { code: string };
-
+  // Device A: a new player, a new game, a few steps, a save.
   const deviceA = await browser.newContext({ ...PLAY_USE, baseURL });
-  await joinWith(deviceA.request, code, `e2e${Date.now() % 100000}`);
+  const friend = await addFriend(deviceA.request, `e2e${Date.now() % 100000}`);
+  await signInWith(deviceA.request, friend.link);
   const pageA = await deviceA.newPage();
   await pageA.goto("/?stats");
   await expect(pageA.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
@@ -85,11 +75,9 @@ test("a save made on one device continues on another", async ({ browser, baseURL
     return res.ok() ? res.body() : null;
   });
 
-  // Device B: signed in with a device code from A, with nothing saved in this browser.
-  const deviceCode = await deviceA.request.post("/api/me/device-code");
-  expect(deviceCode.ok()).toBe(true);
+  // Device B: the same player signed in again, with nothing saved in this browser.
   const deviceB = await browser.newContext({ ...PLAY_USE, baseURL });
-  await joinWith(deviceB.request, ((await deviceCode.json()) as { code: string }).code, "");
+  await signInWith(deviceB.request, await friendLink(deviceB.request, friend.player.id));
   const pageB = await deviceB.newPage();
   pageB.on("dialog", (d) => void d.accept());
   await pageB.goto("/?stats");

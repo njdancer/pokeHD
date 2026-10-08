@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import type { Player } from "./directory/store.ts";
+import { sendSignIn, signInLink } from "./directory/mail.ts";
+import { cleanEmail, type CodeKind, type Player } from "./directory/store.ts";
 import { PLAYER_ID_HEADER, PLAYER_NAME_HEADER } from "./room/do.ts";
 import { savesApi } from "./saves/saves.ts";
 
@@ -18,9 +19,13 @@ const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
 
 app.get("/health", (c) => c.json({ ok: true }));
 
-/** Serves the private test ROM to the holder of DEV_ROM_TOKEN. */
+/**
+ * Serves Nick's private test ROM to Nick: his session in the browser, or DEV_ROM_TOKEN for
+ * tools (`pnpm rom:fetch` in a sandbox with no browser).
+ */
 app.get("/dev-rom", async (c) => {
-  if (!(await bearerMatches(c, c.env.DEV_ROM_TOKEN))) return c.text("Not found", 404);
+  const allowed = (await bearerMatches(c, c.env.DEV_ROM_TOKEN)) || isAdmin(c, await currentPlayer(c));
+  if (!allowed) return c.text("Not found", 404);
   const rom = await c.env.PRIVATE.get(c.env.DEV_ROM_KEY);
   if (!rom) return c.text("Not found", 404);
   return new Response(rom.body, {
@@ -28,35 +33,52 @@ app.get("/dev-rom", async (c) => {
   });
 });
 
-// Friends (D19): an invite code makes a player; the session cookie says who you are after that.
+// Friends (D23): a player is an email address. Signing in sends a code to it; the session cookie
+// says who you are after that. Nick (ADMIN_EMAIL) adds friends from the game.
 
-/** Joins with an invite code (new player called `name`) or a device code (existing player). */
-app.post("/join", async (c) => {
-  const body = await c.req.json<{ code?: unknown; name?: unknown }>().catch(() => ({}) as never);
-  if (typeof body.code !== "string") return c.json({ error: "invalid-code" }, 400);
-  const name = typeof body.name === "string" ? body.name : "";
-  const result = await directory(c).redeem(body.code, name);
-  if (!result.ok) return c.json({ error: result.error }, result.error === "name-taken" ? 409 : 400);
-  setCookie(c, SESSION_COOKIE, result.sessionToken, {
-    path: "/",
-    secure: true,
-    httpOnly: true,
-    sameSite: "Strict",
-    maxAge: SESSION_MAX_AGE,
-  });
-  return c.json({ player: result.player });
+/** Emails a sign-in code, if the address belongs to a player. The answer doesn't say which. */
+app.post("/auth/request", async (c) => {
+  const body = await c.req.json<{ email?: unknown }>().catch(() => ({}) as never);
+  const email = typeof body.email === "string" ? cleanEmail(body.email) : null;
+  if (!email) return c.json({ error: "bad-email" }, 400);
+  const dir = directory(c);
+  const player =
+    email === adminEmail(c) ? await dir.ensurePlayer(email, c.env.ADMIN_NAME) : await dir.playerByEmail(email);
+  if (!player) return c.json({ ok: true });
+  const code = await dir.createCode(player.id, "email");
+  if (!code.ok) return c.json({ ok: true }); // Rate limited: the last code is still on its way.
+  try {
+    await sendSignIn(c.env, {
+      to: email,
+      code: code.code,
+      link: signInLink(new URL(c.req.url).origin, email, code.code),
+      invite: false,
+    });
+  } catch (error) {
+    console.error("sign-in email failed", error);
+    return c.json({ error: "send-failed" }, 502);
+  }
+  return c.json({ ok: true });
+});
+
+/** Signs in with the emailed code, or the code in a sign-in link. */
+app.post("/auth/verify", async (c) => {
+  const body = await c.req.json<{ email?: unknown; code?: unknown }>().catch(() => ({}) as never);
+  if (typeof body.email !== "string" || typeof body.code !== "string") {
+    return c.json({ error: "invalid-code" }, 400);
+  }
+  const result = await directory(c).verify(body.email, body.code);
+  if (!result.ok) return c.json({ error: result.error }, 400);
+  setSession(c, result.sessionToken);
+  return c.json(account(c, result.player));
 });
 
 app.get("/me", async (c) => {
   const player = await currentPlayer(c);
-  return player ? c.json({ player }) : c.json({ error: "signed-out" }, 401);
-});
-
-/** A one-hour code that signs you in on another device. */
-app.post("/me/device-code", async (c) => {
-  const player = await currentPlayer(c);
   if (!player) return c.json({ error: "signed-out" }, 401);
-  return c.json(await directory(c).createDeviceCode(player.id));
+  // Every visit pushes the cookie's expiry out again, so a player who keeps playing stays in.
+  setSession(c, getCookie(c, SESSION_COOKIE)!);
+  return c.json(account(c, player));
 });
 
 app.post("/sign-out", async (c) => {
@@ -84,29 +106,98 @@ app.get("/room", async (c) => {
 /** Cloud backup of the player's battery saves, per ROM. */
 app.route("/saves", savesApi<Bindings>(currentPlayer));
 
-// Admin: Nick, holding ADMIN_TOKEN (a Worker secret). `pnpm invite` wraps these.
+// Admin: Nick, signed in as ADMIN_EMAIL, from the game. ADMIN_TOKEN (a Worker secret) is for
+// scripts and tests: `pnpm invite` wraps these routes. The session cookie is SameSite=Strict, so
+// another site can't make Nick's browser call them.
 
 app.use("/admin/*", async (c, next) => {
-  if (!(await bearerMatches(c, c.env.ADMIN_TOKEN))) return c.text("Not found", 404);
+  const allowed = (await bearerMatches(c, c.env.ADMIN_TOKEN)) || isAdmin(c, await currentPlayer(c));
+  if (!allowed) return c.text("Not found", 404);
   await next();
 });
 
-app.post("/admin/invites", async (c) => {
-  const body = await c.req.json<{ note?: unknown }>().catch(() => ({}) as never);
-  const note = typeof body.note === "string" ? body.note.slice(0, 100) : "";
-  return c.json(await directory(c).createInvite(note));
+app.get("/admin/players", async (c) => {
+  const players = await directory(c).listPlayers();
+  return c.json({ players: players.map((p) => ({ ...p, admin: isAdmin(c, p) })) });
 });
 
-app.get("/admin/invites", async (c) => c.json({ invites: await directory(c).listInvites() }));
-app.get("/admin/players", async (c) => c.json({ players: await directory(c).listPlayers() }));
+/** Adds a friend by email, and makes them a sign-in link (emailed to them if `send`). */
+app.post("/admin/players", async (c) => {
+  const body = await c.req.json<{ email?: unknown; name?: unknown; send?: unknown }>().catch(() => ({}) as never);
+  const email = typeof body.email === "string" ? body.email : "";
+  const name = typeof body.name === "string" ? body.name : "";
+  const added = await directory(c).addPlayer(email, name);
+  if (!added.ok) return c.json({ error: added.error }, added.error.endsWith("-taken") ? 409 : 400);
+  return c.json({ player: added.player, ...(await invite(c, added.player, body.send === true)) });
+});
+
+/** A fresh sign-in link for a player, e.g. when the first one expired. */
+app.post("/admin/players/:id/link", async (c) => {
+  const body = await c.req.json<{ send?: unknown }>().catch(() => ({}) as never);
+  const player = (await directory(c).listPlayers()).find((p) => p.id === c.req.param("id"));
+  if (!player?.email) return c.json({ error: "not-found" }, 404);
+  return c.json(await invite(c, player, body.send === true));
+});
+
+/** Gives a player an email: for friends who joined with a D19 invite code. */
+app.patch("/admin/players/:id", async (c) => {
+  const body = await c.req.json<{ email?: unknown }>().catch(() => ({}) as never);
+  const result = await directory(c).setEmail(c.req.param("id"), typeof body.email === "string" ? body.email : "");
+  if (result.ok) return c.json({ ok: true });
+  return c.json({ error: result.error }, result.error === "not-found" ? 404 : result.error === "email-taken" ? 409 : 400);
+});
 
 app.delete("/admin/players/:id", async (c) => {
-  const removed = await directory(c).revokePlayer(c.req.param("id"));
+  const dir = directory(c);
+  const player = (await dir.listPlayers()).find((p) => p.id === c.req.param("id"));
+  if (player && isAdmin(c, player)) return c.json({ error: "is-admin" }, 400);
+  const removed = await dir.revokePlayer(c.req.param("id"));
   return removed ? c.json({ ok: true }) : c.json({ error: "not-found" }, 404);
 });
 
+/** Makes a link code for `player` and, if `send`, emails it. The link comes back either way. */
+async function invite(c: Ctx, player: Player, send: boolean) {
+  const code = await directory(c).createCode(player.id, "link" satisfies CodeKind);
+  if (!code.ok || !player.email) throw new Error(`no link code for ${player.id}`);
+  const link = signInLink(new URL(c.req.url).origin, player.email, code.code);
+  let sent = false;
+  if (send) {
+    try {
+      await sendSignIn(c.env, { to: player.email, name: player.name, code: code.code, link, invite: true });
+      sent = true;
+    } catch (error) {
+      console.error("invite email failed", error);
+    }
+  }
+  return { link, expiresAt: code.expiresAt, sent };
+}
+
 function directory(c: Ctx) {
   return c.env.DIRECTORY.getByName("friends");
+}
+
+function adminEmail(c: Ctx): string | null {
+  // Missing only in test Workers with a config of their own.
+  return c.env.ADMIN_EMAIL ? cleanEmail(c.env.ADMIN_EMAIL) : null;
+}
+
+function isAdmin(c: Ctx, player: Player | null): boolean {
+  return !!player?.email && player.email === adminEmail(c);
+}
+
+/** What the browser learns about the signed-in player. */
+function account(c: Ctx, player: Player) {
+  return { player: { id: player.id, name: player.name }, email: player.email, admin: isAdmin(c, player) };
+}
+
+function setSession(c: Ctx, token: string) {
+  setCookie(c, SESSION_COOKIE, token, {
+    path: "/",
+    secure: true,
+    httpOnly: true,
+    sameSite: "Strict",
+    maxAge: SESSION_MAX_AGE,
+  });
 }
 
 async function currentPlayer(c: Ctx): Promise<Player | null> {

@@ -16,7 +16,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
  * - `connecting`: the first connection is opening.
  * - `open`: connected and welcomed; `friends` is live.
  * - `reconnecting`: the connection dropped and a retry is scheduled or opening.
- * - `signed-out`: the room refused us and `/api/me` says there's no session; send them to /join.
+ * - `signed-out`: the room refused us and `/api/me` says there's no session; send them to /login.
  * - `replaced`: the same player connected from another tab or device. We don't fight it.
  * - `closed`: `close()` was called (or never connected).
  */

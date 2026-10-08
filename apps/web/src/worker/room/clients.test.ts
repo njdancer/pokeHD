@@ -35,21 +35,22 @@ afterAll(async () => {
   await worker?.dispose();
 });
 
-/** Makes an invite and joins with it; returns the session cookie. */
+/** Adds a player as the admin and signs in with their link; returns the session cookie. */
 async function newPlayer(name: string): Promise<string> {
-  const invite = await fetch(new URL("/api/admin/invites", base), {
+  const add = await fetch(new URL("/api/admin/players", base), {
     method: "POST",
     headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
-    body: "{}",
+    body: JSON.stringify({ email: `${name.toLowerCase()}@example.com`, name }),
   });
-  const { code } = (await invite.json()) as { code: string };
-  const join = await fetch(new URL("/api/join", base), {
+  expect(add.status).toBe(200);
+  const { link } = (await add.json()) as { link: string };
+  const verify = await fetch(new URL("/api/auth/verify", base), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ code, name }),
+    body: JSON.stringify(Object.fromEntries(new URLSearchParams(new URL(link).hash.slice(1)))),
   });
-  expect(join.status).toBe(200);
-  const cookie = join.headers.get("set-cookie")!.split(";")[0]!;
+  expect(verify.status).toBe(200);
+  const cookie = verify.headers.get("set-cookie")!.split(";")[0]!;
   expect(cookie).toMatch(/^__Host-pokehd-session=/);
   return cookie;
 }
@@ -154,5 +155,42 @@ describe("two RoomClients in one room", () => {
     stranger.client.connect();
     await until(stranger.client, (s) => s.status === "signed-out");
     expect(stranger.sockets).toHaveLength(1);
+  });
+});
+
+describe("email sign-in (D23)", () => {
+  const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
+    fetch(new URL(path, base), {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+
+  it("emails a code to players, and says the same to strangers", async () => {
+    await newPlayer("Kim");
+    // Local dev simulates Email Service, so this sends nothing but runs the real binding.
+    expect((await post("/api/auth/request", { email: "kim@example.com" })).status).toBe(200);
+    expect((await post("/api/auth/request", { email: "nobody@example.com" })).status).toBe(200);
+    expect((await post("/api/auth/request", { email: "nope" })).status).toBe(400);
+    // The admin is made on first request.
+    expect((await post("/api/auth/request", { email: "Nick@dncr.me" })).status).toBe(200);
+    const players = await fetch(new URL("/api/admin/players", base), {
+      headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+    });
+    expect(((await players.json()) as { players: { email: string; admin: boolean }[] }).players).toContainEqual(
+      expect.objectContaining({ email: "nick@dncr.me", admin: true }),
+    );
+  });
+
+  it("knows who you are, keeps the admin routes and dev ROM from players, and signs out", async () => {
+    const cookie = await newPlayer("Lee");
+    const me = await fetch(new URL("/api/me", base), { headers: { cookie } });
+    expect(await me.json()).toMatchObject({ player: { name: "Lee" }, email: "lee@example.com", admin: false });
+    expect(me.headers.get("set-cookie")).toMatch(/Max-Age=\d+/);
+    expect((await fetch(new URL("/api/admin/players", base), { headers: { cookie } })).status).toBe(404);
+    expect((await fetch(new URL("/api/dev-rom", base), { headers: { cookie } })).status).toBe(404);
+    expect((await post("/api/auth/verify", { email: "lee@example.com", code: "123456" })).status).toBe(400);
+    await post("/api/sign-out", {}, { cookie });
+    expect((await fetch(new URL("/api/me", base), { headers: { cookie } })).status).toBe(401);
   });
 });

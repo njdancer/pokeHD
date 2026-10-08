@@ -1,8 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
-import { DirectoryStore, type SqlValue } from "./store.ts";
+import { DirectoryStore, type CodeKind, type SqlValue } from "./store.ts";
 
 /**
- * The one directory of friends (D19), addressed by name as `"friends"`. The Worker calls it
+ * The one directory of friends (D23), addressed by name as `"friends"`. The Worker calls it
  * over RPC; nothing reaches it from outside.
  */
 export class Directory extends DurableObject<Env> {
@@ -17,14 +17,23 @@ export class Directory extends DurableObject<Env> {
     this.#store = new DirectoryStore({ exec });
   }
 
-  createInvite(note: string) {
-    return this.#store.createInvite(note);
+  addPlayer(email: string, name: string) {
+    return this.#store.addPlayer(email, name);
   }
-  createDeviceCode(playerId: string) {
-    return this.#store.createDeviceCode(playerId);
+  ensurePlayer(email: string, name: string) {
+    return this.#store.ensurePlayer(email, name);
   }
-  redeem(code: string, name: string) {
-    return this.#store.redeem(code, name);
+  setEmail(playerId: string, email: string) {
+    return this.#store.setEmail(playerId, email);
+  }
+  playerByEmail(email: string) {
+    return this.#store.playerByEmail(email);
+  }
+  createCode(playerId: string, kind: CodeKind) {
+    return this.#store.createCode(playerId, kind);
+  }
+  verify(email: string, code: string) {
+    return this.#store.verify(email, code);
   }
   authenticate(sessionToken: string) {
     return this.#store.authenticate(sessionToken);
@@ -34,9 +43,6 @@ export class Directory extends DurableObject<Env> {
   }
   listPlayers() {
     return this.#store.listPlayers();
-  }
-  listInvites() {
-    return this.#store.listInvites();
   }
   revokePlayer(playerId: string) {
     return this.#store.revokePlayer(playerId);

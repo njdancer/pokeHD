@@ -5,26 +5,20 @@
 // POKEHD_PLAY=1 POKEHD_ADMIN_TOKEN=… pnpm test:e2e ghosts
 import { writeFileSync } from "node:fs";
 import { expect, test, type Browser } from "@playwright/test";
+import { addFriend, signInWith } from "./friends.ts";
 import { hasRom, loadWorld, Player, PLAY_USE, REDS_HOUSE_2F, sleep, type Dir } from "./game.ts";
 
 const ADMIN_TOKEN = process.env["POKEHD_ADMIN_TOKEN"];
 
 test.skip(!process.env["POKEHD_PLAY"], "Long play-through: set POKEHD_PLAY=1 to run it");
 test.skip(!hasRom, "Needs rom/pokeblue.gb");
-test.skip(!ADMIN_TOKEN, "Needs POKEHD_ADMIN_TOKEN (and the dev server's ADMIN_TOKEN) to make invites");
+test.skip(!ADMIN_TOKEN, "Needs POKEHD_ADMIN_TOKEN (and the dev server's ADMIN_TOKEN) to add players");
 test.use(PLAY_USE);
 
-/** A new player from a fresh invite, on the game page with stats. */
+/** A new player, signed in with their link, on the game page with stats. */
 async function newPlayer(browser: Browser, baseURL: string | undefined, name: string) {
   const context = await browser.newContext({ ...PLAY_USE, baseURL });
-  const invite = await context.request.post("/api/admin/invites", {
-    headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
-    data: { note: "e2e ghosts" },
-  });
-  expect(invite.ok(), await invite.text()).toBe(true);
-  const { code } = (await invite.json()) as { code: string };
-  const join = await context.request.post("/api/join", { data: { code, name } });
-  expect(join.ok(), await join.text()).toBe(true);
+  await signInWith(context.request, (await addFriend(context.request, name)).link);
   const page = await context.newPage();
   await page.goto("/?stats");
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });

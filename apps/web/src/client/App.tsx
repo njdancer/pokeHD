@@ -24,9 +24,17 @@ export function App() {
 
   useEffect(() => {
     (async () => {
-      const devRom = await fetchDevRom();
-      if (devRom) return accept(devRom);
+      // Locally the dev server's ROM wins, so a rebuilt one is picked up. Deployed, the stored
+      // ROM wins and Nick's test ROM only fills in for a browser that has none.
+      if (import.meta.env.DEV) {
+        const devRom = await fetchDevRom();
+        if (devRom) return accept(devRom);
+      }
       const rom = await loadStoredRom();
+      if (!rom && !import.meta.env.DEV) {
+        const devRom = await fetchDevRom();
+        if (devRom) return accept(devRom);
+      }
       const check = rom && (await checkRom(rom));
       if (!rom || !check || !check.ok) return setState({ kind: "needs-rom" });
       setState({ kind: "ready", rom, header: check.header, romKey: await romKey(rom) });
