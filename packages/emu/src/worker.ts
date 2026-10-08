@@ -168,7 +168,9 @@ async function handle(data: ToWorker) {
         break;
       case "resume-point": {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.
-        const g = gb && !link && !guard?.asking && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        // Signed-in players always have a port open (RoomLink keeps one ready), so it's the
+        // session that counts, not the port.
+        const g = gb && !link?.inSession && !guard?.asking && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
         // Hand over any newer save first, so the stored save matches the one in the state.
         if (g?.sramDirty) flushSram();
         post({ type: "resume-point", id: data.id, state: g ? g.saveState() : null });
