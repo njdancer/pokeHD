@@ -1,8 +1,9 @@
 // The game page: the player's ROM running in the emulator, its overworld state decoded every
-// frame and rendered as the live HD world, with the Game Boy's own screen beside it for text,
-// menus and battles (p1-play). URL option: ?stats shows frame rate and decoded state.
+// frame and rendered as the live HD world, battles included (p2-battles), with the Game Boy's own
+// screen beside it for text and menus (p1-play). URL options: ?stats shows frame rate and decoded
+// state; in dev, ?fixture=battle-wild starts from a recorded state (tools/record-battles.ts).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EmulatorHost, OVERWORLD_WATCHES, saveSummary, type SaveSummary, OverworldDecoder, SCREEN_HEIGHT, SCREEN_WIDTH, type OverworldState, type OverworldWatched } from "@pokehd/emu";
+import { BATTLE_WATCHES, EmulatorHost, OVERWORLD_WATCHES, saveSummary, type SaveSummary, OverworldDecoder, SCREEN_HEIGHT, SCREEN_WIDTH, type BattleScreen, type BattleState, type OverworldState, type OverworldWatched } from "@pokehd/emu";
 import { createEngine, type Engine } from "@pokehd/engine";
 import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
 import { parseWorld, type RomHeader } from "@pokehd/rom";
@@ -32,7 +33,9 @@ import { GiftCourier } from "../room/gifts.ts";
 import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
 import { GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
-import { inWorldTracker, screenLayout, type ScreenLayout } from "./screen.ts";
+import { inWorldTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
+import { BattleTracker, maskBattleScreen } from "./battle.ts";
+import { BattleHud } from "./BattleHud.tsx";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
 import "./game.css";
 
@@ -141,7 +144,9 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   // Bumped by a .sav import: restarts the emulator on the imported save.
   const [boot, setBoot] = useState(0);
   // The latest mode and map flag, so the layout can be recomputed when the player toggles pip.
-  const sceneRef = useRef<{ mode: OverworldState["mode"]; inWorld: boolean }>({ mode: "overworld", inWorld: false });
+  const sceneRef = useRef<{ mode: OverworldState["mode"]; inWorld: boolean; battle?: BattleScene }>({ mode: "overworld", inWorld: false });
+  /** The battle's HD cards: the state they show and which the game draws now. */
+  const [battleHud, setBattleHud] = useState<{ state: BattleState; huds: BattleScreen["huds"] } | null>(null);
 
   const enableSound = async () => {
     await hostRef.current?.enableAudio().catch(() => {}); // not a gesture the browser accepts
@@ -166,8 +171,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     pipRef.current = !pipRef.current;
     savePip(pipRef.current);
     setPip(pipRef.current);
-    const { mode, inWorld } = sceneRef.current;
-    setLayout(screenLayout(mode, inWorld, pipRef.current));
+    const { mode, inWorld, battle } = sceneRef.current;
+    setLayout(screenLayout(mode, inWorld, pipRef.current, battle));
   };
 
   useEffect(() => {
@@ -228,7 +233,10 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         await readResumePoint(romKey).catch(() => null),
         await within(fetchCloudResumePoint(romKey), CLOUD_WAIT_MS, null),
       ]);
-      const resume = resumePoint?.state ?? null;
+      // Dev only: ?fixture=battle-wild starts from a state recorded by tools/record-battles.ts.
+      const fixture = import.meta.env.DEV && new URLSearchParams(location.search).get("fixture");
+      const recorded = fixture ? await fetch(`/__dev/fixture/${fixture}.state`).then((r) => (r.ok ? r.arrayBuffer() : null)) : null;
+      const resume = recorded ? new Uint8Array(recorded) : (resumePoint?.state ?? null);
       if (disposed) return;
       if (!restored) void cloudBackup(romKey).status().then((s) => !disposed && setCloudNewer(s.kind === "newer"), () => {});
 
@@ -236,6 +244,10 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       const ctx = screenRef.current!.getContext("2d")!;
       const image = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
       const decoder = new OverworldDecoder();
+      /** Battles are drawn in HD once the renderer is up; until then the screen shows them. */
+      let hd = false;
+      let battles: BattleTracker | null = null;
+      let hudKey = "";
       let trackInWorld = inWorldTracker();
       let latest: OverworldState | null = null;
       let emuFrames = 0;
@@ -260,25 +272,37 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         onEraseAnswered: () => setErasing(null),
         onFrame: ({ pixels, watched }) => {
           image.data.set(new Uint8Array(pixels));
-          ctx.putImageData(image, 0, 0);
           emuFrames++;
           const bytes = watched as OverworldWatched;
           const state = decoder.decode(bytes);
           const inWorld = trackInWorld(bytes);
           // Before the first map loads (title, intro) the state is meaningless; the HD view waits.
           if (inWorld) live!.push(state, performance.now() / 1000);
+          // Battles: the HD layer draws the battle screen; the Game Boy's keeps text and menus.
+          const fight = battles?.frame(watched);
+          const battle = hd && inWorld ? fight?.scene : undefined;
+          live!.setBattle(battle ? (fight?.view ?? null) : null);
+          if (battle === "scene" && fight?.screen) maskBattleScreen(image.data, fight.screen);
+          ctx.putImageData(image, 0, 0);
+          const huds = battle === "scene" && fight?.state && fight.screen ? { state: fight.state, huds: fight.screen.huds } : null;
+          const key = huds ? JSON.stringify([huds.huds, huds.state.player.mon, huds.state.enemy.mon]) : "";
+          if (key !== hudKey) {
+            hudKey = key;
+            setBattleHud(huds);
+          }
           latest = state;
           roomClient?.sendPresence(toPresence(state, inWorld));
           const scene = sceneRef.current;
-          if (scene.mode !== state.mode || scene.inWorld !== inWorld) {
-            sceneRef.current = { mode: state.mode, inWorld };
-            setLayout(screenLayout(state.mode, inWorld, pipRef.current));
+          if (scene.mode !== state.mode || scene.inWorld !== inWorld || scene.battle !== battle) {
+            sceneRef.current = { mode: state.mode, inWorld, battle };
+            setLayout(screenLayout(state.mode, inWorld, pipRef.current, battle));
           }
         },
         onError: (text) => setMessage(`Emulator error: ${text}`),
         onGift: (event) => courier?.onGiftEvent(event),
       });
-      host.watch(OVERWORLD_WATCHES);
+      const watching = host;
+      battles = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...BATTLE_WATCHES }, (watches) => watching.watch(watches));
       host.setButtons(joypad.mask);
       hostRef.current = host;
       const started = await host.started;
@@ -424,6 +448,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       if (disposed) return created.dispose();
       engine = created;
       live.setLook(engine.look);
+      hd = true;
       setMessage(
         started.resumed
           ? "Back where you left off."
@@ -453,6 +478,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       delete window.__pokehd;
       sceneRef.current = { mode: "overworld", inWorld: false };
       setLayout("full");
+      setBattleHud(null);
       setNoHd(false);
       setRoom(null);
       setLink(null);
@@ -582,6 +608,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         />
       )}
       {gifts && <GiftNotices rom={rom} courier={gifts} />}
+      {battleHud && !noHd && layout === "battle" && <BattleHud state={battleHud.state} huds={battleHud.huds} />}
       {input && touch && <TouchPad onChange={onTouch} />}
       {savedAt > 0 && <SavedToast shownAt={savedAt} />}
       {erasing && <EraseConfirm old={erasing.old} onAnswer={answerErase} />}

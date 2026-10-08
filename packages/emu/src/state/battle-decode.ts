@@ -1,5 +1,6 @@
 // Pure decoding of BATTLE_WATCHES bytes into a BattleState, plus BattleDecoder for the parts that
 // need the frames before. Offsets are battle_struct and party_struct in macros/ram.asm.
+import { decodeText } from "@pokehd/rom";
 import {
   BATTLE_STRUCT_LENGTH,
   PARTY_LENGTH,
@@ -40,6 +41,8 @@ const NO_ANIMATION = 0xff;
 /** The filled menu cursor ▶; the game only draws it in the menu taking input. */
 const MENU_CURSOR_TILE = 0xed;
 const SURFING = 2;
+/** wPlayerBattleStatus3 / wEnemyBattleStatus3 bit 3. */
+const TRANSFORMED = 1 << 3;
 
 const VARIANTS = ["normal", "old-man", "safari"] as const;
 
@@ -56,7 +59,7 @@ export function monStatus(value: number): MonStatus {
   return "ok";
 }
 
-function mon(struct: Uint8Array): BattleMon | null {
+function mon(struct: Uint8Array, name: Uint8Array, status3: Uint8Array): BattleMon | null {
   const species = byte(struct, SPECIES);
   if (species === 0 || struct.length < BATTLE_STRUCT_LENGTH) return null;
   return {
@@ -67,6 +70,8 @@ function mon(struct: Uint8Array): BattleMon | null {
     status: monStatus(byte(struct, STATUS)),
     types: [byte(struct, TYPE1), byte(struct, TYPE1 + 1)],
     moves: [0, 1, 2, 3].map((i) => byte(struct, MOVES + i)) as BattleMon["moves"],
+    name: decodeText(name),
+    transformed: (byte(status3, 0) & TRANSFORMED) !== 0,
   };
 }
 
@@ -127,8 +132,8 @@ export function decodeBattleState(watched: BattleWatched): BattleState | null {
 function decode(watched: BattleWatched, soundArmed: boolean, intro: boolean): BattleState | null {
   if (byte(watched.inBattle, 0) === 0) return null;
   const type = battleType(watched);
-  const player: BattleSide = { mon: mon(watched.playerMon), team: team(watched.playerParty) };
-  const enemy: BattleSide = { mon: mon(watched.enemyMon), team: type === "wild" ? [] : team(watched.enemyParty) };
+  const player: BattleSide = { mon: mon(watched.playerMon, watched.playerName, watched.playerStatus3), team: team(watched.playerParty) };
+  const enemy: BattleSide = { mon: mon(watched.enemyMon, watched.enemyName, watched.enemyStatus3), team: type === "wild" ? [] : team(watched.enemyParty) };
   const result = outcome(watched, type, player, enemy);
   const turn: BattleState["turn"] = byte(watched.whoseTurn, 0) === 0 ? "player" : "enemy";
   const animationId = byte(watched.animationId, 0);

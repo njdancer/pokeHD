@@ -6,6 +6,7 @@ const Login = lazy(() => import("./room/Login.tsx").then((m) => ({ default: m.Lo
 const EmuDebug = lazy(() => import("./dev/emu/EmuDebug.tsx").then((m) => ({ default: m.EmuDebug })));
 const LivePlayback = lazy(() => import("./dev/LivePlayback.tsx").then((m) => ({ default: m.LivePlayback })));
 const TextDebug = lazy(() => import("./dev/TextDebug.tsx").then((m) => ({ default: m.TextDebug })));
+const BattleDev = lazy(() => import("./dev/BattleDev.tsx").then((m) => ({ default: m.BattleDev })));
 const Bench = lazy(() => import("./dev/Bench.tsx").then((m) => ({ default: m.Bench })));
 // The ROM explorer (/explore), with its ~850 KB label table, only loads when opened.
 const Explorer = lazy(() => import("./explore/Explorer.tsx").then((m) => ({ default: m.Explorer })));
@@ -26,6 +27,7 @@ export function Root() {
   if (path === "/dev/emu") return <Suspense><EmuDebug /></Suspense>;
   if (path === "/dev/live") return <Suspense><LivePlayback /></Suspense>;
   if (path === "/dev/text") return <Suspense><TextDebug /></Suspense>;
+  if (path === "/dev/battle") return <Suspense><BattleDev /></Suspense>;
   if (path === "/dev/bench") return <Suspense><Bench /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;
   if (MapViewer && location.hash === "#maps") return <Suspense><MapViewer /></Suspense>;

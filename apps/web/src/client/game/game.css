@@ -50,3 +50,32 @@ a.room-badge { color: var(--fg); border: 1px solid #ffffff26; }
 }
 .with-touch-pad .room-badge { display: inline-flex; align-items: center; }
 .with-touch-pad .game-settings input[type="checkbox"] { width: 22px; height: 22px; vertical-align: middle; }
+
+/*
+ * Battles (p2-battles): the HD arena fills the view; the Game Boy's screen sits over it like a
+ * dialog with the scene and HUD cells cut out, so only text and menus show, and HD cards stand in
+ * for the HUDs.
+ */
+.gb-screen.battle {
+  width: min(80vw, 52vh * 160 / 144); left: 50%; bottom: 16px; translate: -50% 0;
+  box-shadow: none; border-radius: 0;
+}
+.with-touch-pad .gb-screen.battle { bottom: auto; top: 56px; width: min(92vw, 44vh * 160 / 144); }
+.battle-hud { position: fixed; inset: 0; z-index: 2; pointer-events: none; }
+.battle-card {
+  position: absolute; width: min(15rem, calc(50vw - 24px)); padding: .5rem .75rem; box-sizing: border-box;
+  color: var(--fg); background: #0d1117c7; border: 1px solid #ffffff26; border-radius: 12px;
+  box-shadow: 0 6px 24px #0007; font-weight: 600;
+}
+.battle-card.enemy { right: 16px; top: 56px; }
+.battle-card.player { left: 16px; bottom: 16px; }
+.with-touch-pad .battle-card { top: calc(64px + min(92vw, 44vh * 160 / 144) * 144 / 160); bottom: auto; }
+.battle-card-top { display: flex; align-items: baseline; gap: .5rem; }
+.battle-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: .02em; }
+.battle-level { margin-left: auto; color: var(--muted); font-size: .85rem; }
+.battle-status { padding: 0 .35rem; font-size: .75rem; color: #fff; background: #a05cc8; border-radius: 4px; }
+.battle-bar { height: 10px; margin-top: .4rem; background: #ffffff1f; border-radius: 5px; overflow: hidden; }
+.battle-bar span { display: block; height: 100%; background: #4cd16a; transition: width .8s ease, background-color .3s; }
+.battle-bar[data-colour="yellow"] span { background: #f2c94c; }
+.battle-bar[data-colour="red"] span { background: #eb5757; }
+.battle-hp { margin-top: .25rem; text-align: right; font-size: .85rem; font-variant-numeric: tabular-nums; }
