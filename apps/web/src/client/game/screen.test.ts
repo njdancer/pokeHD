@@ -13,6 +13,12 @@ describe("screenLayout", () => {
     expect(screenLayout("dialog", true, true)).toBe("dialog");
   });
 
+  it("stays out of the way while the HD text layer shows the text", () => {
+    expect(screenLayout("dialog", true, false, true)).toBe("hidden");
+    expect(screenLayout("dialog", true, true, true)).toBe("corner");
+    expect(screenLayout("battle", true, false, true)).toBe("full");
+  });
+
   it("follows the player's choice on the overworld", () => {
     expect(screenLayout("overworld", true, true)).toBe("corner");
     expect(screenLayout("overworld", true, false)).toBe("hidden");

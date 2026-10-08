@@ -1,11 +1,25 @@
 // The game page: the player's ROM running in the emulator, its overworld state decoded every
-// frame and rendered as the live HD world, with the Game Boy's own screen beside it for text,
-// menus and battles (p1-play). URL option: ?stats shows frame rate and decoded state.
+// frame and rendered as the live HD world, with its text boxes and menus re-typeset over it
+// (p2-text) and the Game Boy's own screen beside it for battles and the rest (p1-play). URL option: ?stats shows frame rate and decoded state.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EmulatorHost, OVERWORLD_WATCHES, saveSummary, type SaveSummary, OverworldDecoder, SCREEN_HEIGHT, SCREEN_WIDTH, type OverworldState, type OverworldWatched } from "@pokehd/emu";
+import {
+  EmulatorHost,
+  OVERWORLD_WATCHES,
+  saveSummary,
+  type SaveSummary,
+  OverworldDecoder,
+  SCREEN_HEIGHT,
+  SCREEN_WIDTH,
+  ScreenTextDecoder,
+  TEXT_WATCHES,
+  type OverworldState,
+  type OverworldWatched,
+  type ScreenText,
+  type TextWatched,
+} from "@pokehd/emu";
 import { createEngine, type Engine } from "@pokehd/engine";
 import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
-import { parseWorld, type RomHeader } from "@pokehd/rom";
+import { parseWorld, readGlyphs, type RomHeader } from "@pokehd/rom";
 import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../input/index.ts";
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { cloudBackup } from "../saves/cloud-save.ts";
@@ -34,6 +48,8 @@ import { GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, screenLayout, type ScreenLayout } from "./screen.ts";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
+import { TextOverlay } from "./TextOverlay.tsx";
+import { TEXT_LOOKS, hdTextFits, loadTextLook, saveTextLook, textKey, type TextLook } from "./hd-text.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
@@ -138,10 +154,16 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   /** When the last autosave landed, for the "Saved" toast. */
   const [savedAt, setSavedAt] = useState(0);
   const touch = useTouchDevice();
+  const glyphs = useMemo(() => readGlyphs(rom), [rom]);
+  /** How the HD text layer looks, or `off` for the Game Boy screen. */
+  const [textLook, setTextLook] = useState(loadTextLook);
+  const textLookRef = useRef(textLook);
+  /** The text on screen, while the HD text layer can show it. */
+  const [hdText, setHdText] = useState<ScreenText | null>(null);
   // Bumped by a .sav import: restarts the emulator on the imported save.
   const [boot, setBoot] = useState(0);
   // The latest mode and map flag, so the layout can be recomputed when the player toggles pip.
-  const sceneRef = useRef<{ mode: OverworldState["mode"]; inWorld: boolean }>({ mode: "overworld", inWorld: false });
+  const sceneRef = useRef<{ mode: OverworldState["mode"]; inWorld: boolean; hdText: boolean }>({ mode: "overworld", inWorld: false, hdText: false });
 
   const enableSound = async () => {
     await hostRef.current?.enableAudio().catch(() => {}); // not a gesture the browser accepts
@@ -166,8 +188,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     pipRef.current = !pipRef.current;
     savePip(pipRef.current);
     setPip(pipRef.current);
-    const { mode, inWorld } = sceneRef.current;
-    setLayout(screenLayout(mode, inWorld, pipRef.current));
+    const { mode, inWorld, hdText } = sceneRef.current;
+    setLayout(screenLayout(mode, inWorld, pipRef.current, hdText));
   };
 
   useEffect(() => {
@@ -236,6 +258,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       const ctx = screenRef.current!.getContext("2d")!;
       const image = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
       const decoder = new OverworldDecoder();
+      const textDecoder = new ScreenTextDecoder(glyphs);
+      let shownText = "";
       let trackInWorld = inWorldTracker();
       let latest: OverworldState | null = null;
       let emuFrames = 0;
@@ -269,16 +293,24 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           if (inWorld) live!.push(state, performance.now() / 1000);
           latest = state;
           roomClient?.sendPresence(toPresence(state, inWorld));
+          // Text and menus: drawn by the HD text layer when it can show all of them.
+          const text = textDecoder.decode(bytes as unknown as TextWatched);
+          const fits = textLookRef.current !== "off" && hdTextFits(text, state.mode, inWorld);
+          const key = fits ? textKey(text) : "";
+          if (key !== shownText) {
+            shownText = key;
+            setHdText(fits ? text : null);
+          }
           const scene = sceneRef.current;
-          if (scene.mode !== state.mode || scene.inWorld !== inWorld) {
-            sceneRef.current = { mode: state.mode, inWorld };
-            setLayout(screenLayout(state.mode, inWorld, pipRef.current));
+          if (scene.mode !== state.mode || scene.inWorld !== inWorld || scene.hdText !== fits) {
+            sceneRef.current = { mode: state.mode, inWorld, hdText: fits };
+            setLayout(screenLayout(state.mode, inWorld, pipRef.current, fits));
           }
         },
         onError: (text) => setMessage(`Emulator error: ${text}`),
         onGift: (event) => courier?.onGiftEvent(event),
       });
-      host.watch(OVERWORLD_WATCHES);
+      host.watch({ ...OVERWORLD_WATCHES, ...TEXT_WATCHES });
       host.setButtons(joypad.mask);
       hostRef.current = host;
       const started = await host.started;
@@ -451,7 +483,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       live?.dispose();
       canvas.remove();
       delete window.__pokehd;
-      sceneRef.current = { mode: "overworld", inWorld: false };
+      sceneRef.current = { mode: "overworld", inWorld: false, hdText: false };
+      setHdText(null);
       setLayout("full");
       setNoHd(false);
       setRoom(null);
@@ -462,7 +495,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       setResumed(false);
       setErasing(null);
     };
-  }, [rom, romKey, boot]);
+  }, [rom, romKey, boot, glyphs]);
 
   const onTouch = useMemo(() => (mask: number) => input?.setTouchMask(mask), [input]);
   // Without an emulator (it's restarting) the panel just stays on "Reading your game…".
@@ -505,6 +538,12 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     hostRef.current?.setAutosave(on);
   };
 
+  const chooseTextLook = (look: TextLook) => {
+    textLookRef.current = look;
+    saveTextLook(look);
+    setTextLook(look);
+  };
+
   const s = stats?.state;
   return (
     <div className={touch ? "game with-touch-pad" : "game"} ref={holder}>
@@ -517,6 +556,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         data-testid="gb-screen"
         data-layout={noHd ? "full" : layout}
       />
+      {hdText && !noHd && textLook !== "off" && <TextOverlay text={hdText} look={textLook} glyphs={glyphs} />}
       <div className="game-hud">
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
         <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
@@ -535,6 +575,14 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             <h2>{header.title}</h2>
             {autosave ? <p>Saves itself every 5 minutes and after battles.</p> : <p>Autosave is off.</p>}
           </section>
+          <div className="row">
+            <label>
+              Words and menus{" "}
+              <select value={textLook} onChange={(e) => chooseTextLook(e.target.value as TextLook)}>
+                {TEXT_LOOKS.map(({ look, label }) => <option key={look} value={look}>{label}</option>)}
+              </select>
+            </label>
+          </div>
           {input && <KeyBindingsPanel input={input} />}
           <GrownUps>
             <div className="row">

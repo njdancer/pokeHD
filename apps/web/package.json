@@ -12,6 +12,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@fontsource/nunito": "^5.3.0",
+    "@fontsource/spectral": "^5.3.0",
     "@pokehd/emu": "workspace:*",
     "@pokehd/engine": "workspace:*",
     "@pokehd/protocol": "workspace:*",

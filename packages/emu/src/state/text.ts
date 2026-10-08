@@ -13,7 +13,10 @@ export interface TextLine {
   text: string;
 }
 
-/** A bordered box on screen, in tiles, borders included. */
+/**
+ * A bordered box on screen, in tiles, borders included. A box whose bottom is hidden under
+ * another box down to the screen's edge (a menu under the message box) reaches the last row.
+ */
 export interface TextBox {
   x: number;
   y: number;
@@ -93,6 +96,11 @@ export interface ScreenText {
   quantity: QuantityPrompt | null;
   /** Text outside any box: battle HUD names and levels, titles, the Pokédex … */
   loose: TextLine[];
+  /**
+   * True when a box holds tiles that aren't text (a picture, an HP bar), so the boxes alone
+   * don't say everything the screen does.
+   */
+  pictures: boolean;
 }
 
 const at = (address: number, length = 1): Watch => [address, length];
