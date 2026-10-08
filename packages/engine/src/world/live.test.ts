@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three/webgpu";
 import { fakeWorld } from "./fake-world.ts";
 import { GHOST_DELAY, type GhostState } from "./ghosts.ts";
+import type { ChunkJob } from "./chunk.ts";
+import { inPlaceBuilder, type ChunkBuilder, type ChunkResult } from "./chunk-builder.ts";
 import { createLiveWorld, GB_FRAME_SECONDS } from "./live.ts";
 import { asGhost, scriptedWalk } from "./playback.ts";
 
@@ -87,6 +89,58 @@ describe("createLiveWorld", () => {
     expect(live.builds.length).toBe(before + 1); // only map C was built
     expect(groupOfA?.parent).toBe(live.root);
     expect(live.chunks.get(0)).toBe("built");
+    live.dispose();
+  });
+});
+
+describe("createLiveWorld with a background builder", () => {
+  const camera = new THREE.PerspectiveCamera();
+  camera.position.set(0, 20, 20);
+  /** Builds in place but hands results over only when `flush` is called, like a worker. */
+  const deferred = () => {
+    const local = inPlaceBuilder(fakeWorld());
+    const queue: { job: ChunkJob; resolve: (r: ChunkResult) => void }[] = [];
+    const builder: ChunkBuilder = {
+      build: (job) => new Promise((resolve) => queue.push({ job, resolve })),
+      dispose() {},
+    };
+    const flush = async () => {
+      for (const q of queue.splice(0)) q.resolve(local.build(q.job) as ChunkResult);
+      await Promise.resolve();
+      await Promise.resolve();
+    };
+    return { builder, queue, flush };
+  };
+
+  it("builds one chunk at a time and shows it when it arrives", async () => {
+    const { builder, queue, flush } = deferred();
+    const live = createLiveWorld(fakeWorld(), { builder });
+    live.push(walk()[0]!, 0);
+    live.update(0, camera, new THREE.Vector3(), false);
+    live.update(0, camera, new THREE.Vector3(), false);
+    expect(queue.map((q) => q.job.map)).toEqual([0]);
+    expect(live.chunks.get(0)).toBe("queued");
+    await flush();
+    expect(live.chunks.get(0)).toBe("built");
+    expect(live.root.getObjectByName("hybrid")?.parent).toBe(live.root);
+    live.update(0, camera, new THREE.Vector3(), false);
+    expect(queue.map((q) => q.job.map)).toEqual([1]);
+    live.dispose();
+  });
+
+  it("keeps a chunk that arrives after the player warped away, for when they come back", async () => {
+    const { builder, queue, flush } = deferred();
+    const live = createLiveWorld(fakeWorld(), { builder });
+    const base = walk()[0]!;
+    live.push(base, 0);
+    live.update(0, camera, new THREE.Vector3(), false);
+    live.push({ ...base, mapId: 2, player: { ...base.player, x: 0, y: 0 }, fade: 1 }, GB_FRAME_SECONDS);
+    await flush(); // map A lands after the warp
+    expect(live.root.getObjectByName("hybrid")).toBeUndefined();
+    live.push(base, 2 * GB_FRAME_SECONDS);
+    live.update(0, camera, new THREE.Vector3(), false);
+    expect(live.chunks.get(0)).toBe("built"); // revived, not rebuilt
+    expect(queue.map((q) => q.job.map)).toEqual([1]);
     live.dispose();
   });
 });

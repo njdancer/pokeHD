@@ -1,19 +1,21 @@
 import * as THREE from "three/webgpu";
-import { FIRST_INDOOR_MAP, LABEL_TABLES, type MapData, type MapId, type WorldData } from "@pokehd/rom";
+import { FIRST_INDOOR_MAP, type MapData, type MapId, type WorldData } from "@pokehd/rom";
 import type { LookController, WorldContent } from "../index.ts";
+import type { BlockRect } from "./chunk.ts";
+import { createChunkBuilder, type ChunkBuilder, type ChunkResult } from "./chunk-builder.ts";
 import { disposeTree } from "./content.ts";
 import { actorBob, actorOffset, createGhosts, GHOST_LOOKS, DEFAULT_GHOST_LOOK, type GhostLook, type GhostState } from "./ghosts.ts";
 import { DEFAULT_STYLE_PARAMS, type StyleParams } from "./params.ts";
 import { placeColours as sgbPlaceColours, PLAIN_COLOURS, playerRamp } from "./place.ts";
-import { buildRegion, placeMaps, TILE_UNITS } from "./region.ts";
+import { placeMaps, TILE_UNITS } from "./region.ts";
 import { createSpriteSet, faceCamera, SPRITE_RED, SPRITE_SEEL, type Facing, type SpriteActor } from "./sprites.ts";
-import { buildFlat, buildStyle, DEFAULT_STYLE, type StyleId } from "./styles.ts";
+import { DEFAULT_STYLE, type StyleId } from "./styles.ts";
 
 // The live overworld (p1-state-render): the world the game is in, driven by a stream of decoded
 // game state. Each map is a chunk built from ROM data and positioned by its connections, so
 // walking across a route edge needs no rebuild. Chunks two connections away are built ahead,
-// one per frame and only while the player is well inside a map, so a build never lands on the
-// frame a route edge is crossed. Chunks left behind (by a warp, or by walking more than two
+// one at a time and only while the player is well inside a map. Builds run in a worker
+// (./chunk-builder.ts), so the main thread only turns the result into three.js objects. Chunks left behind (by a warp, or by walking more than two
 // connections away) are kept, unrendered, for a while: going back outside from a house reuses
 // them rather than building them again, and keeps their shaders compiled (the first frame that
 // draws freshly built chunks can take 80–160 ms in WebGPU and seconds in WebGL2). Given the
@@ -74,6 +76,8 @@ export interface LiveWorldOptions {
   sgbColours?: boolean;
   /** Seconds on the performance clock; tests replace it. */
   clock?: () => number;
+  /** Where chunks get built; defaults to a worker where there is one. */
+  builder?: ChunkBuilder;
 }
 
 type LookLike = Pick<LookController, "params" | "wrapToMorning">;
@@ -93,11 +97,22 @@ export interface LiveWorld extends WorldContent {
   setCompiler(compile: ((object: THREE.Object3D) => Promise<void>) | null): void;
   /** The engine's look, once it exists (the engine is created with this world as content). */
   setLook(look: LookLike): void;
-  /** The latest chunk builds, newest last (at most 16), for perf checks. `at` is performance.now(). */
-  readonly builds: readonly { map: MapId; ms: number; at: number }[];
+  /**
+   * The latest chunk builds, newest last (at most 16), for perf checks. `ms` is main-thread time
+   * (the whole build when there's no worker), `at` when that started (performance.now()), and
+   * `totalMs` the time from asking for the build to having it.
+   */
+  readonly builds: readonly ChunkBuild[];
   /** Map ID → chunk build status, for debugging. */
   readonly chunks: ReadonlyMap<MapId, "queued" | "built">;
   dispose(): void;
+}
+
+export interface ChunkBuild {
+  map: MapId;
+  ms: number;
+  at: number;
+  totalMs: number;
 }
 
 interface Chunk {
@@ -122,6 +137,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   /** The town or route outside, for indoor maps' colours. */
   let outside: MapId | undefined;
   let look = options.look;
+  let disposed = false;
   let compile: ((object: THREE.Object3D) => Promise<void>) | null = null;
   /** Chunk groups whose shaders are compiled (or that were built with no compiler to wait for). */
   const compiled = new WeakSet<THREE.Group>();
@@ -210,55 +226,64 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     c.group = null;
   };
 
-  const builds: { map: MapId; ms: number; at: number }[] = [];
+  const builder = options.builder ?? createChunkBuilder(world);
+  /** The chunk being built in the background; one at a time, nearest first. */
+  let building: Chunk | null = null;
+  const builds: ChunkBuild[] = [];
   const build = (c: Chunk) => {
-    const t0 = performance.now();
-    const others = neighbours(c);
-    const rect = (m: { map: MapData; bx: number; by: number }) => ({
+    const rect = (m: { map: MapData; bx: number; by: number }): BlockRect => ({
       id: m.map.id, x0: m.bx, y0: m.by, x1: m.bx + m.map.widthBlocks, y1: m.by + m.map.heightBlocks,
     });
-    const rects = [rect(c), ...others.map(rect)];
-    const distance = (r: ReturnType<typeof rect>, x: number, y: number) =>
-      Math.max(r.x0 - x, x - (r.x1 - 1), r.y0 - y, y - (r.y1 - 1), 0);
-    // A border block belongs to the nearest map (lowest ID on ties), so neighbouring chunks
-    // share the border without drawing it twice; none is drawn over a neighbouring map.
-    const drawBorder = (x: number, y: number) => {
-      const ax = c.bx + x;
-      const ay = c.by + y;
-      let best = rects[0]!;
-      let bestD = Infinity;
-      for (const r of rects) {
-        const d = distance(r, ax, ay);
-        if (d === 0 && r.id !== c.map.id) return false;
-        if (d < bestD || (d === bestD && r.id < best.id)) {
-          best = r;
-          bestD = d;
-        }
-      }
-      return best.id === c.map.id;
-    };
-    const region = buildRegion(world, c.map.id, { marginBlocks: MARGIN_BLOCKS, drawBorder });
-    const labelled = LABEL_TABLES[world.tilesets[c.map.tileset]!.name] !== undefined;
-    const group = labelled ? buildStyle(style, region, params, placeColours(world, c.map.id, outside)) : buildFlat(region);
-    c.offset = { x: -region.rootX * TILE_UNITS, z: -region.rootY * TILE_UNITS };
-    group.position.set(c.bx * 2 + c.offset.x, 0, c.by * 2 + c.offset.z);
-    c.group = group;
+    const result = builder.build({
+      map: c.map.id,
+      rects: [rect(c), ...neighbours(c).map(rect)],
+      marginBlocks: MARGIN_BLOCKS,
+      style,
+      params,
+      colours: placeColours(world, c.map.id, outside),
+    });
+    if (!(result instanceof Promise)) return finish(c, result);
+    building = c;
+    result.then(
+      (r) => {
+        building = null;
+        if (!disposed) finish(c, r);
+      },
+      (e: unknown) => {
+        building = null;
+        console.warn(`[pokeHD] couldn't build map ${c.map.id}`, e);
+        c.group = new THREE.Group(); // don't try again
+      },
+    );
+  };
+  /** Takes a built chunk on: into the scene once compiled, or kept spare if it's no longer loaded. */
+  const finish = (c: Chunk, r: ChunkResult) => {
+    // The map may have been left and come back since (a new Chunk, still unbuilt); its border
+    // doesn't depend on placement, so the build serves it.
+    const now = chunks.get(c.map.id);
+    const owner = now && !now.group ? now : c;
+    const group = r.group;
+    owner.offset = { x: -r.rootX * TILE_UNITS, z: -r.rootY * TILE_UNITS };
+    group.position.set(owner.bx * 2 + owner.offset.x, 0, owner.by * 2 + owner.offset.z);
+    owner.group = group;
     if (!compile) {
       compiled.add(group);
-      root.add(group);
+      show(owner);
     } else {
       const ready = () => {
         compiled.add(group);
         // It may have been dropped, or retired and revived (a new Chunk with the same group).
-        const now = chunks.get(c.map.id);
-        if (now?.group === group) show(now);
+        const current = chunks.get(owner.map.id);
+        if (current?.group === group) show(current);
       };
       compile(group).then(ready, (e: unknown) => {
         console.warn("[pokeHD] couldn't precompile a map chunk", e);
         ready();
       });
     }
-    builds.push({ map: c.map.id, ms: performance.now() - t0, at: t0 });
+    if (chunks.get(owner.map.id) !== owner) retire(owner);
+    const at = performance.now() - r.mainMs;
+    builds.push({ map: owner.map.id, ms: r.mainMs, at, totalMs: r.totalMs });
     if (builds.length > 16) builds.shift();
   };
 
@@ -340,16 +365,18 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       latest = state;
     },
     update(_seconds, camera) {
-      // At most one build a frame: this map, then its neighbours, then (only away from the
+      // One build at a time: this map, then its neighbours, then (only away from the
       // edges) maps two connections out.
       const here = current === null ? undefined : chunks.get(current);
       const p = latest?.player;
       const inside =
         !!here && !!p &&
         Math.min(p.x, p.y, here.map.widthBlocks * 2 - 1 - p.x, here.map.heightBlocks * 2 - 1 - p.y) >= BUILD_CLEARANCE;
-      const pending = [...chunks.values()].filter((c) => !c.group && (c.hops <= 1 || inside));
-      pending.sort((a, b) => a.hops - b.hops);
-      if (pending[0]) build(pending[0]);
+      if (!building) {
+        const pending = [...chunks.values()].filter((c) => !c.group && (c.hops <= 1 || inside));
+        pending.sort((a, b) => a.hops - b.hops);
+        if (pending[0]) build(pending[0]);
+      }
 
       if (latest && here && prev && last) {
         const now = clock();
@@ -400,6 +427,8 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       fadeQuad.quaternion.copy(camera.quaternion);
     },
     dispose() {
+      disposed = true;
+      if (!options.builder) builder.dispose();
       for (const c of [...chunks.values(), ...spare.values()]) drop(c);
       chunks.clear();
       spare.clear();
