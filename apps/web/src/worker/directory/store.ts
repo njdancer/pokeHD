@@ -1,7 +1,7 @@
-// Who the friends are (D19): invite codes, players and their sessions, in SQLite. This module is
-// plain logic over a tiny SQL interface, so tests run it on node:sqlite; the Directory Durable
-// Object (./do.ts) runs it on its own SQLite storage.
-import { newInviteCode, newSessionToken, normaliseInviteCode, sha256Hex } from "./codes.ts";
+// Who the friends are (D23): players with their emails, sign-in codes and sessions, in SQLite.
+// This module is plain logic over a tiny SQL interface, so tests run it on node:sqlite; the
+// Directory Durable Object (./do.ts) runs it on its own SQLite storage.
+import { newEmailCode, newLinkCode, newSessionToken, normaliseCode, sha256Hex } from "./codes.ts";
 
 export type SqlValue = string | number | null;
 
@@ -13,27 +13,42 @@ export interface Sql {
 export interface Player {
   id: string;
   name: string;
+  /** Null only for players who joined with a D19 invite code and haven't had one added. */
+  email: string | null;
 }
 
-export interface InviteSummary {
-  note: string;
+export interface PlayerSummary extends Player {
   createdAt: number;
-  expiresAt: number;
-  /** When it was used, or null while still open. */
-  usedAt: number | null;
-  /** Who joined with it. */
-  usedBy: string | null;
+  revokedAt: number | null;
 }
 
-export type RedeemResult =
-  | { ok: true; player: Player; sessionToken: string }
-  | { ok: false; error: "invalid-code" | "bad-name" | "name-taken" };
+/** `email`: typed by the player, 6 digits. `link`: in a link Nick shares, 12 characters. */
+export type CodeKind = "email" | "link";
 
-const DAY = 24 * 60 * 60 * 1000;
-export const INVITE_TTL = 7 * DAY;
-/** A code to sign an existing player in on another device is only good for a short while. */
-export const DEVICE_CODE_TTL = 60 * 60 * 1000;
+export type AddPlayerResult =
+  | { ok: true; player: Player }
+  | { ok: false; error: "bad-email" | "bad-name" | "name-taken" | "email-taken" };
+
+export type CodeResult =
+  | { ok: true; code: string; expiresAt: number }
+  | { ok: false; error: "not-found" | "too-soon" | "too-many" };
+
+export type VerifyResult =
+  | { ok: true; player: Player; sessionToken: string }
+  | { ok: false; error: "invalid-code" };
+
+const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * MINUTE;
+/** A code sent by email is typed in straight away. */
+export const EMAIL_CODE_TTL = 15 * MINUTE;
+/** A link Nick shares may sit in a chat for a while before the friend taps it. */
+export const LINK_CODE_TTL = 7 * DAY;
+/** Wrong guesses at a player's emailed codes before they all stop working. */
+export const MAX_ATTEMPTS = 5;
+/** Emailed codes: at most one a minute and this many an hour per player, so nobody can spam. */
+export const EMAIL_CODES_PER_HOUR = 5;
 export const MAX_NAME_LENGTH = 16;
+const MAX_EMAIL_LENGTH = 254;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS players (
@@ -44,20 +59,21 @@ CREATE TABLE IF NOT EXISTS players (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS players_active_name
   ON players (name COLLATE NOCASE) WHERE revoked_at IS NULL;
-CREATE TABLE IF NOT EXISTS invites (
-  code_hash TEXT PRIMARY KEY,
-  note TEXT NOT NULL,
-  player_id TEXT REFERENCES players (id),
-  created_at INTEGER NOT NULL,
-  expires_at INTEGER NOT NULL,
-  used_at INTEGER,
-  used_by TEXT REFERENCES players (id)
-);
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   player_id TEXT NOT NULL REFERENCES players (id),
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS login_codes (
+  code_hash TEXT PRIMARY KEY,
+  player_id TEXT NOT NULL REFERENCES players (id),
+  kind TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used_at INTEGER,
+  attempts INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS login_codes_player ON login_codes (player_id, created_at);
 `;
 
 /**
@@ -70,6 +86,13 @@ export function cleanName(input: string): string | null {
   return /^[\p{L}\p{N} _.'-]+$/u.test(name) ? name : null;
 }
 
+/** An email address, trimmed and lower-cased. Null if it doesn't look like one. */
+export function cleanEmail(input: string): string | null {
+  const email = input.trim().toLowerCase();
+  if (email.length > MAX_EMAIL_LENGTH) return null;
+  return /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(email) ? email : null;
+}
+
 export class DirectoryStore {
   readonly #sql: Sql;
   readonly #now: () => number;
@@ -78,83 +101,148 @@ export class DirectoryStore {
     this.#sql = sql;
     this.#now = now;
     for (const statement of SCHEMA.split(";")) if (statement.trim()) sql.exec(statement);
+    // Players from D19 had no email. SQLite has no ADD COLUMN IF NOT EXISTS, so look first.
+    if (!sql.exec("PRAGMA table_info(players)").some((c) => c.name === "email")) {
+      sql.exec("ALTER TABLE players ADD COLUMN email TEXT");
+    }
+    sql.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS players_active_email ON players (email) WHERE revoked_at IS NULL",
+    );
   }
 
-  /** A new single-use invite. The code is returned once and only its hash is kept. */
-  async createInvite(note: string, ttl = INVITE_TTL): Promise<{ code: string; expiresAt: number }> {
-    const code = newInviteCode();
-    const hash = await sha256Hex(normaliseInviteCode(code)!);
-    const now = this.#now();
+  /** Adds a friend by email (Nick, from the game). They sign in by email from then on. */
+  addPlayer(emailInput: string, nameInput: string): AddPlayerResult {
+    const email = cleanEmail(emailInput);
+    if (!email) return { ok: false, error: "bad-email" };
+    const name = cleanName(nameInput);
+    if (!name) return { ok: false, error: "bad-name" };
+    if (this.playerByEmail(email)) return { ok: false, error: "email-taken" };
+    if (this.#nameTaken(name)) return { ok: false, error: "name-taken" };
+    const player = { id: crypto.randomUUID(), name, email };
     this.#sql.exec(
-      "INSERT INTO invites (code_hash, note, created_at, expires_at) VALUES (?, ?, ?, ?)",
-      hash,
-      note,
-      now,
-      now + ttl,
+      "INSERT INTO players (id, name, email, created_at) VALUES (?, ?, ?, ?)",
+      player.id,
+      player.name,
+      player.email,
+      this.#now(),
     );
-    return { code, expiresAt: now + ttl };
-  }
-
-  /** A short-lived code that signs `playerId` in on another device. */
-  async createDeviceCode(playerId: string): Promise<{ code: string; expiresAt: number } | null> {
-    if (!this.#activePlayer(playerId)) return null;
-    const code = newInviteCode();
-    const hash = await sha256Hex(normaliseInviteCode(code)!);
-    const now = this.#now();
-    this.#sql.exec(
-      "INSERT INTO invites (code_hash, note, player_id, created_at, expires_at) VALUES (?, 'device', ?, ?, ?)",
-      hash,
-      playerId,
-      now,
-      now + DEVICE_CODE_TTL,
-    );
-    return { code, expiresAt: now + DEVICE_CODE_TTL };
+    return { ok: true, player };
   }
 
   /**
-   * Uses a code. An invite creates a new player called `name`; a device code signs its player
-   * in and ignores `name`. Either way the code is spent and a new session starts.
+   * The admin's player, made on first use. The admin is set in the repo, not in the database,
+   * so this runs whenever they ask to sign in. A D19 player with their name and no email
+   * becomes theirs, keeping its saves.
    */
-  async redeem(codeInput: string, nameInput: string): Promise<RedeemResult> {
-    const code = normaliseInviteCode(codeInput);
-    if (!code) return { ok: false, error: "invalid-code" };
-    // Hash everything up front: from here on the work is synchronous, so two redemptions of
-    // the same code can't interleave inside the Durable Object.
-    const codeHash = await sha256Hex(code);
+  ensurePlayer(emailInput: string, nameInput: string): Player | null {
+    const email = cleanEmail(emailInput);
+    const name = cleanName(nameInput);
+    if (!email || !name) return null;
+    const existing = this.playerByEmail(email);
+    if (existing) return existing;
+    const legacy = this.#sql.exec(
+      "SELECT id FROM players WHERE name = ? COLLATE NOCASE AND email IS NULL AND revoked_at IS NULL",
+      name,
+    )[0];
+    if (legacy) {
+      this.#sql.exec("UPDATE players SET email = ? WHERE id = ?", email, String(legacy.id));
+      return this.#activePlayer(String(legacy.id));
+    }
+    const added = this.addPlayer(email, this.#nameTaken(name) ? `${name.slice(0, 14)} 2` : name);
+    return added.ok ? added.player : null;
+  }
+
+  /** Gives a player an email, or changes it. */
+  setEmail(playerId: string, emailInput: string): { ok: true } | { ok: false; error: "bad-email" | "email-taken" | "not-found" } {
+    const email = cleanEmail(emailInput);
+    if (!email) return { ok: false, error: "bad-email" };
+    if (!this.#activePlayer(playerId)) return { ok: false, error: "not-found" };
+    const owner = this.playerByEmail(email);
+    if (owner && owner.id !== playerId) return { ok: false, error: "email-taken" };
+    this.#sql.exec("UPDATE players SET email = ? WHERE id = ?", email, playerId);
+    return { ok: true };
+  }
+
+  playerByEmail(emailInput: string): Player | null {
+    const email = cleanEmail(emailInput);
+    if (!email) return null;
+    const row = this.#sql.exec(
+      "SELECT id, name, email FROM players WHERE email = ? AND revoked_at IS NULL",
+      email,
+    )[0];
+    return row ? toPlayer(row) : null;
+  }
+
+  /**
+   * A new single-use sign-in code for `playerId`. The code is returned once and only its hash
+   * is kept. Emailed codes are rate limited per player.
+   */
+  async createCode(playerId: string, kind: CodeKind): Promise<CodeResult> {
+    const code = kind === "email" ? newEmailCode() : newLinkCode();
+    const hash = await codeHash(playerId, normaliseCode(code)!);
+    const now = this.#now();
+    if (!this.#activePlayer(playerId)) return { ok: false, error: "not-found" };
+    if (kind === "email") {
+      const recent = this.#sql
+        .exec(
+          "SELECT created_at FROM login_codes WHERE player_id = ? AND kind = 'email' AND created_at > ?",
+          playerId,
+          now - 60 * MINUTE,
+        )
+        .map((r) => Number(r.created_at));
+      if (recent.some((t) => t > now - MINUTE)) return { ok: false, error: "too-soon" };
+      if (recent.length >= EMAIL_CODES_PER_HOUR) return { ok: false, error: "too-many" };
+    }
+    const ttl = kind === "email" ? EMAIL_CODE_TTL : LINK_CODE_TTL;
+    this.#sql.exec(
+      "INSERT INTO login_codes (code_hash, player_id, kind, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
+      hash,
+      playerId,
+      kind,
+      now,
+      now + ttl,
+    );
+    return { ok: true, code, expiresAt: now + ttl };
+  }
+
+  /** Signs in with an email and a code: the code is spent and a new session starts. */
+  async verify(emailInput: string, codeInput: string): Promise<VerifyResult> {
+    const fail = { ok: false, error: "invalid-code" } as const;
+    const player = this.playerByEmail(emailInput);
+    const code = normaliseCode(codeInput);
+    if (!player || !code) return fail;
+    // Hash everything up front: from here on the work is synchronous, so two sign-ins with the
+    // same code can't interleave inside the Durable Object.
+    const hash = await codeHash(player.id, code);
     const sessionToken = newSessionToken();
     const tokenHash = await sha256Hex(sessionToken);
     const now = this.#now();
 
-    const invite = this.#sql.exec(
-      "SELECT player_id FROM invites WHERE code_hash = ? AND used_at IS NULL AND expires_at > ?",
-      codeHash,
+    const row = this.#sql.exec(
+      `SELECT kind FROM login_codes WHERE code_hash = ? AND player_id = ? AND used_at IS NULL
+       AND expires_at > ? AND attempts < ?`,
+      hash,
+      player.id,
       now,
+      MAX_ATTEMPTS,
     )[0];
-    if (!invite) return { ok: false, error: "invalid-code" };
-
-    let player: Player;
-    if (invite.player_id !== null) {
-      const existing = this.#activePlayer(String(invite.player_id));
-      if (!existing) return { ok: false, error: "invalid-code" };
-      player = existing;
-    } else {
-      const name = cleanName(nameInput);
-      if (!name) return { ok: false, error: "bad-name" };
-      if (this.#nameTaken(name)) return { ok: false, error: "name-taken" };
-      player = { id: crypto.randomUUID(), name };
+    if (!row) {
+      // Six digits are guessable given enough tries, so wrong ones count against them all.
       this.#sql.exec(
-        "INSERT INTO players (id, name, created_at) VALUES (?, ?, ?)",
+        "UPDATE login_codes SET attempts = attempts + 1 WHERE player_id = ? AND kind = 'email' AND used_at IS NULL",
         player.id,
-        player.name,
+      );
+      return fail;
+    }
+    this.#sql.exec("UPDATE login_codes SET used_at = ? WHERE code_hash = ?", now, hash);
+    if (row.kind === "email") {
+      // Any other emailed code is stale now.
+      this.#sql.exec(
+        "UPDATE login_codes SET used_at = ? WHERE player_id = ? AND kind = 'email' AND used_at IS NULL",
         now,
+        player.id,
       );
     }
-    this.#sql.exec(
-      "UPDATE invites SET used_at = ?, used_by = ? WHERE code_hash = ?",
-      now,
-      player.id,
-      codeHash,
-    );
     this.#sql.exec(
       "INSERT INTO sessions (token_hash, player_id, created_at) VALUES (?, ?, ?)",
       tokenHash,
@@ -168,11 +256,11 @@ export class DirectoryStore {
   async authenticate(sessionToken: string): Promise<Player | null> {
     const tokenHash = await sha256Hex(sessionToken);
     const row = this.#sql.exec(
-      `SELECT p.id, p.name FROM sessions s JOIN players p ON p.id = s.player_id
+      `SELECT p.id, p.name, p.email FROM sessions s JOIN players p ON p.id = s.player_id
        WHERE s.token_hash = ? AND p.revoked_at IS NULL`,
       tokenHash,
     )[0];
-    return row ? { id: String(row.id), name: String(row.name) } : null;
+    return row ? toPlayer(row) : null;
   }
 
   /** Ends one session (signing out on one device). */
@@ -180,47 +268,34 @@ export class DirectoryStore {
     this.#sql.exec("DELETE FROM sessions WHERE token_hash = ?", await sha256Hex(sessionToken));
   }
 
-  listPlayers(): (Player & { createdAt: number; revokedAt: number | null })[] {
+  /** Everyone still in, oldest first. */
+  listPlayers(): PlayerSummary[] {
     return this.#sql
-      .exec("SELECT id, name, created_at, revoked_at FROM players ORDER BY created_at")
+      .exec(
+        "SELECT id, name, email, created_at, revoked_at FROM players WHERE revoked_at IS NULL ORDER BY created_at",
+      )
       .map((r) => ({
-        id: String(r.id),
-        name: String(r.name),
+        ...toPlayer(r),
         createdAt: Number(r.created_at),
         revokedAt: r.revoked_at === null ? null : Number(r.revoked_at),
       }));
   }
 
-  listInvites(): InviteSummary[] {
-    return this.#sql
-      .exec(
-        `SELECT i.note, i.created_at, i.expires_at, i.used_at, p.name AS used_by
-         FROM invites i LEFT JOIN players p ON p.id = i.used_by
-         WHERE i.player_id IS NULL ORDER BY i.created_at`,
-      )
-      .map((r) => ({
-        note: String(r.note),
-        createdAt: Number(r.created_at),
-        expiresAt: Number(r.expires_at),
-        usedAt: r.used_at === null ? null : Number(r.used_at),
-        usedBy: r.used_by === null ? null : String(r.used_by),
-      }));
-  }
-
-  /** Removes a player: their sessions end and their name is free again. */
+  /** Removes a player: their sessions and codes end, and their name and email are free again. */
   revokePlayer(playerId: string): boolean {
     if (!this.#activePlayer(playerId)) return false;
     this.#sql.exec("UPDATE players SET revoked_at = ? WHERE id = ?", this.#now(), playerId);
     this.#sql.exec("DELETE FROM sessions WHERE player_id = ?", playerId);
+    this.#sql.exec("DELETE FROM login_codes WHERE player_id = ?", playerId);
     return true;
   }
 
   #activePlayer(id: string): Player | null {
     const row = this.#sql.exec(
-      "SELECT id, name FROM players WHERE id = ? AND revoked_at IS NULL",
+      "SELECT id, name, email FROM players WHERE id = ? AND revoked_at IS NULL",
       id,
     )[0];
-    return row ? { id: String(row.id), name: String(row.name) } : null;
+    return row ? toPlayer(row) : null;
   }
 
   #nameTaken(name: string): boolean {
@@ -231,4 +306,13 @@ export class DirectoryStore {
       ).length > 0
     );
   }
+}
+
+function toPlayer(row: Record<string, SqlValue>): Player {
+  return { id: String(row.id), name: String(row.name), email: row.email === null ? null : String(row.email) };
+}
+
+/** Codes are hashed with their player, so two players' identical six digits never collide. */
+function codeHash(playerId: string, code: string): Promise<string> {
+  return sha256Hex(`${playerId}:${code}`);
 }

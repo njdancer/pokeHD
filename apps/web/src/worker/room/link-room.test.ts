@@ -53,15 +53,18 @@ async function startWorker(): Promise<Worker> {
   return worker;
 }
 
-/** A player joined with a fresh invite code: their ID and session cookie. */
+/** A player added by the admin and signed in with their link: their ID and session cookie. */
 async function join_(base: URL, name: string) {
-  const invite = await fetch(new URL("/api/admin/invites", base), {
+  const add = await fetch(new URL("/api/admin/players", base), {
     method: "POST",
     headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
-    body: "{}",
+    body: JSON.stringify({ email: `${name.toLowerCase()}@example.com`, name }),
   });
-  const { code } = (await invite.json()) as { code: string };
-  const res = await fetch(new URL("/api/join", base), { method: "POST", body: JSON.stringify({ code, name }) });
+  const { link } = (await add.json()) as { link: string };
+  const res = await fetch(new URL("/api/auth/verify", base), {
+    method: "POST",
+    body: JSON.stringify(Object.fromEntries(new URLSearchParams(new URL(link).hash.slice(1)))),
+  });
   const { player } = (await res.json()) as { player: { id: string } };
   const cookie = res.headers.get("set-cookie")!.split(";")[0]!;
   return { id: player.id, cookie };

@@ -1,12 +1,20 @@
-// Invite codes and session tokens. Only SHA-256 hashes of either are ever stored, so a leaked
-// database can't be used to join or to sign in as anyone.
+// Sign-in codes and session tokens. Only SHA-256 hashes of either are ever stored, so a leaked
+// database can't be used to sign in as anyone.
 
 /** Crockford base32: no I, L, O or U, so a code read aloud or typed from a phone survives. */
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const CODE_LENGTH = 12;
+const EMAIL_CODE_LENGTH = 6;
 
-/** A fresh invite code, 60 random bits shown as `XXXX-XXXX-XXXX`. */
-export function newInviteCode(): string {
+/** A code to type from an email: six digits, guessable only within MAX_ATTEMPTS tries. */
+export function newEmailCode(): string {
+  // 2^32 is not a multiple of 10^6, but the bias (under one in 4000) doesn't matter here.
+  const [n] = crypto.getRandomValues(new Uint32Array(1));
+  return String(n! % 1_000_000).padStart(EMAIL_CODE_LENGTH, "0");
+}
+
+/** A code for a sign-in link: 60 random bits shown as `XXXX-XXXX-XXXX`. */
+export function newLinkCode(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(CODE_LENGTH));
   const chars = Array.from(bytes, (b) => ALPHABET[b & 31]).join("");
   return `${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8)}`;
@@ -14,14 +22,16 @@ export function newInviteCode(): string {
 
 /**
  * The canonical form of a typed code: case, spaces and dashes don't matter, and the letters
- * Crockford base32 leaves out read as the digits they look like. Null if it can't be a code.
+ * Crockford base32 leaves out read as the digits they look like. Six digits are an emailed
+ * code, twelve characters a link code. Null if it can't be either.
  */
-export function normaliseInviteCode(input: string): string | null {
+export function normaliseCode(input: string): string | null {
   const code = input
     .toUpperCase()
     .replace(/[\s-]/g, "")
     .replace(/O/g, "0")
     .replace(/[IL]/g, "1");
+  if (code.length === EMAIL_CODE_LENGTH) return /^\d+$/.test(code) ? code : null;
   if (code.length !== CODE_LENGTH) return null;
   for (const c of code) if (!ALPHABET.includes(c)) return null;
   return code;
