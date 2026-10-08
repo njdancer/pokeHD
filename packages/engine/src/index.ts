@@ -9,6 +9,7 @@ import { createPlaceholder } from "./look/placeholder.ts";
 import { NEUTRAL_TINT, normTint } from "./look/grade.ts";
 import { createPost } from "./look/post.ts";
 import { defaultQuality, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
+import { createGovernor, RUNGS } from "./look/governor.ts";
 import { createRig } from "./look/rig.ts";
 import { webgpuViewsWork } from "./webgpu-probe.ts";
 
@@ -62,6 +63,9 @@ export interface EngineStats {
   updateMs: number;
   /** Of that, rendering and post-processing (pipeline compiles and uploads land here), ms. */
   renderMs: number;
+  /** Dynamic resolution: the render scale (1 is full), and whether depth of field is on. */
+  scale: number;
+  dof: boolean;
   width: number;
   height: number;
 }
@@ -107,6 +111,11 @@ export interface EngineOptions {
   world?: WorldContent;
   /** Defaults to `?quality=`, else mobile on touch-only devices. */
   quality?: Quality;
+  /**
+   * Lowers the render resolution (and, last, depth of field) while frames miss 60 fps, and raises
+   * it again when they don't. Defaults to on unless the page URL has `?dynres=0`.
+   */
+  dynamicResolution?: boolean;
 }
 
 // The newest engine created on a canvas owns it. React StrictMode mounts, unmounts and
@@ -151,13 +160,15 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const fogColor = uniform(rig.fogColor);
 
   let fixedSize: { width: number; height: number } | null = null;
-  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, width: 0, height: 0 };
+  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, scale: 1, dof: true, width: 0, height: 0 };
+  const governor = (options.dynamicResolution ?? query.get("dynres") !== "0") ? createGovernor() : null;
+  let rung = RUNGS[0]!;
   const resize = () => {
     if (fixedSize) {
       renderer.setPixelRatio(1);
       renderer.setSize(fixedSize.width, fixedSize.height, false);
     } else {
-      renderer.setPixelRatio(Math.min(devicePixelRatio, params.render.maxPixelRatio));
+      renderer.setPixelRatio(Math.min(devicePixelRatio, params.render.maxPixelRatio) * rung.scale);
       renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     }
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
@@ -190,7 +201,17 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   let quality = options.quality ?? defaultQuality();
   /** The look as loaded, before the quality patch: what setQuality re-applies to. */
   let source: { cycle: DayCycle } | { look: unknown } = { cycle: DEFAULT_CYCLE };
-  const tiered = (look: unknown) => mergeLook(mergeLook(DEFAULT_LOOK, look), QUALITY_PATCHES[quality]);
+  const tiered = (look: unknown) => {
+    const out = mergeLook(mergeLook(DEFAULT_LOOK, look), QUALITY_PATCHES[quality]);
+    if (!rung.dof) out.dof.enabled = false;
+    return out;
+  };
+  /** Lays the quality tier and the governor's rung over the loaded look again. */
+  const reapply = () => {
+    Object.assign(params.render, tiered({ render: DEFAULT_LOOK.render }).render);
+    if ("cycle" in source) look.setCycle(source.cycle);
+    else look.set({ ...(source.look as object), time: params.time, camera: params.camera });
+  };
   let cycle: DayCycle | null = null;
   const look: LookController = {
     params,
@@ -274,9 +295,21 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   renderer.setAnimationLoop((t) => {
     if (superseded()) return renderer.setAnimationLoop(null);
     timer.update(t);
+    const delta = timer.getDelta();
+    // The raw interval, vsync and all, is what the governor judges.
+    const changed = governor && !fixedSize ? governor.sample(delta * 1000, t / 1000) : null;
+    if (changed !== null) {
+      const next = RUNGS[changed]!;
+      const dofChanged = next.dof !== rung.dof;
+      rung = next;
+      stats.scale = rung.scale;
+      stats.dof = rung.dof;
+      if (dofChanged) reapply();
+      else resize();
+    }
     frameHooks.before?.();
     // The first delta can be negative (rAF time vs. the timer's clock); clamp long stalls too.
-    renderFrame(Math.min(Math.max(timer.getDelta(), 0), 0.1));
+    renderFrame(Math.min(Math.max(delta, 0), 0.1));
     frameHooks.after?.();
   });
 
@@ -303,9 +336,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     },
     setQuality(next) {
       quality = next;
-      Object.assign(params.render, tiered({ render: DEFAULT_LOOK.render }).render);
-      if ("cycle" in source) look.setCycle(source.cycle);
-      else look.set({ ...(source.look as object), time: params.time, camera: params.camera });
+      reapply();
     },
     setWorld(next) {
       scene.remove(world.root);

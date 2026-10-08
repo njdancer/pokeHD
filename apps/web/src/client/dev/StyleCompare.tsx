@@ -93,7 +93,7 @@ export function StyleCompare() {
       const params = structuredClone(DEFAULT_STYLE_PARAMS);
       for (const [i, id] of STYLE_IDS.entries()) {
         const world = createStyledWorld(region, id, params, focus);
-        const engine = await createEngine(canvases[i]!, { world, lookdev: false });
+        const engine = await createEngine(canvases[i]!, { world, lookdev: false, dynamicResolution: false });
         views.push({ id, engine, world });
         if (disposed) break;
       }

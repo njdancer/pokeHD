@@ -69,6 +69,9 @@ interface Stats {
   worstMs: number;
   emuFps: number;
   cpuMs: number;
+  /** Dynamic resolution's render scale, and whether depth of field is on. */
+  scale: number;
+  dof: boolean;
   backend: string;
   state: OverworldState | null;
   inWorld: boolean;
@@ -274,6 +277,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             worstMs: Math.max(...times),
             emuFps: ((emuFrames - framesAtShown) * 1000) / (now - shown),
             cpuMs: engine?.stats.cpuMs ?? 0,
+            scale: engine?.stats.scale ?? 1,
+            dof: engine?.stats.dof ?? true,
             backend: engine?.backend ?? "no renderer",
             state: latest,
             inWorld: sceneRef.current.inWorld,
@@ -386,7 +391,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           data-mode={s?.mode}
           data-in-world={stats.inWorld}
         >
-          {`${stats.backend} · ${stats.fps.toFixed(0)} fps · worst ${stats.worstMs.toFixed(1)} ms · cpu ${stats.cpuMs.toFixed(1)} ms · emu ${stats.emuFps.toFixed(1)} fps\n`}
+          {`${stats.backend} · ${stats.fps.toFixed(0)} fps · worst ${stats.worstMs.toFixed(1)} ms · cpu ${stats.cpuMs.toFixed(1)} ms · res ${Math.round(stats.scale * 100)}%${stats.dof ? "" : " no DoF"} · emu ${stats.emuFps.toFixed(1)} fps\n`}
           {s ? `map ${s.mapId} (${s.player.x}, ${s.player.y}) ${s.player.facing} · ${s.mode} · fade ${s.fade.toFixed(2)}` : "no state"}
         </pre>
       )}

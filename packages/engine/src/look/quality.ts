@@ -1,5 +1,7 @@
 // Quality tiers: patches laid over whatever look is loaded, so a phone keeps the look's colours,
-// light and framing but skips the costliest work. Measured on /dev/bench (see docs/PERF.md).
+// light and framing but skips the costliest work that's hard to see on a small, dense screen.
+// Resolution isn't part of a tier: dynamic resolution (./governor.ts) lowers it only when frames
+// run long. Measured on /dev/bench (see docs/PERF.md).
 
 export type Quality = "full" | "mobile";
 
@@ -7,7 +9,7 @@ export const QUALITY_PATCHES: Record<Quality, object> = {
   full: {},
   mobile: {
     ao: { resolution: 0.25 },
-    render: { antialias: "fxaa", maxPixelRatio: 1.5 },
+    render: { antialias: "fxaa" },
   },
 };
 
