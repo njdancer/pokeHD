@@ -29,6 +29,17 @@ const addr = (name: SymbolName) => SYMBOLS[name].address;
 /** Offset of a save-RAM symbol in the battery RAM image (`GameBoy.saveSram()`). */
 const sramOffset = (name: SymbolName) => SYMBOLS[name].bank * 0x2000 + SYMBOLS[name].address - 0xa000;
 
+/**
+ * The battery RAM with its scratch space blanked: the start of bank 0, where the game
+ * decompresses Pokémon and trainer pictures (sSpriteBuffer0–2) whenever it shows one. Those
+ * writes change no save, so comparing saves ignores them.
+ */
+export function saveData(sram: Uint8Array): Uint8Array {
+  const out = sram.slice();
+  out.fill(0, 0, Math.min(out.length, sramOffset("sHallOfFame")));
+  return out;
+}
+
 /** True if the battery RAM holds a save the game would load (its checksum matches). */
 export function hasSave(sram: Uint8Array): boolean {
   const start = sramOffset("sGameData");
@@ -91,8 +102,8 @@ export function otherTrainersSave(gb: GameBoy): string | undefined {
 
 /**
  * Loads a resume point, or says why it can't be used. It must hold exactly the stored save
- * (`sram`): a save made after it, an imported .sav or a cloud restore all make it stale, and a
- * damaged one won't match.
+ * (`sram`, scratch space aside): a save made after it, an imported .sav or a cloud restore all
+ * make it stale, and a damaged one won't match.
  */
 export function loadResumePoint(g: GameBoy, state: Uint8Array, sram: Uint8Array | undefined): string | undefined {
   try {
@@ -100,8 +111,9 @@ export function loadResumePoint(g: GameBoy, state: Uint8Array, sram: Uint8Array 
   } catch {
     return "the emulator couldn't read it";
   }
-  const held = g.saveSram();
-  const matches = sram ? held.length === sram.length && held.every((b, i) => b === sram[i]) : !hasSave(held);
+  const held = saveData(g.saveSram());
+  const want = sram && saveData(sram);
+  const matches = want ? held.length === want.length && held.every((b, i) => b === want[i]) : !hasSave(held);
   if (!matches) return "the save file has changed since";
   g.clearSramDirty();
   return undefined;

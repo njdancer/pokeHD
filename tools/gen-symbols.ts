@@ -162,6 +162,7 @@ export const ALLOWLIST: readonly string[] = [
   "wPlayerName",
   // Autosave: where the save file keeps its checksummed data and trainer ID
   "sGameData",
+  "sHallOfFame",
   "sGameDataEnd",
   "sMainData",
   "wMainDataStart",

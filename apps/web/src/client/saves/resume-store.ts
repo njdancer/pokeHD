@@ -7,15 +7,22 @@
 // Signed-in players' points also go to the cloud (p1-kidproof), gzipped, with the SHA-1 of the
 // save they hold: a phone whose storage was cleared, or another device on the same save, picks
 // up from the exact spot.
+import { saveData } from "@pokehd/emu";
 import { sha1Hex } from "@pokehd/rom";
 import { run } from "../idb.ts";
+
+/** A save's identity for matching points: picture scratch space doesn't count (see `saveData`). */
+const saveHash = (save: Uint8Array) => sha1Hex(saveData(save));
 
 interface StoredPoint {
   state: ArrayBuffer;
   sha1: string;
   /** Local time it was taken (ms), for display only. */
   takenAt: number;
-  /** SHA-1 of the battery save the state holds (missing on points from before p1-kidproof). */
+  /**
+   * SHA-1 of the battery save the state holds, picture scratch blanked (missing on points from
+   * before p1-kidproof).
+   */
   saveSha1?: string;
 }
 
@@ -41,7 +48,7 @@ export async function readResumePoint(key: string): Promise<ResumePoint | null> 
 /** Stores a point taken while `save` was the stored battery save. Returns its state's SHA-1. */
 export async function storeResumePoint(key: string, state: Uint8Array, save?: Uint8Array): Promise<string> {
   const sha1 = await sha1Hex(state);
-  const point: StoredPoint = { state: state.slice().buffer, sha1, takenAt: Date.now(), ...(save ? { saveSha1: await sha1Hex(save) } : {}) };
+  const point: StoredPoint = { state: state.slice().buffer, sha1, takenAt: Date.now(), ...(save ? { saveSha1: await saveHash(save) } : {}) };
   await run("saves", "readwrite", (s) => s.put(point, pointKey(key)));
   return sha1;
 }
@@ -60,7 +67,7 @@ async function gunzip(bytes: ArrayBuffer): Promise<Uint8Array> {
  * 64 KB; a gzipped point is a few KB). False if signed out.
  */
 export async function uploadResumePoint(key: string, state: Uint8Array, save: Uint8Array, keepalive = false, f: Fetch = fetch): Promise<boolean> {
-  const [body, stateSha1, saveSha1] = await Promise.all([gzip(state), sha1Hex(state), sha1Hex(save)]);
+  const [body, stateSha1, saveSha1] = await Promise.all([gzip(state), sha1Hex(state), saveHash(save)]);
   const res = await f(`/api/saves/${key}/resume`, {
     method: "PUT",
     body,
@@ -90,7 +97,7 @@ export async function fetchCloudResumePoint(key: string, f: Fetch = fetch): Prom
  * points recorded their save is still tried (the emulator checks it anyway).
  */
 export async function pickResumePoint(save: Uint8Array | undefined, points: (ResumePoint | null)[]): Promise<ResumePoint | null> {
-  const saveSha1 = save ? await sha1Hex(save) : undefined;
+  const saveSha1 = save ? await saveHash(save) : undefined;
   const fits = points.filter((p): p is ResumePoint => !!p && (p.saveSha1 === undefined || p.saveSha1 === saveSha1));
   return fits.sort((a, b) => b.takenAt - a.takenAt)[0] ?? null;
 }
