@@ -69,6 +69,12 @@ describe("save history", () => {
     expect(all[0]!.summary!.minutes).toBe(KEEP_PERIODIC + 4);
   });
 
+  it("promotes a periodic copy when the same save is kept before a replacement", async () => {
+    await keepSave("k", gameSave(1, 0, 1), "save", offline);
+    expect(await keepSave("k", gameSave(1, 0, 1), "replaced", offline)).toBe(true);
+    expect((await listHistory("k", offline)).map((e) => e.reason)).toEqual(["replaced"]);
+  });
+
   it("keeps the old trainer's save when a new game saves over it", async () => {
     const keep = vi.fn((sram: Uint8Array, reason: string) => keepSave("k", sram, reason as "save", offline));
     const slot = await openSaveSlot("k", null, keep);

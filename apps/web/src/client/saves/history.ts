@@ -52,10 +52,11 @@ export function prune(entries: StoredEntry[]): StoredEntry[] {
 
 /**
  * Whether a save should be kept: before a replacement always (unless that exact save is kept
- * already); periodically when the last periodic copy is old enough or another trainer's.
+ * already as one); periodically when the last periodic copy is old enough or another trainer's.
  */
 export function shouldKeep(entries: StoredEntry[], reason: HistoryReason, sha1: string, sram: Uint8Array, now: number): boolean {
-  if (entries.some((e) => e.sha1 === sha1)) return false;
+  // The same bytes kept already, unless only as a periodic copy, which a replacement promotes.
+  if (entries.some((e) => e.sha1 === sha1 && (reason === "save" || e.reason !== "save"))) return false;
   if (reason !== "save") return true;
   const last = entries.filter((e) => e.reason === "save").at(-1);
   if (!last) return true;
@@ -78,7 +79,10 @@ export async function keepSave(key: string, sram: Uint8Array, reason: HistoryRea
   // Ids are `<takenAt>-<reason>`, so no two entries share a millisecond.
   const takenAt = Math.max(now, ...entries.map((e) => e.takenAt + 1));
   const entry: StoredEntry = { takenAt, reason, sram: sram.slice().buffer, sha1 };
-  await run("saves", "readwrite", (s) => s.put(prune([...entries, entry]), historyKey(key)));
+  // A periodic copy of these bytes becomes this one, so the list doesn't show it twice and it
+  // lasts as long as the copies kept before a replacement.
+  const others = entries.filter((e) => e.sha1 !== sha1);
+  await run("saves", "readwrite", (s) => s.put(prune([...others, entry]), historyKey(key)));
   void uploadEntry(key, entry, f).catch((err) => console.warn("[pokeHD] couldn't copy an earlier save to the cloud", err));
   return true;
 }

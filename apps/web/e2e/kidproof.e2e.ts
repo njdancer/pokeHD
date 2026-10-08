@@ -19,10 +19,14 @@ const ROM_KEY = createHash("sha1").update(readFileSync(ROM_PATH)).digest("hex");
 /** The trainer ID's offset in the battery save (sMainData holds a copy of WRAM from wMainDataStart). */
 const ID_AT = 0x2000 + SYMBOLS.sMainData.address - 0xa000 + SYMBOLS.wPlayerID.address - SYMBOLS.wMainDataStart.address;
 
-/** The stored save's trainer ID, or null with no save. */
+const SRAM_AT = (name: "sGameData" | "sGameDataEnd" | "sMainDataCheckSum") => SYMBOLS[name].bank * 0x2000 + SYMBOLS[name].address - 0xa000;
+/** Where the save's checksummed data starts and ends, and its checksum. */
+const CHECKED = [SRAM_AT("sGameData"), SRAM_AT("sGameDataEnd"), SRAM_AT("sMainDataCheckSum")] as const;
+
+/** The stored save's trainer ID, or null with no valid save (the game also keeps scratch data in SRAM). */
 async function savedId(page: Page): Promise<number | null> {
   return page.evaluate(
-    ([key, at]) =>
+    ([key, at, [start, end, sumAt]]) =>
       new Promise<number | null>((resolve, reject) => {
         const open = indexedDB.open("pokehd");
         open.onerror = () => reject(open.error);
@@ -31,25 +35,33 @@ async function savedId(page: Page): Promise<number | null> {
           get.onsuccess = () => {
             const buf = get.result as ArrayBuffer | undefined;
             open.result.close();
-            resolve(buf ? (new Uint8Array(buf)[at]! << 8) | new Uint8Array(buf)[at + 1]! : null);
+            if (!buf) return resolve(null);
+            const sram = new Uint8Array(buf);
+            let sum = 0;
+            for (let i = start; i < end; i++) sum = (sum + sram[i]!) & 0xff;
+            resolve((~sum & 0xff) === sram[sumAt] ? (sram[at]! << 8) | sram[at + 1]! : null);
           };
         };
       }),
-    [ROM_KEY, ID_AT] as const,
+    [ROM_KEY, ID_AT, CHECKED] as const,
   );
 }
 
-/** Opens the start menu's SAVE (the fourth item before the Pokédex) and says YES. */
-async function startSaving(p: Player): Promise<void> {
+/**
+ * Opens the start menu's SAVE (the fourth item before the Pokédex; the menu remembers its cursor,
+ * so `downs` is 0 once SAVE was last used), then presses A, as a child would, until `done`.
+ */
+async function startSaving(p: Player, done: () => Promise<boolean>, downs = 3): Promise<void> {
   await p.tap("Enter");
   await sleep(500);
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < downs; i++) {
     await p.tap("ArrowDown");
     await sleep(200);
   }
-  await p.tap("z"); // SAVE
-  await sleep(1500);
-  await p.tap("z"); // "Would you like to save the game?" YES
+  for (const end = Date.now() + 60_000; Date.now() < end && !(await done()); ) {
+    await p.tap("z");
+    await sleep(600);
+  }
 }
 
 test("a new game can't erase the old save by accident", async ({ page }) => {
@@ -61,8 +73,7 @@ test("a new game can't erase the old save by accident", async ({ page }) => {
 
   // The first adventure, saved by hand.
   await p.playIntro();
-  await startSaving(p);
-  await expect.poll(() => savedId(page), { timeout: 30_000 }).not.toBeNull();
+  await startSaving(p, async () => (await savedId(page)) !== null);
   const first = (await savedId(page))!;
   await p.clearDialogs();
 
@@ -81,8 +92,8 @@ test("a new game can't erase the old save by accident", async ({ page }) => {
   await p.playIntro();
 
   // Saving it asks the page's question, and mashing A meanwhile does nothing.
-  await startSaving(p);
   const keep = page.getByRole("button", { name: "Keep my old adventure" });
+  await startSaving(p, () => keep.isVisible());
   await expect(keep).toBeVisible({ timeout: 30_000 });
   await page.screenshot({ path: "test-results/kidproof-erase-question.png" });
   for (let i = 0; i < 20; i++) {
@@ -94,11 +105,15 @@ test("a new game can't erase the old save by accident", async ({ page }) => {
   await expect(keep).toBeHidden({ timeout: 10_000 });
   await sleep(3000);
   expect(await savedId(page)).toBe(first);
-  await p.clearDialogs();
+  // NO goes back to the start menu: close it.
+  for (let i = 0; i < 3; i++) {
+    await p.tap("x");
+    await sleep(600);
+  }
 
   // Held long enough, erase goes through and the new trainer is saved.
-  await startSaving(p);
   const erase = page.getByRole("button", { name: /Hold to erase/ });
+  await startSaving(p, () => erase.isVisible(), 0);
   await expect(erase).toBeVisible({ timeout: 30_000 });
   await erase.hover();
   await page.mouse.down();
