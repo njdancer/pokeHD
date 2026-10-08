@@ -1,12 +1,23 @@
 import type { Tileset } from "../world/types.ts";
 import { CAVERN } from "./cavern.ts";
+import { CEMETERY } from "./cemetery.ts";
+import { CLUB } from "./club.ts";
+import { FACILITY } from "./facility.ts";
 import { FOREST } from "./forest.ts";
 import { GATE } from "./gate.ts";
 import { GYM } from "./gym.ts";
 import { HOUSE } from "./house.ts";
+import { INTERIOR } from "./interior.ts";
+import { LAB } from "./lab.ts";
+import { LOBBY } from "./lobby.ts";
+import { MANSION } from "./mansion.ts";
 import { OVERWORLD } from "./overworld.ts";
+import { PLATEAU } from "./plateau.ts";
 import { POKECENTER } from "./pokecenter.ts";
 import { REDS_HOUSE } from "./reds-house.ts";
+import { SHIP_PORT } from "./ship-port.ts";
+import { SHIP } from "./ship.ts";
+import { UNDERGROUND } from "./underground.ts";
 import type { Label, TilesetLabelTable } from "./types.ts";
 
 export { LABELS, type Label, type TilesetLabelTable } from "./types.ts";
@@ -29,6 +40,17 @@ export const LABEL_TABLES: Partial<Record<string, TilesetLabelTable>> = {
   MUSEUM: GATE,
   FOREST_GATE: GATE,
   CAVERN,
+  SHIP,
+  SHIP_PORT,
+  CEMETERY,
+  INTERIOR,
+  LOBBY,
+  MANSION,
+  LAB,
+  CLUB,
+  FACILITY,
+  PLATEAU,
+  UNDERGROUND,
 };
 
 /** Labels the ROM's own lists imply: doors, tall grass, ledges. */
