@@ -15,8 +15,8 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
   any binary or image.
   **One deliberate exception, for Nick's testing only:** his ROM sits in the private R2 bucket
   `pokehd-private` and `GET /api/dev-rom` returns it only with `Authorization: Bearer
-  <DEV_ROM_TOKEN>` (Worker secret). The client reads the token from a `#dev=<token>` URL fragment
-  and strips it. Locally, the Vite dev server serves `rom/pokeblue.gb` at `/__dev/rom` and the app
+  <DEV_ROM_TOKEN>` (Worker secret). The client reads the token from a `#dev=<token>` URL fragment,
+  strips it and remembers it in that browser's localStorage, so later links work without it. Locally, the Vite dev server serves `rom/pokeblue.gb` at `/__dev/rom` and the app
   auto-loads it. Never expose the ROM any other way (no public assets, no public bucket).
 - **Keep it private.** The GitHub repo is private. Don't name public things "Pokémon".
 - **Visuals are the point.** Pixel art stays crisp (no xBR/HQx smoothing on sprites); the
