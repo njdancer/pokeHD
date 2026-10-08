@@ -9,6 +9,8 @@ import {
   createStyledWorld,
   DEFAULT_STYLE,
   DEFAULT_STYLE_PARAMS,
+  INTERIOR_LOOKS,
+  type InteriorLook,
   regionFocuses,
   STYLES,
   VIEW_PRESETS,
@@ -32,6 +34,17 @@ const VIEW_PARAM = query.get("view");
 const INITIAL_VIEW: ViewPreset = VIEW_PARAM && VIEW_PARAM in VIEW_PRESETS ? (VIEW_PARAM as ViewPreset) : "hd2d";
 const INITIAL_PHASE = Number(query.get("phase") ?? 0.5);
 const MAP_NAME = query.get("map");
+// &interiors=open,dollhouse,walls-down (or all): one Hybrid view per interior look instead.
+const INTERIORS_PARAM = query.get("interiors");
+const INTERIOR_IDS: InteriorLook[] | null = INTERIORS_PARAM
+  ? INTERIORS_PARAM === "all"
+    ? (Object.keys(INTERIOR_LOOKS) as InteriorLook[])
+    : INTERIORS_PARAM.split(",").filter((s): s is InteriorLook => s in INTERIOR_LOOKS)
+  : null;
+/** What each view shows: a style, and indoors an interior look. */
+const VIEWS: { id: StyleId; interior?: InteriorLook; name: string }[] = INTERIOR_IDS
+  ? INTERIOR_IDS.map((interior) => ({ id: "hybrid", interior, name: INTERIOR_LOOKS[interior].name }))
+  : STYLE_IDS.map((id) => ({ id, name: STYLES[id].name }));
 
 const SLIDERS: { key: keyof StyleParams; label: string; min: number; max: number; step: number }[] = [
   { key: "wallScale", label: "wall height", min: 0.5, max: 2.5, step: 0.05 },
@@ -48,6 +61,7 @@ const SLIDERS: { key: keyof StyleParams; label: string; min: number; max: number
 
 interface View {
   id: StyleId;
+  interior?: InteriorLook;
   engine: Engine;
   world: StyledWorld;
 }
@@ -73,11 +87,11 @@ export function StyleCompare() {
   useEffect(() => {
     // Fresh canvases per mount: StrictMode's mount, unmount, remount must not share GPU contexts.
     let disposed = false;
-    const canvases = STYLE_IDS.map(() => document.createElement("canvas"));
+    const canvases = VIEWS.map(() => document.createElement("canvas"));
     const cells = canvases.map((c, i) => {
       const cell = document.createElement("div");
       cell.className = "styles-cell";
-      cell.dataset.name = STYLES[STYLE_IDS[i]!].name;
+      cell.dataset.name = VIEWS[i]!.name;
       cell.append(c);
       holder.current!.querySelector(".styles-grid")!.append(cell);
       return cell;
@@ -97,15 +111,19 @@ export function StyleCompare() {
       const focuses = regionFocuses(region);
       const focus = focuses.find((f) => f.name === query.get("focus")) ?? focuses[0]!;
       const params = structuredClone(DEFAULT_STYLE_PARAMS);
-      for (const [i, id] of STYLE_IDS.entries()) {
-        const world = createStyledWorld(region, id, params, focus);
+      for (const [i, { id, interior }] of VIEWS.entries()) {
+        const world = createStyledWorld(region, id, params, focus, interior);
         const engine = await createEngine(canvases[i]!, { world, lookdev: false, dynamicResolution: false });
-        views.push({ id, engine, world });
+        views.push({ id, interior, engine, world });
         if (disposed) break;
       }
       if (disposed) return;
       session.current = { region, focuses, views, params, focus };
-      applyCamera(views, VIEW_PRESETS[INITIAL_VIEW]);
+      // &yaw=, &pitch= and &distance= nudge the starting view (for screenshots).
+      const nudge = Object.fromEntries(
+        (["yaw", "pitch", "distance"] as const).flatMap((k) => (query.has(k) ? [[k, Number(query.get(k))]] : [])),
+      );
+      applyCamera(views, { ...VIEW_PRESETS[INITIAL_VIEW], ...nudge });
       applyPhase(views, INITIAL_PHASE);
       setReady({ focuses, backend: views[0]?.engine.backend ?? "" });
     })().catch((e: unknown) => setError(String(e)));
@@ -163,7 +181,7 @@ export function StyleCompare() {
     const s = session.current;
     if (!s) return;
     s.views = s.views.map((v) => {
-      const world = createStyledWorld(s.region, v.id, s.params, s.focus);
+      const world = createStyledWorld(s.region, v.id, s.params, s.focus, v.interior);
       v.engine.setWorld(world);
       v.world.dispose();
       return { ...v, world };
@@ -198,7 +216,7 @@ export function StyleCompare() {
       // pipelines still compiling), so take one to warm up and keep the second.
       await v.engine.capture();
       const png = await v.engine.capture();
-      const name = `style-${v.id}-${view}`;
+      const name = `style-${v.interior ?? v.id}-${view}`;
       if (import.meta.env.DEV) {
         await fetch(`/__dev/shot?name=${name}`, { method: "POST", body: png });
         continue;
@@ -212,7 +230,7 @@ export function StyleCompare() {
 
   return (
     <div className="styles-page" ref={holder}>
-      <div className={`styles-grid n${STYLE_IDS.length}`} />
+      <div className={`styles-grid n${VIEWS.length}`} />
       <div className="styles-panel">
         <button type="button" onClick={() => setPanel(!panel)}>{panel ? "Hide" : "Controls"}</button>
         {error && <p className="status bad">{error}</p>}

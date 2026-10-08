@@ -446,3 +446,14 @@ Why: settle it now, while only a few devices have the app installed, so saves an
 move once. Nick chose to keep the project name in the address.
 
 Alternatives: `play.dncr.me` (recommended for a neutral name), or staying on workers.dev.
+
+## D30. Interiors are dollhouses
+
+Indoors, the Hybrid style builds the room rather than laying it flat. The back wall, shelves and
+machines stand up at their front edge with their drawing on the front face (the Game Boy draws
+them as elevations). Tables, counters and chairs become raised slabs, and plants and statues
+become voxel volumes. The filler blocks around a room are left out. Of three enclosures (open
+room, dollhouse, walls down; `/dev/styles?map=OAKS_LAB&interiors=all`), Nick picked
+**dollhouse** on 2026-10-08: a tall back wall, and side walls that step down toward the camera,
+so the room reads as a room without hiding the floor or the exit. He found the differences
+small, so this is easy to revisit.
