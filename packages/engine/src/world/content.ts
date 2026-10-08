@@ -3,6 +3,7 @@ import type { WorldContent } from "../index.ts";
 import type { StyleParams } from "./params.ts";
 import { TILE_UNITS, type Region } from "./region.ts";
 import { npcSprites } from "./sprites.ts";
+import type { InteriorLook } from "./interior.ts";
 import { buildStyle, type StyleId } from "./styles.ts";
 
 // A region in one style, packaged as engine content: the look-dev rig, sky and post stack light
@@ -28,9 +29,9 @@ export interface StyledWorld extends WorldContent {
   dispose(): void;
 }
 
-export function createStyledWorld(region: Region, style: StyleId, params: StyleParams, focus: Focus): StyledWorld {
+export function createStyledWorld(region: Region, style: StyleId, params: StyleParams, focus: Focus, interior?: InteriorLook): StyledWorld {
   const root = new THREE.Group();
-  root.add(buildStyle(style, region, params));
+  root.add(buildStyle(style, region, params, undefined, interior));
   const sprites = npcSprites(region);
   root.add(sprites.group);
   const target = new THREE.Vector3(focus.x, 0.5, focus.z);

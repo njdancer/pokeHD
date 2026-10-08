@@ -2,6 +2,7 @@
 export { buildRegion, placeMaps, PX_PER_UNIT, TILE_UNITS, type Region, type RegionOptions } from "./region.ts";
 export { DEFAULT_STYLE_PARAMS, type StyleParams } from "./params.ts";
 export { buildStyle, DEFAULT_STYLE, STYLES, type StyleId } from "./styles.ts";
+export { DEFAULT_INTERIOR_LOOK, INTERIOR_LOOKS, type InteriorLook } from "./interior.ts";
 export { createStyledWorld, regionFocuses, type Focus, type StyledWorld } from "./content.ts";
 export { createLiveWorld, GB_FRAME_SECONDS, type LiveActor, type LiveState, type LiveWorld, type LiveWorldOptions } from "./live.ts";
 export { createGhosts, DEFAULT_GHOST_LOOK, GHOST_DELAY, GHOST_LOOKS, type GhostLook, type GhostLookId, type GhostState, type Ghosts } from "./ghosts.ts";
