@@ -40,6 +40,13 @@ describe("inWorldTracker", () => {
     expect(track(at([4, 4, 4]))).toBe(true);
   });
 
+  it("starts in the world after a resume point, until a reset", () => {
+    const track = inWorldTracker(true);
+    expect(track(at([4, 4, 4]))).toBe(true);
+    expect(track(at([0, 0, 0]))).toBe(false);
+    expect(track(at([4, 4, 4]))).toBe(false);
+  });
+
   it("ends when the game resets", () => {
     const track = inWorldTracker();
     track(at([0, 0, 0]));

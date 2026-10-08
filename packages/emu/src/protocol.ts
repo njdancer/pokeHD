@@ -8,7 +8,8 @@ import type { LinkRole } from "./link.ts";
 export type Watch = readonly [address: number, length: number];
 
 export type ToWorker =
-  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; sampleRate: number }
+  /** `resume` is a resume point to start from, used only if it holds exactly `sram` as its save. */
+  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number }
   /** Switches pacing to the audio clock; the port talks to the audio worklet. */
   | { type: "audio"; port: MessagePort }
   | { type: "buttons"; mask: number }
@@ -16,6 +17,9 @@ export type ToWorker =
   | { type: "pause"; paused: boolean }
   | { type: "save-state"; id: number }
   | { type: "load-state"; state: Uint8Array }
+  /** A save state to resume from later, if now is a moment one can be taken. */
+  | { type: "resume-point"; id: number }
+  | { type: "autosave"; enabled: boolean }
   /** Attaches a LinkPort to the worker's GameBoy (replacing any previous one). */
   | { type: "link-open"; role: LinkRole; connectTimeoutFrames?: number }
   /** The friend's next link message. */
@@ -39,10 +43,14 @@ export interface FrameMessage {
 }
 
 export type FromWorker =
-  | { type: "ready" }
+  /** `resumed` says whether the resume point was used; `reason` why not, if one was passed. */
+  | { type: "ready"; resumed: boolean; reason?: string }
   | FrameMessage
   | { type: "sram"; sram: Uint8Array }
   | { type: "state"; id: number; state: Uint8Array }
+  | { type: "resume-point"; id: number; state: Uint8Array | null }
+  /** An autosave was skipped, and why. */
+  | { type: "autosave-skipped"; reason: string }
   /** An outbound link message for the friend. */
   | { type: "link-send"; message: LinkMessage }
   | { type: "read"; id: number; bytes: Uint8Array[] }

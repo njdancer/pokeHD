@@ -17,11 +17,12 @@ export type ScreenLayout = "full" | "dialog" | "corner" | "hidden";
  * - with a save, the main menu loads it, map and all, to preview it.
  * So the answer turns true only after WRAM has been seen cleared and then EnterMap has set its
  * map-loaded flag (BIT_CUR_MAP_LOADED_2; the Continue screen sets only the first one), and it
- * holds until the map header clears again (a reset).
+ * holds until the map header clears again (a reset). After resuming from a resume point (only
+ * ever taken in the world), `resumed` says the loaded map is already the world.
  */
-export function inWorldTracker() {
-  let cleared = false;
-  let inWorld = false;
+export function inWorldTracker(resumed = false) {
+  let cleared = resumed;
+  let inWorld = resumed;
   return (watched: Pick<OverworldWatched, "mapHeader" | "mapScriptFlags">): boolean => {
     const mapLoaded = (watched.mapHeader[1] ?? 0) > 0 && (watched.mapHeader[2] ?? 0) > 0;
     if (!mapLoaded) cleared = true;

@@ -16,6 +16,15 @@ export interface HostLink {
 export interface EmulatorHostOptions {
   rom: Uint8Array;
   sram?: Uint8Array;
+  /**
+   * A resume point (`resumePoint()`) to start from instead of the title screen. It's used only
+   * if it holds exactly `sram` as its save; otherwise the game boots on `sram` as usual.
+   */
+  resume?: Uint8Array;
+  /** Runs the game's own save every few minutes of play and after key moments. Default on. */
+  autosave?: boolean;
+  /** Called with the reason when an autosave was skipped (another trainer's save, …). */
+  onAutosaveSkipped?: (reason: string) => void;
   /** Called for every emulated frame, in the order they were produced. */
   onFrame?: (frame: FrameMessage) => void;
   /** Called (at most about once a second) when the game has written its save. */
@@ -35,21 +44,42 @@ export interface TakenGift {
  * Runs a GameBoy in a Web Worker. Pacing is a ~59.73 Hz timer until `enableAudio()` is called
  * (it needs a user gesture), after which the audio clock drives emulation.
  */
+/** How the emulator started: from the resume point, or why not. */
+export interface Started {
+  resumed: boolean;
+  reason?: string;
+}
+
 export class EmulatorHost {
   readonly #worker: Worker;
+  /** Resolves once the emulator is running. */
+  readonly started: Promise<Started>;
   readonly #audio: AudioContext;
   #audioNode: AudioWorkletNode | undefined;
   #nextId = 1;
   readonly #pending = new Map<number, (state: Uint8Array) => void>();
   readonly #reads = new Map<number, (bytes: Uint8Array[]) => void>();
   readonly #takes = new Map<number, (taken: TakenGift) => void>();
+  readonly #resumePoints = new Map<number, (state: Uint8Array | null) => void>();
   #linkSend: ((message: LinkMessage) => void) | undefined;
 
   constructor(options: EmulatorHostOptions) {
     this.#audio = new AudioContext({ latencyHint: "interactive" });
     this.#worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module", name: "pokehd-emu" });
+    let ready: (started: Started) => void = () => {};
+    this.started = new Promise((resolve) => (ready = resolve));
     this.#worker.onmessage = ({ data }: MessageEvent<FromWorker>) => {
       switch (data.type) {
+        case "ready":
+          ready({ resumed: data.resumed, ...(data.reason ? { reason: data.reason } : {}) });
+          break;
+        case "resume-point":
+          this.#resumePoints.get(data.id)?.(data.state);
+          this.#resumePoints.delete(data.id);
+          break;
+        case "autosave-skipped":
+          options.onAutosaveSkipped?.(data.reason);
+          break;
         case "frame":
           options.onFrame?.(data);
           break;
@@ -79,7 +109,25 @@ export class EmulatorHost {
           break;
       }
     };
-    this.#post({ type: "start", rom: options.rom, sram: options.sram, sampleRate: this.#audio.sampleRate });
+    const { rom, sram, resume } = options;
+    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate });
+    if (options.autosave === false) this.setAutosave(false);
+  }
+
+  setAutosave(enabled: boolean): void {
+    this.#post({ type: "autosave", enabled });
+  }
+
+  /**
+   * A save state to pass back as `resume` next time, or null if now isn't a moment to take one
+   * (a link session, a gift landed but not yet saved). Any newer save reaches `onSram` first.
+   */
+  resumePoint(): Promise<Uint8Array | null> {
+    const id = this.#nextId++;
+    return new Promise((resolve) => {
+      this.#resumePoints.set(id, resolve);
+      this.#post({ type: "resume-point", id });
+    });
   }
 
   /** Resumes audio output. Call from a user gesture (click, key press). Safe to call again. */
