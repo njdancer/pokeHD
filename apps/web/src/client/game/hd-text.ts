@@ -1,36 +1,22 @@
 // Whether the HD text layer can stand in for the Game Boy screen (p2-text), and the player's
 // choice of how it looks. The game still draws every box and moves every cursor; this only
-// decides who shows it.
+// decides who shows it. The look is Storybook (D31).
 import type { OverworldMode, ScreenText } from "@pokehd/emu";
 
-/**
- * `storybook`: rounded letters on warm paper. `lantern`: serif on dark glass with gold lines.
- * `pixel`: the game's own letters, crisp, on a light panel. `off`: the Game Boy screen.
- */
-export type TextLook = "storybook" | "lantern" | "pixel" | "off";
+const HD_TEXT_KEY = "pokehd.text.look.v1";
 
-export const TEXT_LOOKS: readonly { look: TextLook; label: string }[] = [
-  { look: "storybook", label: "Storybook" },
-  { look: "lantern", label: "Lantern" },
-  { look: "pixel", label: "Game Boy letters" },
-  { look: "off", label: "Game Boy screen" },
-];
-
-const LOOK_KEY = "pokehd.text.look.v1";
-export const DEFAULT_LOOK: TextLook = "storybook";
-
-export function loadTextLook(): TextLook {
+/** Whether the player wants the HD text layer (on unless turned off in Settings). */
+export function loadHdTextOn(): boolean {
   try {
-    const stored = localStorage.getItem(LOOK_KEY);
-    return TEXT_LOOKS.some((l) => l.look === stored) ? (stored as TextLook) : DEFAULT_LOOK;
+    return localStorage.getItem(HD_TEXT_KEY) !== "off";
   } catch {
-    return DEFAULT_LOOK;
+    return true;
   }
 }
 
-export function saveTextLook(look: TextLook): void {
+export function saveHdTextOn(on: boolean): void {
   try {
-    localStorage.setItem(LOOK_KEY, look);
+    localStorage.setItem(HD_TEXT_KEY, on ? "storybook" : "off");
   } catch {
     // Storage blocked (some private windows): the choice lasts until reload.
   }

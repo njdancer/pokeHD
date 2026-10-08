@@ -56,7 +56,7 @@ import { BattleTracker, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
 import { TextOverlay } from "./TextOverlay.tsx";
-import { TEXT_LOOKS, hdTextFits, loadTextLook, saveTextLook, textKey, type TextLook } from "./hd-text.ts";
+import { hdTextFits, loadHdTextOn, saveHdTextOn, textKey } from "./hd-text.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
@@ -162,9 +162,9 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [savedAt, setSavedAt] = useState(0);
   const touch = useTouchDevice();
   const glyphs = useMemo(() => readGlyphs(rom), [rom]);
-  /** How the HD text layer looks, or `off` for the Game Boy screen. */
-  const [textLook, setTextLook] = useState(loadTextLook);
-  const textLookRef = useRef(textLook);
+  /** Words and menus drawn in HD (Storybook, D31), or on the Game Boy screen. */
+  const [hdTextOn, setHdTextOn] = useState(loadHdTextOn);
+  const hdTextOnRef = useRef(hdTextOn);
   /** The text on screen, while the HD text layer can show it. */
   const [hdText, setHdText] = useState<ScreenText | null>(null);
   // Bumped by a .sav import: restarts the emulator on the imported save.
@@ -322,7 +322,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           roomClient?.sendPresence(toPresence(state, inWorld));
           // Text and menus: drawn by the HD text layer when it can show all of them.
           const text = textDecoder.decode(bytes as unknown as TextWatched);
-          const fits = textLookRef.current !== "off" && hdTextFits(text, state.mode, inWorld);
+          const fits = hdTextOnRef.current && hdTextFits(text, state.mode, inWorld);
           const key = fits ? textKey(text) : "";
           if (key !== shownText) {
             shownText = key;
@@ -568,10 +568,10 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     hostRef.current?.setAutosave(on);
   };
 
-  const chooseTextLook = (look: TextLook) => {
-    textLookRef.current = look;
-    saveTextLook(look);
-    setTextLook(look);
+  const toggleHdText = (on: boolean) => {
+    hdTextOnRef.current = on;
+    saveHdTextOn(on);
+    setHdTextOn(on);
   };
 
   const s = stats?.state;
@@ -586,7 +586,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         data-testid="gb-screen"
         data-layout={noHd ? "full" : layout}
       />
-      {hdText && !noHd && textLook !== "off" && <TextOverlay text={hdText} look={textLook} glyphs={glyphs} />}
+      {hdText && !noHd && hdTextOn && <TextOverlay text={hdText} />}
       <div className="game-hud">
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
         <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
@@ -607,10 +607,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           </section>
           <div className="row">
             <label>
-              Words and menus{" "}
-              <select value={textLook} onChange={(e) => chooseTextLook(e.target.value as TextLook)}>
-                {TEXT_LOOKS.map(({ look, label }) => <option key={look} value={look}>{label}</option>)}
-              </select>
+              <input type="checkbox" checked={hdTextOn} onChange={(e) => toggleHdText(e.target.checked)} />
+              {" "}HD words and menus
             </label>
           </div>
           {input && <KeyBindingsPanel input={input} />}
