@@ -84,6 +84,25 @@ and a half second with many of them (startup, shader compiles) is thrown away wh
 
 On the estimate, an iPhone 13 Pro should settle around 80–90% scale with depth of field on.
 
+## Map changes and the first frame
+
+Two kinds of stall used to land outside the frame budget above.
+
+**Map chunk builds.** Building a map (region, colours, terrain, voxel trees, grass) took 30-50 ms
+of JavaScript warm in Node and 50-170 ms in a browser, on the main thread, each time a map came
+into range. Chunks now build in a worker (`packages/engine/src/world/chunk-worker.ts`) and come
+back as plain arrays; turning them into three.js objects takes 1-10 ms (`live.builds[].ms`;
+`totalMs` is the wait for the worker). The worker bundle is about 150 KB gzipped, loaded once.
+
+**Shader compiles.** WebGL2 links each program on the main thread the first time it draws, so the
+first frame (scene, shadows and every post pass) froze the page: 1.8-2.0 s in the cloud sandbox's
+software WebGL, about 2.6 s on a real device. The engine now asks for pipelines without waiting
+(as `compileAsync` does) and skips a draw until its program is ready, keeping the WebGL2 canvas
+hidden until every pass has drawn once. With KHR_parallel_shader_compile (Chrome; Safari lists it
+but may still block, WebKit bug 251514) the first frame took 0.25-0.37 s of main thread in the
+sandbox, with the extension faked since its software WebGL lacks it. Scene objects keep this for good on both backends, so a new chunk's shadow pass
+or a new sprite turns up a frame late rather than stalling one.
+
 ## What's left
 
 - **Geometry is next.** About a million triangles a frame: the voxel trees are 1,824 triangles
