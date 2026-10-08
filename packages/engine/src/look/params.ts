@@ -110,6 +110,8 @@ export interface LookParams {
     shadowTint: string;
     highlightTint: string;
     splitToneAmount: number;
+    /** How far midtones lean toward the colour of the place on screen (its SGB palette, D11). */
+    placeTint: number;
     lutIntensity: number;
   };
   vignette: {
@@ -242,6 +244,7 @@ export const LOOK_SCHEMA: { [G in Group]: { [K in keyof LookParams[G]]: FieldSpe
     shadowTint: c,
     highlightTint: c,
     splitToneAmount: n(0, 1, 0.005),
+    placeTint: n(0, 1, 0.005, "place tint"),
     lutIntensity: n(0, 1, 0.01, "LUT mix"),
   },
   vignette: { enabled: b, intensity: n(0, 1, 0.01), radius: n(0.1, 1.5, 0.01), smoothness: n(0.01, 1.5, 0.01) },

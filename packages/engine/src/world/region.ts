@@ -33,6 +33,8 @@ export interface Region {
   maps: PlacedMap[];
   /** The tileset every map in the region shares. */
   tileset: Tileset;
+  /** The world's sprite sheets, for drawing the maps' objects. */
+  sprites: WorldData["sprites"];
   /** Where the root map's origin sits, in region tiles: subtract to get root-map coordinates. */
   rootX: number;
   rootY: number;
@@ -135,6 +137,7 @@ export function buildRegion(world: WorldData, root: MapId, options: RegionOption
     shades,
     maps: placed.map((p) => ({ map: p.map, x: (p.bx - minX) * 4, y: (p.by - minY) * 4 })),
     tileset,
+    sprites: world.sprites,
     rootX: -minX * 4,
     rootY: -minY * 4,
   };

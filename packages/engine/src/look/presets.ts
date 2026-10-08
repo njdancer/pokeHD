@@ -54,6 +54,7 @@ export const DEFAULT_LOOK: LookParams = {
     shadowTint: "#3b4c78",
     highlightTint: "#ffd9a8",
     splitToneAmount: 0.18,
+    placeTint: 0.15,
     lutIntensity: 1,
   },
   vignette: { enabled: true, intensity: 0.35, radius: 0.85, smoothness: 0.6 },

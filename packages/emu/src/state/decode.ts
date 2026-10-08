@@ -135,6 +135,7 @@ export function decodeOverworldState(watched: OverworldWatched): OverworldState 
   return {
     mode: mode(watched),
     mapId: byte(watched.map, 0),
+    lastMap: byte(watched.lastMap, 0),
     player: {
       ...actor(watched.sprites1, 0, x, y, step),
       transport: TRANSPORTS[byte(watched.transport, 0)] ?? "walk",

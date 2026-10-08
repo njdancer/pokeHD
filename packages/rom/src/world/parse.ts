@@ -1,5 +1,6 @@
 // Parses the overworld from ROM bytes into WorldData. Formats: vendor/pokered
 // macros/scripts/maps.asm (map headers, connections, objects) and data/tilesets/*.asm.
+import { readSgbPalettes } from "../colour/sgb.ts";
 import { MAP_NAMES, TILESET_NAMES } from "../generated/names.ts";
 import { SYMBOLS, romOffset, type SymbolName } from "../symbols.ts";
 import type {
@@ -9,6 +10,7 @@ import type {
   Npc,
   NpcMovement,
   Sign,
+  SpriteSheet,
   TileAnimation,
   Tileset,
   TilesetSemantics,
@@ -277,11 +279,43 @@ function parseMap(r: RomReader, id: number, name: string): MapData {
   };
 }
 
+/** Sprite IDs run 1 to 0x48 (constants/sprite_constants.asm); 0 is SPRITE_NONE. */
+const SPRITE_COUNT = 0x49;
+/** FIRST_STILL_SPRITE: from here on, sheets are a single 4-tile frame. */
+const FIRST_STILL_SPRITE = 0x3d;
+/** A sheet's standing frames; walking frames follow straight after (LoadMapSpriteTilePatterns). */
+const STANDING_BYTES = 12 * 16;
+
+/**
+ * Sprite sheets from SpriteSheetPointerTable (data/sprites/sprites.asm): `dw graphics`,
+ * `db size in bytes`, `db bank` per sprite ID from 1. Like the game, a walking sheet's walking
+ * frames are read from the 12 tiles after its standing frames; sheets for people who never walk
+ * have none, so those frames are whatever follows (the game never shows them).
+ */
+function parseSprites(r: RomReader): (SpriteSheet | null)[] {
+  const sheets: (SpriteSheet | null)[] = [null];
+  for (let id = 1; id < SPRITE_COUNT; id++) {
+    const entry = r.sym("SpriteSheetPointerTable", (id - 1) * 4);
+    const size = r.u8(entry + 2);
+    const start = r.offset(r.u8(entry + 3), r.u16(entry));
+    const still = id >= FIRST_STILL_SPRITE;
+    sheets.push(spriteSheet(r, id, start, still ? size : STANDING_BYTES * 2, still));
+  }
+  return sheets;
+}
+
+function spriteSheet(r: RomReader, id: number, start: number, bytes: number, still: boolean): SpriteSheet {
+  return { id, still, tiles: decode2bpp(r.rom.subarray(start, start + bytes)) };
+}
+
 /** Parses every map and tileset. Expects the verified reference ROM (see `checkRom`). */
 export function parseWorld(rom: Uint8Array): WorldData {
   const r = new RomReader(rom);
   return {
     maps: MAP_NAMES.map((name, id) => (name === null ? null : parseMap(r, id, name))),
     tilesets: parseTilesets(r),
+    sprites: parseSprites(r),
+    bikeSprite: spriteSheet(r, 0, r.sym("RedBikeSprite"), STANDING_BYTES * 2, false),
+    sgbPalettes: readSgbPalettes(rom),
   };
 }

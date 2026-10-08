@@ -8,6 +8,8 @@
 //   from the map's top-left corner. A block is 2×2 steps.
 // Field names carry their unit where it isn't obvious (`widthBlocks`, `offsetBlocks`).
 
+import type { SgbPalette } from "../colour/sgb.ts";
+
 /** Map IDs are the game's own (0 = Pallet Town … 247). */
 export type MapId = number;
 /** Tileset IDs are the game's own (0 = OVERWORLD … 23 = PLATEAU). */
@@ -18,6 +20,28 @@ export interface WorldData {
   maps: (MapData | null)[];
   /** Indexed by tileset ID. Tilesets that share graphics in ROM share the same arrays here. */
   tilesets: Tileset[];
+  /** Overworld sprite sheets indexed by sprite ID (SPRITE_* constant); index 0 (SPRITE_NONE) is `null`. */
+  sprites: (SpriteSheet | null)[];
+  /** The player's bike sheet, which the game loads directly rather than through the sprite table. */
+  bikeSprite: SpriteSheet;
+  /** Super Game Boy palettes indexed by PAL_* constant; see `overworldPalette`. */
+  sgbPalettes: SgbPalette[];
+}
+
+/**
+ * An overworld sprite sheet: 16×16 frames of 2×2 tiles (top-left, top-right, bottom-left,
+ * bottom-right). Walking sheets have six frames: standing down, up, left, then walking down, up,
+ * left (right is left mirrored). Still sheets (item balls, boulders, Snorlax) have one.
+ */
+export interface SpriteSheet {
+  id: number;
+  /** One frame, the same whichever way the object faces (sprite IDs from FIRST_STILL_SPRITE). */
+  still: boolean;
+  /**
+   * Decoded 2bpp graphics, one byte (0–3) per pixel: `tiles[t * 64 + py * 8 + px]`, 4 tiles per
+   * frame. Colour 0 is transparent; the rest go through the object palette (rOBP0).
+   */
+  tiles: Uint8Array;
 }
 
 export interface MapData {

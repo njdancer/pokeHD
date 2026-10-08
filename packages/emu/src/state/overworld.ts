@@ -70,6 +70,8 @@ export interface OverworldState {
    * back during a warp's fade-out (see there); `decodeOverworldState` reports it raw.
    */
   mapId: number;
+  /** wLastMap: the town or route last stepped out of, whose colours buildings take (p1-colour). */
+  lastMap: number;
   player: Player;
   /** The current map's NPC slots that hold a sprite, in slot order. */
   npcs: Npc[];
@@ -101,6 +103,8 @@ export const OVERWORLD_WATCHES = {
   map: sym("wCurMap"),
   /** wCurMapTileset, wCurMapHeight, wCurMapWidth: change when a new map's header loads. */
   mapHeader: sym("wCurMapTileset", 3),
+  /** wLastMap: the outdoor map the player last left by a warp. */
+  lastMap: sym("wLastMap"),
   /** wWarpedFromWhichMap: the map the last warp left, to tell warps from connections. */
   warpedFrom: sym("wWarpedFromWhichMap"),
   /** wYCoord, wXCoord (adjacent). */

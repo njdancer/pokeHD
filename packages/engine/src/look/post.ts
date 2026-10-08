@@ -7,7 +7,7 @@ import { fxaa } from "three/addons/tsl/display/FXAANode.js";
 import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { lut3D } from "three/addons/tsl/display/Lut3DNode.js";
 import { smaa } from "three/addons/tsl/display/SMAANode.js";
-import { bakeLut, LUT_SIZE } from "./grade.ts";
+import { bakeLut, LUT_SIZE, NEUTRAL_TINT } from "./grade.ts";
 import type { LookParams, ToneMappingName } from "./params.ts";
 
 // Post-processing chain, in order:
@@ -59,6 +59,7 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
   let lutKey = "";
 
   let owned: Disposable[] = [];
+  let scenePass: ReturnType<typeof pass> | undefined;
   let aoNode: ReturnType<typeof ao> | undefined;
   let bloomNode: ReturnType<typeof bloom> | undefined;
 
@@ -67,7 +68,7 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
     owned = [];
     aoNode = bloomNode = undefined;
 
-    const scenePass = pass(scene, camera, { samples: 0 });
+    scenePass = pass(scene, camera, { samples: 0 });
     owned.push(scenePass);
     let out: Vec4 = scenePass.getTextureNode("output");
 
@@ -118,8 +119,11 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
   return {
     pipeline,
     build,
-    /** Per-frame uniform updates. `focusDistance` is the camera-to-target distance; `fade` 1 is black. */
-    update(p: LookParams, focusDistance: number, fade: number) {
+    /**
+     * Per-frame uniform updates. `focusDistance` is the camera-to-target distance; `fade` 1 is
+     * black; `place` is the place tint (a `normTint`).
+     */
+    update(p: LookParams, focusDistance: number, fade: number, place: Readonly<[number, number, number]> = NEUTRAL_TINT) {
       u.fade.value = fade;
       renderer.toneMappingExposure = p.grade.exposure;
       u.aoIntensity.value = p.ao.intensity;
@@ -144,15 +148,33 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
       u.vignetteRadius.value = p.vignette.radius;
       u.vignetteSmoothness.value = p.vignette.smoothness;
 
-      const key = JSON.stringify(p.grade);
+      const key = JSON.stringify(p.grade) + place.map((v) => v.toFixed(3)).join();
       if (key !== lutKey) {
         lutKey = key;
-        bakeLut(p.grade, LUT_SIZE, lutData);
+        bakeLut(p.grade, LUT_SIZE, lutData, place);
         lut.needsUpdate = true;
       }
     },
     render() {
       pipeline.render();
+    },
+    /**
+     * Compiles `object`'s shaders for the scene pass, without drawing it, so adding it to the
+     * scene later doesn't stall a frame (WebGL2 compiles shaders synchronously on first draw).
+     * Mirrors PassNode.compileAsync, which compiles the whole scene: the pipelines must be
+     * built against the pass's render target and MRT, or the first draw builds them again.
+     */
+    compile(object: THREE.Object3D): Promise<void> {
+      if (!scenePass) return Promise.resolve();
+      const target = renderer.getRenderTarget();
+      const mrt = renderer.getMRT();
+      renderer.setRenderTarget(scenePass.renderTarget);
+      renderer.setMRT(scenePass.getMRT());
+      // compileAsync captures the render context before its first await; restore at once.
+      const done = renderer.compileAsync(object, camera, scene);
+      renderer.setRenderTarget(target);
+      renderer.setMRT(mrt);
+      return done;
     },
     dispose() {
       for (const d of owned) d.dispose();

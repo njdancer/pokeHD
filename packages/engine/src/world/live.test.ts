@@ -52,6 +52,43 @@ describe("createLiveWorld", () => {
     expect([...live.chunks.keys()]).toEqual([2]);
     live.dispose();
   });
+
+  it("adds a new chunk to the scene only once its shaders are compiled", async () => {
+    const live = createLiveWorld(fakeWorld());
+    const pending: (() => void)[] = [];
+    live.setCompiler(() => new Promise<void>((resolve) => pending.push(resolve)));
+    live.push(walk()[0]!, 0);
+    live.update(0, camera, new THREE.Vector3(), false);
+    expect(live.chunks.get(0)).toBe("built");
+    const group = live.root.getObjectByName("hybrid");
+    expect(group).toBeUndefined(); // built, still compiling
+    expect(pending).toHaveLength(1);
+    pending[0]!();
+    await Promise.resolve();
+    expect(live.root.getObjectByName("hybrid")?.parent).toBe(live.root);
+    live.dispose();
+  });
+
+  it("reuses the chunks it left on a warp when the player comes back", () => {
+    const live = createLiveWorld(fakeWorld());
+    const base = walk()[0]!;
+    const settle = () => {
+      for (let i = 0; i < 4; i++) live.update(0, camera, new THREE.Vector3(), false);
+    };
+    live.push(base, 0);
+    settle();
+    const before = live.builds.length;
+    const groupOfA = live.root.getObjectByName("hybrid");
+    live.push({ ...base, mapId: 2, player: { ...base.player, x: 0, y: 0 }, fade: 1 }, GB_FRAME_SECONDS);
+    settle();
+    expect(groupOfA?.parent).toBeNull(); // left, not drawn
+    live.push(base, 2 * GB_FRAME_SECONDS);
+    settle();
+    expect(live.builds.length).toBe(before + 1); // only map C was built
+    expect(groupOfA?.parent).toBe(live.root);
+    expect(live.chunks.get(0)).toBe("built");
+    live.dispose();
+  });
 });
 
 describe("ghosts", () => {

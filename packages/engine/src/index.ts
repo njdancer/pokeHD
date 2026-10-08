@@ -6,6 +6,7 @@ import { blendCycle, type DayCycle } from "./look/cycle.ts";
 import { mergeLook, STRUCTURAL, type LookParams } from "./look/params.ts";
 import { DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 import { createPlaceholder } from "./look/placeholder.ts";
+import { NEUTRAL_TINT, normTint } from "./look/grade.ts";
 import { createPost } from "./look/post.ts";
 import { createRig } from "./look/rig.ts";
 import { webgpuViewsWork } from "./webgpu-probe.ts";
@@ -40,11 +41,25 @@ export interface WorldContent {
   /** Point the camera and the DoF focus follow. */
   target: THREE.Vector3;
   update(seconds: number, camera: THREE.Camera, sunDirection: THREE.Vector3, spriteShadows: boolean): void;
+  /**
+   * The colour of the place on screen ("#rrggbb"), which the grade leans toward by
+   * `grade.placeTint`; null or absent is neutral. The engine eases between places.
+   */
+  readonly placeTint?: string | null;
+  /**
+   * Called with the renderer's shader precompiler once this content is rendered (null when it no
+   * longer is). Content that adds objects while running can compile them first, off the frame.
+   */
+  setCompiler?(compile: ((object: THREE.Object3D) => Promise<void>) | null): void;
 }
 
 export interface EngineStats {
   /** CPU time spent building and submitting the last frame, ms. */
   cpuMs: number;
+  /** Of that, the world's own update (live chunk builds happen here), ms. */
+  updateMs: number;
+  /** Of that, rendering and post-processing (pipeline compiles and uploads land here), ms. */
+  renderMs: number;
   width: number;
   height: number;
 }
@@ -76,6 +91,8 @@ export interface EngineOptions {
 // same canvas. A superseded engine never renders and leaves the shared GPU context alone:
 // disposing a WebGL2 renderer calls loseContext(), which would kill its successor too.
 const canvasOwner = new WeakMap<HTMLCanvasElement, symbol>();
+/** Time constant for easing the grade between places, seconds. */
+const PLACE_TINT_SECONDS = 0.6;
 
 /** Owns the canvas and the frame loop. Framework-agnostic: React only mounts it. */
 export async function createEngine(canvas: HTMLCanvasElement, options: EngineOptions = {}): Promise<Engine> {
@@ -87,6 +104,12 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const forceWebGL = options.forceWebGL ?? (query.has("webgl") || !(await webgpuViewsWork()));
   const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, forceWebGL });
   await renderer.init();
+  // three.js puts a small InstancedMesh's matrices in a uniform array sized by its instance count
+  // and named after the buffer, so every one gets its own shader: dozens per map chunk, each
+  // compiled on first draw (seconds of stalls in WebGL2). With no uniform-buffer room they all use
+  // instanced attributes and share their shaders.
+  const capabilities = (renderer.backend as unknown as { capabilities: { getUniformBufferLimit(): number } }).capabilities;
+  capabilities.getUniformBufferLimit = () => 0;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap; // PCF honours shadow.radius for softness
 
@@ -98,13 +121,14 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   let world: WorldContent = options.world ?? createPlaceholder();
   scene.add(world.root);
   const post = createPost(renderer, scene, camera);
+  const compile = (object: THREE.Object3D) => post.compile(object);
 
   const fogNear = uniform(30);
   const fogFar = uniform(100);
   const fogColor = uniform(rig.fogColor);
 
   let fixedSize: { width: number; height: number } | null = null;
-  const stats: EngineStats = { cpuMs: 0, width: 0, height: 0 };
+  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, width: 0, height: 0 };
   const resize = () => {
     if (fixedSize) {
       renderer.setPixelRatio(1);
@@ -137,6 +161,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     resize();
   };
   rebuild();
+  world.setCompiler?.(compile);
 
   const clock = createDayClock(params.time);
   let cycle: DayCycle | null = null;
@@ -175,6 +200,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
 
   look.setCycle(DEFAULT_CYCLE);
 
+  const placeTint: [number, number, number] = [...NEUTRAL_TINT];
   const timer = new THREE.Timer();
   let elapsed = 0;
   const frameHooks: { before?: () => void; after?: () => void } = {};
@@ -190,6 +216,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     if (p.camera.orbit) p.camera.yaw = ((p.camera.yaw + dt * 8 + 180) % 360) - 180;
 
     world.update(elapsed, camera, rig.sunDirection, p.shadows.spriteShadows);
+    stats.updateMs = performance.now() - t0;
     const pitch = p.camera.pitch * (Math.PI / 180);
     const yaw = p.camera.yaw * (Math.PI / 180);
     camera.position
@@ -206,8 +233,14 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     sky.follow(camera);
     fogNear.value = p.fog.near;
     fogFar.value = p.fog.far;
-    post.update(p, camera.position.distanceTo(world.target), clock.fade);
+    // Ease toward the place's tint, so walking into a town shifts the grade over a second or so.
+    const want = world.placeTint ? normTint(world.placeTint) : NEUTRAL_TINT;
+    const k = 1 - Math.exp(-dt / PLACE_TINT_SECONDS);
+    for (let i = 0; i < 3; i++) placeTint[i]! += (want[i]! - placeTint[i]!) * k;
+    post.update(p, camera.position.distanceTo(world.target), clock.fade, placeTint);
+    const tRender = performance.now();
     post.render();
+    stats.renderMs = performance.now() - tRender;
     stats.cpuMs = performance.now() - t0;
 
   };
@@ -230,8 +263,10 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     stats,
     setWorld(next) {
       scene.remove(world.root);
+      world.setCompiler?.(null);
       world = next;
       scene.add(world.root);
+      world.setCompiler?.(compile);
     },
     setFixedSize(size) {
       fixedSize = size;
@@ -245,6 +280,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       );
     },
     dispose() {
+      world.setCompiler?.(null);
       renderer.setAnimationLoop(null);
       clearTimeout(rebuildTimer);
       disposePanel?.();

@@ -1,18 +1,23 @@
 import * as THREE from "three/webgpu";
-import { LABEL_TABLES, type MapData, type MapId, type WorldData } from "@pokehd/rom";
+import { FIRST_INDOOR_MAP, LABEL_TABLES, type MapData, type MapId, type WorldData } from "@pokehd/rom";
 import type { LookController, WorldContent } from "../index.ts";
 import { disposeTree } from "./content.ts";
 import { actorBob, actorOffset, createGhosts, GHOST_LOOKS, DEFAULT_GHOST_LOOK, type GhostLook, type GhostState } from "./ghosts.ts";
 import { DEFAULT_STYLE_PARAMS, type StyleParams } from "./params.ts";
+import { placeColours as sgbPlaceColours, PLAIN_COLOURS, playerRamp } from "./place.ts";
 import { buildRegion, placeMaps, TILE_UNITS } from "./region.ts";
-import { faceCamera, PERSON_GEOMETRY, personMaterial } from "./sprites.ts";
+import { createSpriteSet, faceCamera, SPRITE_RED, SPRITE_SEEL, type Facing, type SpriteActor } from "./sprites.ts";
 import { buildFlat, buildStyle, DEFAULT_STYLE, type StyleId } from "./styles.ts";
 
 // The live overworld (p1-state-render): the world the game is in, driven by a stream of decoded
 // game state. Each map is a chunk built from ROM data and positioned by its connections, so
 // walking across a route edge needs no rebuild. Chunks two connections away are built ahead,
 // one per frame and only while the player is well inside a map, so a build never lands on the
-// frame a route edge is crossed.
+// frame a route edge is crossed. Chunks left behind (by a warp, or by walking more than two
+// connections away) are kept, unrendered, for a while: going back outside from a house reuses
+// them rather than building them again, and keeps their shaders compiled (the first frame that
+// draws freshly built chunks can take 80–160 ms in WebGPU and seconds in WebGL2). Given the
+// engine's precompiler, a new chunk joins the scene only once its shaders are compiled.
 // World units: 1 unit = 1 step, as everywhere in ./world.
 
 /**
@@ -26,11 +31,23 @@ export interface LiveActor {
   y: number;
   step: { dx: number; dy: number; progress: number } | null;
   animFrame: number;
+  /** Which way the sprite faces; down when absent. */
+  facing?: Facing;
 }
 export interface LiveState {
   mapId: number;
-  player: LiveActor;
-  npcs: (LiveActor & { slot: number; visible: boolean })[];
+  /**
+   * wLastMap, the town or route last stepped out of: buildings take its colours. When absent,
+   * the last outdoor map this world saw stands in.
+   */
+  lastMap?: number;
+  /** `transport` picks the player's sheet (walking, bike, surfing); walking when absent. */
+  player: LiveActor & { transport?: "walk" | "bike" | "surf" };
+  /**
+   * `pictureId` is the sprite ID (SPRITE_* constant); when absent, the map data's sprite for
+   * the slot's object is used.
+   */
+  npcs: (LiveActor & { slot: number; visible: boolean; pictureId?: number })[];
   /** 0 normal, 1 black, −1 white. */
   fade: number;
 }
@@ -43,6 +60,8 @@ const MARGIN_BLOCKS = 3;
 const KEEP_HOPS = 2;
 /** Far chunks wait until the player is this many steps inside the current map. */
 const BUILD_CLEARANCE = 4;
+/** Built chunks kept, unrendered, after they leave the loaded set. */
+const SPARE_CHUNKS = 10;
 
 export interface LiveWorldOptions {
   style?: StyleId;
@@ -51,6 +70,8 @@ export interface LiveWorldOptions {
   look?: LookLike;
   /** How friends' ghosts are drawn; see `GHOST_LOOKS`. */
   ghostLook?: GhostLook;
+  /** Colour places from their SGB palettes (./place.ts); false gives the plain base look. Default true. */
+  sgbColours?: boolean;
   /** Seconds on the performance clock; tests replace it. */
   clock?: () => number;
 }
@@ -68,8 +89,12 @@ export interface LiveWorld extends WorldContent {
   setGhostLook(look: GhostLook): void;
   /** Friend ID → whether their ghost is drawn this frame. */
   readonly ghosts: ReadonlyMap<string, boolean>;
+  /** The engine hands over its shader precompiler; new chunks wait for it before being drawn. */
+  setCompiler(compile: ((object: THREE.Object3D) => Promise<void>) | null): void;
   /** The engine's look, once it exists (the engine is created with this world as content). */
   setLook(look: LookLike): void;
+  /** The latest chunk builds, newest last (at most 16), for perf checks. `at` is performance.now(). */
+  readonly builds: readonly { map: MapId; ms: number; at: number }[];
   /** Map ID → chunk build status, for debugging. */
   readonly chunks: ReadonlyMap<MapId, "queued" | "built">;
   dispose(): void;
@@ -83,6 +108,8 @@ interface Chunk {
   bx: number;
   by: number;
   group: THREE.Group | null;
+  /** Where the group sits relative to the map origin, in world units. */
+  offset: { x: number; z: number };
 }
 
 export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}): LiveWorld {
@@ -92,8 +119,19 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   const target = new THREE.Vector3();
   const chunks = new Map<MapId, Chunk>();
   let current: MapId | null = null;
+  /** The town or route outside, for indoor maps' colours. */
+  let outside: MapId | undefined;
   let look = options.look;
+  let compile: ((object: THREE.Object3D) => Promise<void>) | null = null;
+  /** Chunk groups whose shaders are compiled (or that were built with no compiler to wait for). */
+  const compiled = new WeakSet<THREE.Group>();
+  /** Adds a loaded chunk's group to the scene, once it's compiled. */
+  const show = (c: Chunk) => {
+    if (c.group && compiled.has(c.group)) root.add(c.group);
+  };
   const clock = options.clock ?? (() => performance.now() / 1000);
+  const sgb = options.sgbColours ?? true;
+  const placeColours = (...args: Parameters<typeof sgbPlaceColours>) => (sgb ? sgbPlaceColours(...args) : PLAIN_COLOURS);
 
   // Placing maps: the first map anchors world space; connected maps are placed relative to it.
   const place = (id: MapId): Chunk | undefined => chunks.get(id);
@@ -107,11 +145,11 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     let here = place(id);
     if (!here) {
       // Not connected to what's loaded: a warp. Start over around the new map.
-      for (const c of chunks.values()) drop(c);
-      chunks.clear();
       const map = world.maps[id];
       if (!map) return;
-      here = { map, bx: 0, by: 0, hops: 0, group: null };
+      for (const c of chunks.values()) retire(c);
+      chunks.clear();
+      here = revive(map, 0, 0, 0);
       chunks.set(id, here);
     }
     current = id;
@@ -125,8 +163,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         for (const n of neighbours(c)) {
           if (keep.has(n.map.id)) continue;
           keep.add(n.map.id);
-          const existing = chunks.get(n.map.id);
-          const chunk = existing ?? { ...n, hops, group: null };
+          const chunk = chunks.get(n.map.id) ?? revive(n.map, n.bx, n.by, hops);
           chunk.hops = hops;
           chunks.set(n.map.id, chunk);
           next.push(chunk);
@@ -136,10 +173,34 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     }
     for (const [cid, c] of chunks) {
       if (!keep.has(cid)) {
-        drop(c);
+        retire(c);
         chunks.delete(cid);
       }
     }
+  };
+
+  /** Built chunks out of the loaded set, oldest first. Their maps' borders don't depend on placement. */
+  const spare = new Map<MapId, Chunk>();
+  const retire = (c: Chunk) => {
+    if (!c.group) return;
+    root.remove(c.group);
+    spare.delete(c.map.id);
+    spare.set(c.map.id, c);
+    for (const [id, old] of spare) {
+      if (spare.size <= SPARE_CHUNKS) break;
+      spare.delete(id);
+      drop(old);
+    }
+  };
+  /** A chunk for `map` at a new placement: a spare one if there is one, else one to build. */
+  const revive = (map: MapData, bx: number, by: number, hops: number): Chunk => {
+    const old = spare.get(map.id);
+    if (!old?.group) return { map, bx, by, hops, group: null, offset: { x: 0, z: 0 } };
+    spare.delete(map.id);
+    const c = { ...old, bx, by, hops };
+    c.group!.position.set(bx * 2 + c.offset.x, 0, by * 2 + c.offset.z);
+    show(c);
+    return c;
   };
 
   const drop = (c: Chunk) => {
@@ -149,7 +210,9 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     c.group = null;
   };
 
+  const builds: { map: MapId; ms: number; at: number }[] = [];
   const build = (c: Chunk) => {
+    const t0 = performance.now();
     const others = neighbours(c);
     const rect = (m: { map: MapData; bx: number; by: number }) => ({
       id: m.map.id, x0: m.bx, y0: m.by, x1: m.bx + m.map.widthBlocks, y1: m.by + m.map.heightBlocks,
@@ -176,18 +239,38 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     };
     const region = buildRegion(world, c.map.id, { marginBlocks: MARGIN_BLOCKS, drawBorder });
     const labelled = LABEL_TABLES[world.tilesets[c.map.tileset]!.name] !== undefined;
-    const group = labelled ? buildStyle(style, region, params) : buildFlat(region);
-    group.position.set(c.bx * 2 - region.rootX * TILE_UNITS, 0, c.by * 2 - region.rootY * TILE_UNITS);
+    const group = labelled ? buildStyle(style, region, params, placeColours(world, c.map.id, outside)) : buildFlat(region);
+    c.offset = { x: -region.rootX * TILE_UNITS, z: -region.rootY * TILE_UNITS };
+    group.position.set(c.bx * 2 + c.offset.x, 0, c.by * 2 + c.offset.z);
     c.group = group;
-    root.add(group);
+    if (!compile) {
+      compiled.add(group);
+      root.add(group);
+    } else {
+      const ready = () => {
+        compiled.add(group);
+        // It may have been dropped, or retired and revived (a new Chunk with the same group).
+        const now = chunks.get(c.map.id);
+        if (now?.group === group) show(now);
+      };
+      compile(group).then(ready, (e: unknown) => {
+        console.warn("[pokeHD] couldn't precompile a map chunk", e);
+        ready();
+      });
+    }
+    builds.push({ map: c.map.id, ms: performance.now() - t0, at: t0 });
+    if (builds.length > 16) builds.shift();
   };
 
   // Actors, interpolated one emulator frame behind the newest state.
-  const playerSprite = new THREE.Mesh(PERSON_GEOMETRY, personMaterial("player"));
-  playerSprite.castShadow = true;
+  const sprites = createSpriteSet();
+  const player = sprites.actor();
+  const playerColours = sgb ? playerRamp(world) : PLAIN_COLOURS.people;
+  const playerSprite = player.mesh;
   root.add(playerSprite);
-  const npcMaterial = personMaterial("npc");
-  const npcSprites = new Map<number, THREE.Mesh>();
+  const npcSprites = new Map<number, SpriteActor>();
+  const playerSheet = (transport: LiveState["player"]["transport"]) =>
+    transport === "bike" ? world.bikeSprite : world.sprites[transport === "surf" ? SPRITE_SEEL : SPRITE_RED];
 
   interface Sample { at: number; x: number; z: number }
   let prev: Sample | null = null;
@@ -221,6 +304,9 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     setLook(next) {
       look = next;
     },
+    setCompiler(next) {
+      compile = next;
+    },
     setGhosts(states, at = clock()) {
       ghosts.set(states, at);
     },
@@ -230,11 +316,19 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     get ghosts() {
       return ghosts.visible;
     },
+    get builds() {
+      return builds;
+    },
     get chunks() {
       return new Map([...chunks].map(([id, c]) => [id, c.group ? "built" : "queued"] as const));
     },
+    get placeTint() {
+      return current === null ? null : placeColours(world, current, outside).tint;
+    },
     push(state, at = clock()) {
       const before = current;
+      if (state.lastMap !== undefined) outside = state.lastMap;
+      else if (state.mapId < FIRST_INDOOR_MAP) outside = state.mapId;
       enter(state.mapId);
       const c = current === null ? undefined : chunks.get(current);
       if (!c) return;
@@ -264,23 +358,26 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         const x = prev.x + (last.x - prev.x) * t;
         const z = prev.z + (last.z - prev.z) * t;
         playerSprite.position.set(x, bob(latest.player), z);
+        player.show(playerSheet(latest.player.transport), latest.player.facing ?? "down", latest.player.animFrame, playerColours);
+        const people = placeColours(world, here.map.id, outside).people;
         target.set(x, 0.5, z);
 
         const seen = new Set<number>();
         for (const npc of latest.npcs) {
           let s = npcSprites.get(npc.slot);
           if (!s) {
-            s = new THREE.Mesh(PERSON_GEOMETRY, npcMaterial);
-            s.castShadow = true;
+            s = sprites.actor();
             npcSprites.set(npc.slot, s);
-            root.add(s);
+            root.add(s.mesh);
           }
           const d = drawn(npc, here);
-          s.position.set(d.x, bob(npc), d.z);
-          s.visible = npc.visible;
+          const sprite = npc.pictureId ?? here.map.npcs[npc.slot - 1]?.sprite;
+          s.show(sprite === undefined ? null : world.sprites[sprite], npc.facing ?? "down", npc.animFrame, people);
+          s.mesh.position.set(d.x, bob(npc), d.z);
+          s.mesh.visible = npc.visible;
           seen.add(npc.slot);
         }
-        for (const [slot, s] of npcSprites) if (!seen.has(slot)) s.visible = false;
+        for (const [slot, s] of npcSprites) if (!seen.has(slot)) s.mesh.visible = false;
 
         // Fades: the game's own fade drawn over the HD view; the day wraps inside a black one.
         const fade = latest.fade;
@@ -296,20 +393,20 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
 
       ghosts.update(clock(), camera, locate);
       faceCamera(playerSprite, camera);
-      for (const s of npcSprites.values()) faceCamera(s, camera);
+      for (const s of npcSprites.values()) faceCamera(s.mesh, camera);
       // Keep the fade quad just in front of the camera, filling the view.
       camera.getWorldDirection(fadeQuad.position);
       fadeQuad.position.multiplyScalar(0.6).add(camera.position);
       fadeQuad.quaternion.copy(camera.quaternion);
     },
     dispose() {
-      for (const c of chunks.values()) drop(c);
+      for (const c of [...chunks.values(), ...spare.values()]) drop(c);
       chunks.clear();
+      spare.clear();
       fadeQuad.geometry.dispose();
       fadeMaterial.dispose();
       ghosts.dispose();
-      (playerSprite.material as THREE.Material).dispose();
-      npcMaterial.dispose();
+      sprites.dispose();
     },
   };
 }

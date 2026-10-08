@@ -21,8 +21,16 @@ export function fakeWorld(): WorldData {
     id, name, tileset: 0, widthBlocks: w, heightBlocks: blocks.length / w, blocks: new Uint8Array(blocks),
     borderBlock: 1, connections, warps: [], signs: [], npcs: [],
   });
+  // Sprite 1: a blank walking sheet.
+  const sheet = { id: 1, still: false, tiles: new Uint8Array(24 * 64) };
   return {
     tilesets: [tileset],
+    sprites: [null, sheet],
+    bikeSprite: { ...sheet, id: 0 },
+    // Every palette the route's (green); Pallet Town's (palette 1) near-white.
+    sgbPalettes: Array.from({ length: 0x25 }, (_, i) =>
+      i === 1 ? [0xffefff, 0xcee7de, 0xa5d6ff, 0x181010] : [0xffefff, 0xade75a, 0xa5d6ff, 0x181010],
+    ),
     maps: [
       map(0, "A", [0, 2, 0, 0], 2, [{ direction: "north", map: 1, offsetBlocks: -1 }]),
       map(1, "B", [0, 0, 0], 3, [{ direction: "south", map: 0, offsetBlocks: 1 }]),

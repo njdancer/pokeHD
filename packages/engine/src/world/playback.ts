@@ -2,6 +2,7 @@ import { MAP_NAMES, type MapData, type MapId, type WorldData } from "@pokehd/rom
 import type { GhostState } from "./ghosts.ts";
 import type { LiveActor, LiveState } from "./live.ts";
 import { buildRegion } from "./region.ts";
+import { initialFacing, type Facing } from "./sprites.ts";
 
 // A stand-in for a recorded emulator session: a scripted walk across connected maps, one state
 // per Game Boy frame, shaped like the decoder's output. It lets the live world be built and
@@ -9,7 +10,6 @@ import { buildRegion } from "./region.ts";
 // Moves follow the game's timing: a walking step takes 8 frames, the walk animation advances
 // every 4, and a door warp fades out and in a third at a time.
 
-export type Facing = "down" | "up" | "left" | "right";
 export interface ScriptedState extends LiveState {
   player: LiveActor & { facing: Facing };
 }
@@ -75,7 +75,9 @@ export function scriptedWalk(world: WorldData, plan: WalkPlan): ScriptedState[] 
     frames.push({
       mapId: map.id,
       player: { ...player, facing, x: player.x - ox, y: player.y - oy },
-      npcs: map.npcs.map((n, i) => ({ slot: i + 1, x: n.x, y: n.y, step: null, animFrame: 0, visible: true })),
+      npcs: map.npcs.map((n, i) => ({
+        slot: i + 1, x: n.x, y: n.y, step: null, animFrame: 0, visible: true, pictureId: n.sprite, facing: initialFacing(n.movement),
+      })),
       fade,
     });
   const at = (sx: number, sy: number) => {
@@ -146,4 +148,23 @@ export function palletToViridian(world: WorldData): ScriptedState[] {
 export function asGhost(id: string, name: string, state: ScriptedState): GhostState {
   const { x, y, step, animFrame } = state.player;
   return { id, name, mapId: state.mapId, x, y, step, animFrame };
+}
+
+/**
+ * One frame standing still in `map`, in front of its first door unless `at` says where, with
+ * every object where the map data places it. For looking around a map without walking there.
+ */
+export function standingState(world: WorldData, map: MapId, at?: { x: number; y: number }): ScriptedState {
+  const data = world.maps[map];
+  if (!data) throw new Error(`no map ${map}`);
+  const door = data.warps[0];
+  const spot = at ?? (door ? { x: door.x, y: door.y + 1 } : { x: data.widthBlocks, y: data.heightBlocks });
+  return {
+    mapId: map,
+    player: { ...spot, step: null, animFrame: 0, facing: "down" },
+    npcs: data.npcs.map((n, i) => ({
+      slot: i + 1, x: n.x, y: n.y, step: null, animFrame: 0, visible: true, facing: initialFacing(n.movement),
+    })),
+    fade: 0,
+  };
 }
