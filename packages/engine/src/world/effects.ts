@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
-import { color, float, floor, hash, instanceIndex, mix, positionLocal, positionWorld, sin, smoothstep, time, uv, vec3 } from "three/tsl";
+import { color, float, floor, hash, instanceIndex, mix, positionLocal, positionWorld, sin, smoothstep, uv, vec3 } from "three/tsl";
+import { sceneTime as time } from "../scene-time.ts";
 import { LABEL_RAMPS } from "./palette.ts";
 import type { StyleParams } from "./params.ts";
 import { TILE_UNITS } from "./region.ts";

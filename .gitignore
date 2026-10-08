@@ -23,5 +23,7 @@ dist/
 
 # Dev page renders (POST /__dev/shot)
 shots/
+# Screenshot regression baselines: renders of the ROM's graphics, per machine
+apps/web/e2e/baselines/
 test-results/
 playwright-report/
