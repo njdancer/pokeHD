@@ -7,11 +7,11 @@ const VSYNC = 1000 / 60;
  * Runs `seconds` of a 60 Hz display whose GPU needs `workMs(rung)` per frame; frames that miss
  * vsync wait for the next one. Returns the rung at each frame.
  */
-function run(governor: ReturnType<typeof createGovernor>, seconds: number, workMs: (rung: number) => number, start = 0) {
+function run(governor: ReturnType<typeof createGovernor>, seconds: number, workMs: (rung: number) => number, start = 0, vsync = VSYNC) {
   let now = start;
   const rungs: number[] = [];
   while (now < start + seconds) {
-    const interval = Math.max(1, Math.ceil(workMs(governor.rung) / VSYNC - 1e-9)) * VSYNC;
+    const interval = Math.max(1, Math.ceil(workMs(governor.rung) / vsync - 1e-9)) * vsync;
     now += interval / 1000;
     governor.sample(interval, now);
     rungs.push(governor.rung);
@@ -73,5 +73,32 @@ describe("createGovernor", () => {
       g.sample(i % 60 === 0 ? 400 : VSYNC, now);
     }
     expect(g.rung).toBe(0);
+  });
+
+  it("settles below a rung it keeps failing instead of flickering (120 Hz display)", () => {
+    // Work hovers around the 60 fps budget at full size: some windows pass, most don't.
+    let seed = 7;
+    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const g = createGovernor();
+    const work = (r: number) => gpu(17)(r) * (0.85 + rand() * 0.3);
+    const first = run(g, 60, work, 0, 1000 / 120);
+    const { rungs } = run(g, 120, work, first.end, 1000 / 120);
+    const changes = rungs.filter((r, i) => i > 0 && r !== rungs[i - 1]).length;
+    expect(changes).toBeLessThanOrEqual(4); // by now, a probe up a minute at most, and its return
+  });
+
+  it("doesn't take a startup full of stalls for the steady frame rate", () => {
+    const g = createGovernor();
+    // Five seconds of shader compiles: mostly 150-400 ms frames, a few 60 ms ones.
+    let now = 0;
+    for (let i = 0; now < 5; i++) {
+      const ms = i % 4 === 0 ? 60 : 150 + (i % 3) * 120;
+      now += ms / 1000;
+      g.sample(ms, now);
+    }
+    // Then a steady 30 ms at full size: stepping down must stick, not be undone as fruitless.
+    run(g, 40, gpu(30), now);
+    expect(g.rung).toBeGreaterThanOrEqual(2);
+    expect(g.rung).toBeLessThanOrEqual(4);
   });
 });

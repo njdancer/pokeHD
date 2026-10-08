@@ -8,7 +8,10 @@
 // - a whole descent to the bottom rung that doesn't make frames faster is undone and held off
 //   for a while (the frame rate is capped elsewhere: iOS Low Power Mode's 30 fps, or a CPU-bound
 //   page). One step alone can't tell: vsync hides a frame that got faster but still misses;
-// - a step up that soon has to come back down waits twice as long before trying again.
+// - a step up that has to come back down within 15 s waits twice as long before trying again,
+//   so a device on the edge of a rung settles below it instead of flickering between the two;
+// - a window with many stalls (startup, shader compiles, a hidden tab) is thrown away whole, so
+//   its few surviving frames can't pass for the steady load.
 // Pure logic, no three.js: the engine feeds it frame intervals and applies the rung it returns.
 
 export interface Rung {
@@ -58,6 +61,10 @@ const DOWN = 0.2;
 const CLEAN = 0.03;
 /** Intervals over this are stalls (tab hidden, a chunk build, a GC), not the steady load. */
 const STALL_MS = 100;
+/** A window with more stalls than this share of its frames says nothing about the steady load. */
+const STALLY = 0.1;
+/** A step down within this many seconds of a step up marks that step up as failed. */
+const PROBE_S = 15;
 
 export function createGovernor(options: GovernorOptions = {}): Governor {
   const budget = 1000 / (options.targetFps ?? 60);
@@ -78,15 +85,22 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
   let floor = RUNGS.length - 1;
   let floorUntil = 0;
   let capFor = capHold;
-  /** The last step: where from and when. */
-  let last: { from: number; at: number } | null = null;
+  /** When the governor last arrived at the current rung by stepping up. */
+  let cameUpAt = -Infinity;
+  let stalls = 0;
   /** Where the current run of steps down started, and the mean frame time there. */
   let descent: { from: number; meanMs: number } | null = null;
 
   const move = (to: number, now: number, meanMs: number) => {
-    if (to > rung) descent ??= { from: rung, meanMs };
-    else descent = null;
-    last = { from: rung, at: now };
+    if (to > rung) {
+      descent ??= { from: rung, meanMs };
+      // Coming straight back down from a step up: that rung isn't sustainable yet.
+      if (now - cameUpAt < PROBE_S) upHold[to] = Math.min(upHold[to]! * 2, maxUpHold);
+      cameUpAt = -Infinity;
+    } else {
+      descent = null;
+      cameUpAt = now;
+    }
     rung = to;
     quietUntil = now + settle;
     cleanSince = -1;
@@ -99,7 +113,7 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
     },
     reset(now) {
       rung = 0;
-      last = null;
+      cameUpAt = -Infinity;
       descent = null;
       floor = RUNGS.length - 1;
       capFor = capHold;
@@ -107,18 +121,23 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
       quietUntil = now + settle;
       cleanSince = -1;
       frames = [];
+      stalls = 0;
       windowStart = -1;
     },
     sample(intervalMs, now) {
-      if (now < quietUntil || intervalMs > STALL_MS || intervalMs <= 0) return null;
+      if (now < quietUntil || intervalMs <= 0) return null;
       if (windowStart < 0) windowStart = now;
-      frames.push(intervalMs);
+      if (intervalMs > STALL_MS) stalls++;
+      else frames.push(intervalMs);
       if (now - windowStart < windowS || frames.length < 8) return null;
 
+      const stally = stalls > (frames.length + stalls) * STALLY;
       const missed = frames.filter((ms) => ms > budget * MISS).length / frames.length;
       const meanMs = frames.reduce((a, b) => a + b, 0) / frames.length;
       frames = [];
+      stalls = 0;
       windowStart = now;
+      if (stally) return null;
       if (now >= floorUntil) floor = RUNGS.length - 1;
 
       // At the bottom and no faster than where the descent began: the frame rate is capped
@@ -129,20 +148,8 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
         floorUntil = now + capFor;
         capFor = Math.min(capFor * 2, 600);
         move(top, now, meanMs);
-        last = null; // not a probe up: don't judge it as one
+        cameUpAt = -Infinity; // not a probe up
         return rung;
-      }
-
-      // Judge a step up once the first full window after it is in.
-      const judged = last;
-      last = null;
-      if (judged && now - judged.at < settle + windowS * 2.5) {
-        const { from } = judged;
-        if (from > rung && missed > DOWN) {
-          // Going up broke the budget: back down, and wait longer before trying again.
-          upHold[from] = Math.min(upHold[from]! * 2, maxUpHold);
-          return move(from, now, meanMs);
-        }
       }
 
       if (missed > DOWN) {

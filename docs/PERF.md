@@ -68,10 +68,12 @@ resolution and FXAA instead of SMAA. Neither shows on a small, dense screen.
 **Dynamic resolution.** A governor (`packages/engine/src/look/governor.ts`) watches the time
 between display frames and steps down a ladder when more than a fifth of frames in half a second
 miss 60 fps: render scale 100, 90, 80, 70, 60, 50%, then 50% without depth of field. After 3 s
-of clean frames it tries a rung up; a rung up that fails waits twice as long next time. Vsync
+of clean frames it tries a rung up; a rung up that has to come back down within 15 s waits twice
+as long next time (up to a minute), so a device on the edge of a rung settles below it. Vsync
 hides how close a frame came, so it can't judge a single step; instead, a whole descent that
 leaves frames no faster (iOS Low Power Mode's 30 fps cap, or a CPU-bound page) is undone and held
-off for 30 s, then 60, 120 and so on. Stalls over 100 ms (map builds, a hidden tab) are ignored.
+off for 30 s, then 60, 120 and so on. Stalls over 100 ms (map builds, a hidden tab) are ignored,
+and a half second with many of them (startup, shader compiles) is thrown away whole.
 `?dynres=0` turns it off; `?stats` and `/dev/live` show the current scale.
 
 | Rung (M1 Max, 1440p-class) | Frame | iPhone estimate |
