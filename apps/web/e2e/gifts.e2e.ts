@@ -9,18 +9,11 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
 import { GameBoy, GiftDesk, SafePoint } from "@pokehd/emu";
 import { encodeText, POKEBLUE_SHA1, SYMBOLS } from "@pokehd/rom";
 import { playIntro } from "../../../packages/emu/src/testing.ts";
+import { addFriend, adminToken, signInWith } from "./friends.ts";
 
 const ROM_PATH = fileURLToPath(new URL("../../../rom/pokeblue.gb", import.meta.url));
 const WASM_PATH = fileURLToPath(new URL("../../../packages/emu/src/generated/sameboy.wasm", import.meta.url));
 
-function adminToken(): string | undefined {
-  if (process.env.POKEHD_ADMIN_TOKEN) return process.env.POKEHD_ADMIN_TOKEN;
-  try {
-    return /^ADMIN_TOKEN\s*=\s*"?([^"\n]+)"?/m.exec(readFileSync(new URL("../.dev.vars", import.meta.url), "utf8"))?.[1];
-  } catch {
-    return undefined;
-  }
-}
 const token = adminToken();
 test.skip(!process.env.POKEHD_GIFTS || !token || !existsSync(ROM_PATH), "POKEHD_GIFTS=1, the ROM and ADMIN_TOKEN needed");
 
@@ -85,11 +78,9 @@ async function player(browser: Browser, name: string, sram: Uint8Array): Promise
       return kind.startsWith("webgl") ? null : (getContext as (...a: unknown[]) => unknown).call(this, kind, ...rest);
     } as typeof getContext;
   });
-  const invite = await page.request.post("/api/admin/invites", { headers: { authorization: `Bearer ${token}` }, data: {} });
-  const { code } = (await invite.json()) as { code: string };
-  expect((await page.request.post("/api/join", { data: { code, name } })).ok()).toBe(true);
+  await signInWith(page.request, (await addFriend(page.request, name)).link);
   // Put the save in this profile's IndexedDB before the game page opens.
-  await page.goto("/join");
+  await page.goto("/login");
   await page.evaluate(
     async ({ key, bytes }) => {
       const url = "/src/client/saves/save-store.ts";
