@@ -424,8 +424,8 @@ of our own, and needs no list of move animations. Staging the battle where it ha
 place's own lighting and time of day.
 
 Arena look: three styles (`field`, on the spot; `bases`, on the spot with stone bases; `stage`,
-a separate round stage). `field` is the default while Nick picks (thread "HD battle scenes",
-`/mnt/project-files/battles/arena-options.png`); switching is the `arena` option.
+a separate round stage). Nick picked `field` (2026-10-08): the battle plays out where the player
+stands, on the overworld's own ground. The other styles stay behind the `arena` option.
 
 Alternative: a separate arena scene per environment with its own move effects. More control of
 the look, but every effect would be ours, not the game's.
