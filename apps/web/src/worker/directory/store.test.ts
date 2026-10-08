@@ -143,7 +143,7 @@ describe("DirectoryStore", () => {
     const { store, db } = makeStore();
     db.prepare("INSERT INTO players (id, name, created_at) VALUES ('old', 'Nick', 1)").run();
     const nick = store.ensurePlayer("nick@example.com", "Nick");
-    expect(nick).toEqual({ id: "old", name: "Nick", email: "nick@example.com" });
+    expect(nick).toEqual({ id: "old", name: "Nick", email: "nick@example.com", romAccess: true });
     expect(store.ensurePlayer("nick@example.com", "Nick")).toEqual(nick);
 
     const fresh = makeStore().store;
@@ -158,7 +158,7 @@ describe("DirectoryStore", () => {
       INSERT INTO players VALUES ('p1', 'Sam', 1, NULL);
     `);
     const { store } = makeStore(db);
-    expect(store.listPlayers()).toMatchObject([{ id: "p1", name: "Sam", email: null }]);
+    expect(store.listPlayers()).toMatchObject([{ id: "p1", name: "Sam", email: null, romAccess: true }]);
     expect(store.setEmail("p1", "sam@example.com")).toEqual({ ok: true });
     const link = await code(store, "p1", "link");
     expect((await store.verify("sam@example.com", link)).ok).toBe(true);
@@ -176,6 +176,18 @@ describe("DirectoryStore", () => {
     expect(await store.createCode(sam.player.id, "link")).toEqual({ ok: false, error: "not-found" });
     expect(store.listPlayers()).toEqual([]);
     added(store, "sam@example.com", "Sam");
+  });
+
+  it("shares Nick's cartridge with new players until he stops it", async () => {
+    const { store } = makeStore();
+    const sam = await signedIn(store, "sam@example.com", "Sam");
+    expect(sam.player.romAccess).toBe(true);
+    expect(store.setRomAccess(sam.player.id, false)).toBe(true);
+    expect(await store.authenticate(sam.sessionToken)).toMatchObject({ romAccess: false });
+    expect(store.listPlayers()).toMatchObject([{ romAccess: false }]);
+    expect(store.setRomAccess(sam.player.id, true)).toBe(true);
+    expect(await store.authenticate(sam.sessionToken)).toMatchObject({ romAccess: true });
+    expect(store.setRomAccess("nobody", true)).toBe(false);
   });
 
   it("signing out ends only that session", async () => {

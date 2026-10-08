@@ -117,6 +117,11 @@ export class GiftDesk {
     this.#options.emit({ type: "settled", ids });
   }
 
+  /** Received gifts in the game that aren't yet handed over in a save. */
+  get unsettled(): number {
+    return this.#unsaved.length + this.#inSave.length;
+  }
+
   get pending(): number {
     return this.#safe.pending;
   }

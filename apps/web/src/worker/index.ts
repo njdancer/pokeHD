@@ -20,11 +20,12 @@ const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
 app.get("/health", (c) => c.json({ ok: true }));
 
 /**
- * Serves Nick's private test ROM to Nick: his session in the browser, or DEV_ROM_TOKEN for
- * tools (`pnpm rom:fetch` in a sandbox with no browser).
+ * Serves Nick's cartridge (D26): to Nick, to friends he invited and hasn't stopped (romAccess),
+ * and to tools with DEV_ROM_TOKEN (`pnpm rom:fetch` in a sandbox with no browser). `/dev-rom`
+ * is its old name, kept for tools.
  */
-app.get("/dev-rom", async (c) => {
-  const allowed = (await bearerMatches(c, c.env.DEV_ROM_TOKEN)) || isAdmin(c, await currentPlayer(c));
+app.on("GET", ["/rom", "/dev-rom"], async (c) => {
+  const allowed = (await bearerMatches(c, c.env.DEV_ROM_TOKEN)) || romAccess(c, await currentPlayer(c));
   if (!allowed) return c.text("Not found", 404);
   const rom = await c.env.PRIVATE.get(c.env.DEV_ROM_KEY);
   if (!rom) return c.text("Not found", 404);
@@ -139,9 +140,16 @@ app.post("/admin/players/:id/link", async (c) => {
   return c.json(await invite(c, player, body.send === true));
 });
 
-/** Gives a player an email: for friends who joined with a D19 invite code. */
+/**
+ * Changes a player: `email` gives one to a friend who joined with a D19 invite code;
+ * `romAccess` lets them load Nick's cartridge or stops them (D26).
+ */
 app.patch("/admin/players/:id", async (c) => {
-  const body = await c.req.json<{ email?: unknown }>().catch(() => ({}) as never);
+  const body = await c.req.json<{ email?: unknown; romAccess?: unknown }>().catch(() => ({}) as never);
+  if (typeof body.romAccess === "boolean") {
+    const changed = await directory(c).setRomAccess(c.req.param("id"), body.romAccess);
+    return changed ? c.json({ ok: true }) : c.json({ error: "not-found" }, 404);
+  }
   const result = await directory(c).setEmail(c.req.param("id"), typeof body.email === "string" ? body.email : "");
   if (result.ok) return c.json({ ok: true });
   return c.json({ error: result.error }, result.error === "not-found" ? 404 : result.error === "email-taken" ? 409 : 400);
@@ -185,9 +193,19 @@ function isAdmin(c: Ctx, player: Player | null): boolean {
   return !!player?.email && player.email === adminEmail(c);
 }
 
+/** Whether `player` may load Nick's cartridge: Nick, or a friend he hasn't stopped (D26). */
+function romAccess(c: Ctx, player: Player | null): boolean {
+  return !!player && (isAdmin(c, player) || player.romAccess);
+}
+
 /** What the browser learns about the signed-in player. */
 function account(c: Ctx, player: Player) {
-  return { player: { id: player.id, name: player.name }, email: player.email, admin: isAdmin(c, player) };
+  return {
+    player: { id: player.id, name: player.name },
+    email: player.email,
+    admin: isAdmin(c, player),
+    romAccess: romAccess(c, player),
+  };
 }
 
 function setSession(c: Ctx, token: string) {

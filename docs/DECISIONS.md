@@ -304,7 +304,96 @@ Alternative: **Cloudflare Access** (reconsidered). Its sign-in page can't be our
 colours), sessions last at most a month, and sign-in leaves for `*.cloudflareaccess.com`, which
 breaks out of an iPhone home-screen app.
 
-## D24. Phones get a mobile quality tier, and everyone gets dynamic resolution
+## D24. Autosave with the game's own save, plus resume points that never beat the save file
+
+Nick's call on 2026-10-08: quality-of-life features such as autosave are in scope; the "game
+behaviour is the original" rule protects play (stats, RNG, AI, glitches), not every detail of
+the software. Two layers:
+
+- **Autosave** runs `SaveGameData` (what the start menu's SAVE calls) through D20's overworld
+  idle point, so it writes a normal save file. It runs every 5 minutes of play, and after a
+  battle ends, a map change or a gift landing, at most once a minute. Any save by hand restarts
+  the clock. It never replaces another trainer's save: if the save file holds a valid save with
+  a different trainer ID or name (NEW GAME over an old save), it waits until the player saves
+  the new game once themselves, as the game's own "older file will be erased" prompt would
+  have them do. Settings has a switch to turn it off.
+- **Resume points** are emulator save states, taken every minute in the world and whenever the
+  page is hidden, kept in IndexedDB next to the save with a SHA-1. On start-up the emulator
+  uses one only if it loads and its battery RAM is byte-for-byte the stored save; otherwise it
+  boots on the save as usual and the point is deleted. So a save made later, an imported .sav
+  or a cloud restore all make a point stale, and a damaged one can never win over the save
+  file. None is taken during a link session, mid-way through a safe-point call, or while a gift
+  sits in the game unsaved (the room would resend it). After resuming, "Load the save file
+  instead" goes back to the title screen.
+
+Why two: Nick doesn't want to rely on a memory dump alone, and the save file alone loses play
+since the last save when a tab closes. Resume points stay on the device for now; a cloud copy
+can follow.
+
+## D25. Kid-proofing: nothing a child taps loses a save
+
+Nick, 2026-10-08: the game is mostly for his young son, on an iPhone 13 Pro as a home-screen
+app, and never losing progress comes first. Made while Nick was away; flagged for his review.
+
+- **Resume points in the cloud too.** For signed-in players each resume point (D24) also goes
+  to R2 (`saves/<player>/<rom>.resume`, gzipped, a few KB), with the SHA-1 of the save it holds.
+  At start-up the page picks the newest point, local or cloud, that holds the save it has; the
+  emulator still checks it byte for byte. A device with no save at all (new phone, storage
+  cleared) restores the cloud save automatically before the game starts, instead of offering
+  it in Settings, since there's nothing local to lose.
+- **Earlier saves.** The page keeps a copy of the battery save at most every 30 minutes of
+  play (the newest 20), and always before anything replaces it: a different trainer's save
+  (NEW GAME), an import, a cloud restore or going back (the newest 10 of those). Each is copied
+  to R2 (`…/history/`), where the server keeps the newest 30. Settings, under Grown-ups, lists
+  both with trainer, badges, Pokémon caught and play time, and "Go back" restores one (keeping
+  the current save in the list first). Periodic rather than every save, so a long session's
+  autosaves don't push the interesting copies out.
+- **The erase question.** When the game is about to ask "The older file will be erased to
+  save. Okay?", the page shows its own: one big "Keep my old adventure" button, and a smaller
+  one that has to be held for 2 seconds to erase. The player's buttons don't reach the game
+  until it's answered, then the page presses A (YES) or B (NO) for them the game's own way, so
+  the game's logic is untouched. The old save is copied to Earlier saves before the question
+  even shows.
+- **"Saved" toast** when an autosave lands (a manual save already says so in the game).
+- **Home-screen app.** A web manifest (`display: standalone`) and an icon of our own; no pinch
+  or double-tap zoom, no pull-to-refresh or rubber-banding, and touches starting on the screen's
+  side edges are cancelled so a swipe can't go back a page. Touch targets are at least 44 px
+  (Select and Start were 26).
+- **Grown-ups check.** Import save, Export, cloud restore, Earlier saves, the autosave switch,
+  Forget ROM (now also confirmed) and Nick's friends list sit behind a multiplication question
+  (6–9 × 3–8). Not security, just enough that a curious child doesn't wander in.
+- **Sign-in stays put.** Checked, no change needed: the session cookie lasts 400 days (the most
+  browsers allow) and every start-up pushes it out again; server sessions don't expire. On
+  iPhone a home-screen app has its own cookies, separate from Safari, so sign in from inside
+  the app by typing the emailed code (the login page says so there); the email's link would
+  sign in Safari instead. Home-screen apps are exempt from Safari's 7-day storage clearing.
+
+## D26. Friends Nick invites play on his cartridge
+
+Nick's call on 2026-10-08, after inviting Charlie, who could sign in but then had to find a ROM
+of his own before they could play together. Nick's ROM was already in the private R2 bucket for
+his own testing (D23); now every player Nick adds may load it too.
+
+- `GET /api/rom` (`/api/dev-rom` stays as an alias for tools) serves it to a signed-in player
+  who is Nick or has `romAccess`. Everyone else, signed out included, gets the same 404.
+- `romAccess` is a per-player flag in the Directory, on by default: every friend Nick adds, and
+  every player already there when this shipped, gets it. Nick turns it off or back on per
+  friend in Friends ("Stop sharing" / "Share cartridge"); players can't change their own.
+- The browser keeps the shared ROM in IndexedDB like one the player loaded, marked as shared,
+  so the game starts offline and quickly. On each start, if the server says the player is
+  signed out or no longer allowed it, the shared copy is deleted and they're asked for their
+  own. A device that never comes back online keeps its copy; that's the limit of revoking.
+- The ROM screen knows who's signed in: signed out, it offers sign-in ("you won't need a ROM of
+  your own"); signed in with access, a Play button loads the cartridge; signed in without it,
+  it says to load their own. A ROM a player loads themselves still never leaves their browser.
+
+Why: asking friends to find a ROM of their own is the step that stops them playing together. Sharing stays limited to people Nick added
+by email, and he can take it back.
+
+Alternative: friends always bring their own ROM (the original rule). Kept as an option on the
+same screen, and the default for anyone Nick stops sharing with.
+
+## D27. Phones get a mobile quality tier, and everyone gets dynamic resolution
 
 Touch-only devices (coarse pointer, no hover) render with a patch over every look: ambient
 occlusion at quarter resolution and FXAA instead of SMAA (`?quality=full|mobile` overrides).

@@ -1,5 +1,7 @@
 export * from "./core.ts";
 export * from "./host.ts";
+export * from "./autosave.ts";
+export * from "./erase-guard.ts";
 export * from "./link.ts";
 export type { FrameMessage, Watch } from "./protocol.ts";
 export * from "./state/overworld.ts";

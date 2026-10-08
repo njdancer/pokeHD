@@ -1,0 +1,46 @@
+/* The erase question: over everything, the touch pad included. */
+.kid-overlay {
+  position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px;
+  padding-bottom: max(16px, env(safe-area-inset-bottom)); background: #000a; backdrop-filter: blur(4px);
+}
+.kid-card {
+  display: grid; gap: 1rem; width: min(26rem, 100%); padding: 1.5rem; text-align: center;
+  background: var(--bg); border: 1px solid #ffffff26; border-radius: 16px; box-shadow: 0 16px 48px #000a;
+}
+.kid-card h2 { margin: 0; font-size: 1.5rem; }
+.kid-card p { margin: 0; color: var(--muted); line-height: 1.5; }
+.kid-card strong { color: var(--fg); font-weight: 600; }
+.kid-card button {
+  font: inherit; color: var(--fg); cursor: pointer; touch-action: manipulation;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.kid-big {
+  min-height: 72px; font-size: 1.35rem !important; font-weight: 700; border: 0; border-radius: 14px;
+  background: #2f9e5b; box-shadow: 0 4px 0 #1e6b3d;
+}
+.kid-big:active { translate: 0 2px; box-shadow: 0 2px 0 #1e6b3d; }
+.kid-hold {
+  --held: 0;
+  min-height: 44px; font-size: .9rem !important; color: var(--muted) !important; border: 1px solid #ffffff26; border-radius: 10px;
+  background: linear-gradient(90deg, #ff8a7a55 calc(var(--held) * 100%), transparent 0) #0000;
+}
+
+/* "Saved", top centre, fading out on its own. */
+.saved-toast {
+  position: fixed; z-index: 5; left: 50%; top: max(12px, env(safe-area-inset-top)); translate: -50% 0;
+  padding: .35rem .8rem; font-size: .9rem; color: var(--fg); background: #1e6b3de6; border-radius: 999px;
+  pointer-events: none; animation: saved-toast 2.4s ease forwards;
+}
+.saved-toast span { color: #9be7b4; font-weight: 700; }
+@keyframes saved-toast {
+  0% { opacity: 0; translate: -50% -8px; }
+  10%, 75% { opacity: 1; translate: -50% 0; }
+  100% { opacity: 0; }
+}
+
+.grown-ups { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid #ffffff1a; }
+.grown-ups-gate input { font: inherit; width: 4em; color: var(--fg); background: #ffffff14; border: 1px solid #ffffff33; border-radius: 6px; padding: .2rem .4rem; }
+
+.earlier-saves { display: grid; gap: .4rem; margin: 0; padding: 0; list-style: none; }
+.earlier-saves li { display: flex; gap: .5rem; align-items: center; justify-content: space-between; }
+.earlier-saves small { display: block; color: var(--muted); }

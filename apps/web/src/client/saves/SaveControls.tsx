@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { RomHeader } from "@pokehd/rom";
 import { CloudSaveStatus } from "./CloudSaveStatus.tsx";
 import { cloudBackup } from "./cloud-save.ts";
+import { keepSave } from "./history.ts";
 import { checkSav, loadSave, savFileName, storeSave } from "./save-store.ts";
 
 interface Props {
@@ -31,7 +32,11 @@ export function SaveControls({ romKey, header, onImported }: Props) {
     if (!file) return;
     const check = checkSav(new Uint8Array(await file.arrayBuffer()), header);
     if (!check.ok) return setMessage(check.reason);
-    if ((await loadSave(romKey)) && !confirm("Replace the save in this browser with this file? Export it first if you want to keep it.")) return;
+    const current = await loadSave(romKey);
+    if (current) {
+      if (!confirm("Replace the save in this browser with this file? The save you have now is kept under Earlier saves.")) return;
+      await keepSave(romKey, current, "before-import");
+    }
     await storeSave(romKey, check.sram);
     cloudBackup(romKey).onSram(check.sram);
     setMessage("Save imported.");

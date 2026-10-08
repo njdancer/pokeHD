@@ -231,7 +231,7 @@ export type GiftSpec =
 export type TakeResult = { ok: true; gift: Gift } | { ok: false; reason: string };
 
 /** The game's own save (what the start menu's SAVE calls), far-called through `Bankswitch`. */
-const saveGame: Step = {
+export const saveGame: Step = {
   routine: "Bankswitch",
   registers: () => ({ bc: SYMBOLS.SaveGameData.bank << 8, hl: SYMBOLS.SaveGameData.address }),
 };
