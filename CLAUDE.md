@@ -42,7 +42,9 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
 
 - `apps/web`: one Cloudflare Worker project, built by Vite + `@cloudflare/vite-plugin`.
   - `src/client`: React 19 SPA for UI chrome only (ROM loader, lobby, gift/trade pickers,
-    settings, in-game overlays). Plain CSS with custom properties.
+    settings, in-game overlays). Plain CSS with custom properties. `/explore` is a ROM explorer
+    (disassembly, step debugger, asset viewers) over every pokeblue.sym label, generated into
+    `packages/rom/src/generated/explorer-db.ts` by `tools/gen-explorer.ts` (`pnpm rom:symbols`).
   - `src/worker`: Hono app under `/api/*` (`run_worker_first`); everything else is static
     assets with SPA fallback. Durable Objects (multiplayer rooms, hibernatable WebSockets)
     arrive in the multiplayer phase.
