@@ -9,5 +9,22 @@ export async function loadStoredRom(): Promise<Uint8Array | null> {
     return null;
   }
 }
-export const storeRom = (rom: Uint8Array) => run("rom", "readwrite", (s) => s.put(rom.slice().buffer, "rom"));
-export const forgetRom = () => run("rom", "readwrite", (s) => s.delete("rom"));
+/** `shared`: the ROM is Nick's cartridge (D25), so it goes if he stops sharing it with this player. */
+export async function storeRom(rom: Uint8Array, shared = false) {
+  await run("rom", "readwrite", (s) => s.put(rom.slice().buffer, "rom"));
+  if (shared) await run("rom", "readwrite", (s) => s.put(true, "shared"));
+  else await run("rom", "readwrite", (s) => s.delete("shared"));
+}
+
+export async function storedRomIsShared(): Promise<boolean> {
+  try {
+    return (await run<boolean | undefined>("rom", "readonly", (s) => s.get("shared"))) === true;
+  } catch {
+    return false;
+  }
+}
+
+export async function forgetRom() {
+  await run("rom", "readwrite", (s) => s.delete("rom"));
+  await run("rom", "readwrite", (s) => s.delete("shared"));
+}

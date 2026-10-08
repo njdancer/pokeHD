@@ -182,13 +182,36 @@ describe("email sign-in (D23)", () => {
     );
   });
 
-  it("knows who you are, keeps the admin routes and dev ROM from players, and signs out", async () => {
+  it("shares Nick's cartridge with friends until he stops it", async () => {
+    const cookie = await newPlayer("Max");
+    const account = async () => (await (await fetch(new URL("/api/me", base), { headers: { cookie } })).json()) as { player: { id: string }; romAccess: boolean };
+    const { player } = await account();
+    const set = (romAccess: boolean) =>
+      fetch(new URL(`/api/admin/players/${player.id}`, base), {
+        method: "PATCH",
+        headers: { authorization: `Bearer ${ADMIN_TOKEN}` },
+        body: JSON.stringify({ romAccess }),
+      });
+    expect((await set(false)).status).toBe(200);
+    expect(await account()).toMatchObject({ romAccess: false });
+    expect((await fetch(new URL("/api/rom", base), { headers: { cookie } })).status).toBe(404);
+    expect((await set(true)).status).toBe(200);
+    expect(await account()).toMatchObject({ romAccess: true });
+    // Players can't change it themselves.
+    const own = await fetch(new URL(`/api/admin/players/${player.id}`, base), {
+      method: "PATCH",
+      headers: { cookie },
+      body: JSON.stringify({ romAccess: true }),
+    });
+    expect(own.status).toBe(404);
+  });
+
+  it("knows who you are, keeps the admin routes from players, and signs out", async () => {
     const cookie = await newPlayer("Lee");
     const me = await fetch(new URL("/api/me", base), { headers: { cookie } });
-    expect(await me.json()).toMatchObject({ player: { name: "Lee" }, email: "lee@example.com", admin: false });
+    expect(await me.json()).toMatchObject({ player: { name: "Lee" }, email: "lee@example.com", admin: false, romAccess: true });
     expect(me.headers.get("set-cookie")).toMatch(/Max-Age=\d+/);
     expect((await fetch(new URL("/api/admin/players", base), { headers: { cookie } })).status).toBe(404);
-    expect((await fetch(new URL("/api/dev-rom", base), { headers: { cookie } })).status).toBe(404);
     expect((await post("/api/auth/verify", { email: "lee@example.com", code: "123456" })).status).toBe(400);
     await post("/api/sign-out", {}, { cookie });
     expect((await fetch(new URL("/api/me", base), { headers: { cookie } })).status).toBe(401);

@@ -15,6 +15,8 @@ export interface Player {
   name: string;
   /** Null only for players who joined with a D19 invite code and haven't had one added. */
   email: string | null;
+  /** Whether they may load Nick's cartridge (D25). New players may; Nick can take it away. */
+  romAccess: boolean;
 }
 
 export interface PlayerSummary extends Player {
@@ -105,6 +107,10 @@ export class DirectoryStore {
     if (!sql.exec("PRAGMA table_info(players)").some((c) => c.name === "email")) {
       sql.exec("ALTER TABLE players ADD COLUMN email TEXT");
     }
+    // D25: everyone Nick invited may load his cartridge unless he says otherwise.
+    if (!sql.exec("PRAGMA table_info(players)").some((c) => c.name === "rom_access")) {
+      sql.exec("ALTER TABLE players ADD COLUMN rom_access INTEGER NOT NULL DEFAULT 1");
+    }
     sql.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS players_active_email ON players (email) WHERE revoked_at IS NULL",
     );
@@ -118,7 +124,7 @@ export class DirectoryStore {
     if (!name) return { ok: false, error: "bad-name" };
     if (this.playerByEmail(email)) return { ok: false, error: "email-taken" };
     if (this.#nameTaken(name)) return { ok: false, error: "name-taken" };
-    const player = { id: crypto.randomUUID(), name, email };
+    const player = { id: crypto.randomUUID(), name, email, romAccess: true };
     this.#sql.exec(
       "INSERT INTO players (id, name, email, created_at) VALUES (?, ?, ?, ?)",
       player.id,
@@ -167,7 +173,7 @@ export class DirectoryStore {
     const email = cleanEmail(emailInput);
     if (!email) return null;
     const row = this.#sql.exec(
-      "SELECT id, name, email FROM players WHERE email = ? AND revoked_at IS NULL",
+      `SELECT ${PLAYER_COLUMNS} FROM players WHERE email = ? AND revoked_at IS NULL`,
       email,
     )[0];
     return row ? toPlayer(row) : null;
@@ -256,7 +262,7 @@ export class DirectoryStore {
   async authenticate(sessionToken: string): Promise<Player | null> {
     const tokenHash = await sha256Hex(sessionToken);
     const row = this.#sql.exec(
-      `SELECT p.id, p.name, p.email FROM sessions s JOIN players p ON p.id = s.player_id
+      `SELECT p.id, p.name, p.email, p.rom_access FROM sessions s JOIN players p ON p.id = s.player_id
        WHERE s.token_hash = ? AND p.revoked_at IS NULL`,
       tokenHash,
     )[0];
@@ -272,13 +278,20 @@ export class DirectoryStore {
   listPlayers(): PlayerSummary[] {
     return this.#sql
       .exec(
-        "SELECT id, name, email, created_at, revoked_at FROM players WHERE revoked_at IS NULL ORDER BY created_at",
+        `SELECT ${PLAYER_COLUMNS}, created_at, revoked_at FROM players WHERE revoked_at IS NULL ORDER BY created_at`,
       )
       .map((r) => ({
         ...toPlayer(r),
         createdAt: Number(r.created_at),
         revokedAt: r.revoked_at === null ? null : Number(r.revoked_at),
       }));
+  }
+
+  /** Lets a player load Nick's cartridge, or stops them (D25). */
+  setRomAccess(playerId: string, allowed: boolean): boolean {
+    if (!this.#activePlayer(playerId)) return false;
+    this.#sql.exec("UPDATE players SET rom_access = ? WHERE id = ?", allowed ? 1 : 0, playerId);
+    return true;
   }
 
   /** Removes a player: their sessions and codes end, and their name and email are free again. */
@@ -292,7 +305,7 @@ export class DirectoryStore {
 
   #activePlayer(id: string): Player | null {
     const row = this.#sql.exec(
-      "SELECT id, name, email FROM players WHERE id = ? AND revoked_at IS NULL",
+      `SELECT ${PLAYER_COLUMNS} FROM players WHERE id = ? AND revoked_at IS NULL`,
       id,
     )[0];
     return row ? toPlayer(row) : null;
@@ -308,8 +321,15 @@ export class DirectoryStore {
   }
 }
 
+const PLAYER_COLUMNS = "id, name, email, rom_access";
+
 function toPlayer(row: Record<string, SqlValue>): Player {
-  return { id: String(row.id), name: String(row.name), email: row.email === null ? null : String(row.email) };
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    email: row.email === null ? null : String(row.email),
+    romAccess: Number(row.rom_access) === 1,
+  };
 }
 
 /** Codes are hashed with their player, so two players' identical six digits never collide. */

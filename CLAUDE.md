@@ -13,11 +13,14 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
   all assets are derived from it client-side. Symbol addresses, structure layouts and our own
   label tables are fine to commit. `.gitignore` enforces the obvious cases. Check before adding
   any binary or image.
-  **One deliberate exception, for Nick's testing only:** his ROM sits in the private R2 bucket
-  `pokehd-private` and `GET /api/dev-rom` returns it only to Nick's signed-in session (the admin
-  email in `wrangler.jsonc`, D23), or to tools with `Authorization: Bearer <DEV_ROM_TOKEN>`
-  (Worker secret). A browser where Nick is signed in loads it when it has no ROM. Locally, the Vite dev server serves `rom/pokeblue.gb` at `/__dev/rom` and the app
-  auto-loads it. Never expose the ROM any other way (no public assets, no public bucket).
+  **One deliberate exception: Nick's cartridge.** His ROM sits in the private R2 bucket
+  `pokehd-private` and `GET /api/rom` (old name `/api/dev-rom`) returns it only to signed-in
+  players allowed it: Nick (the admin email in `wrangler.jsonc`, D23) and the friends he invited,
+  unless he turned it off for them in Friends (D25); or to tools with
+  `Authorization: Bearer <DEV_ROM_TOKEN>` (Worker secret). A browser whose player is allowed it
+  loads it when it has no ROM. Locally, the Vite dev server serves `rom/pokeblue.gb` at
+  `/__dev/rom` and the app auto-loads it. Never expose the ROM any other way (no public assets,
+  no public bucket, nobody who isn't signed in).
 - **Keep it private.** The GitHub repo is private. Don't name public things "Pokémon".
 - **Visuals are the point.** Pixel art stays crisp (no xBR/HQx smoothing on sprites); the
   HD treatment comes from 3D geometry, lighting, materials and post-processing. It's always
