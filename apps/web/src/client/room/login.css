@@ -1,0 +1,22 @@
+.login { overflow: auto; max-height: 88vh; }
+.login form { display: grid; gap: .9rem; margin-top: 1rem; }
+.login label { display: grid; gap: .3rem; font-size: .9rem; }
+.login label small { color: var(--muted); }
+.login input {
+  font: inherit; font-size: 1.1rem; color: var(--fg); background: #ffffff0d; border: 1px solid #ffffff26;
+  border-radius: 8px; padding: .6rem .7rem; min-width: 0;
+}
+
+.login input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.login button, .login .button {
+  font: inherit; color: var(--fg); background: #ffffff14; border: 1px solid #ffffff26; border-radius: 8px;
+  padding: .55rem 1rem; cursor: pointer; text-decoration: none; text-align: center;
+}
+.login button[type="submit"], .login .button.primary { background: var(--accent); border-color: var(--accent); color: #0d1117; font-weight: 600; }
+.login button:disabled { opacity: .6; cursor: default; }
+.login .actions { display: flex; flex-wrap: wrap; gap: .6rem; }
+.login .who { color: var(--fg); }
+
+.login input[name="code"] { font-family: ui-monospace, monospace; letter-spacing: .12em; font-size: 1.3rem; }
+.login .link-button { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; }
+.login .friends { margin-top: 1.5rem; }

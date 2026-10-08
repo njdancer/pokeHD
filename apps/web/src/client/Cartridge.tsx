@@ -28,6 +28,7 @@ export function Cartridge({ error, onRom }: Props) {
         <input type="file" accept=".gb,.gbc,application/octet-stream" onChange={(e) => read(e.target.files?.[0])} />
       </label>
       {error && <p className="status bad" role="alert">{error}</p>}
+      <p>Invited to play with friends? <a href="/login">Sign in</a>.</p>
     </main>
   );
 }

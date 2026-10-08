@@ -21,7 +21,7 @@
     "DEV_ROM_KEY": "rom-a122f2e20e25a654c17a615c.gb",
     "ADMIN_EMAIL": "nick@dncr.me",
     "ADMIN_NAME": "Nick",
-    "EMAIL_FROM": "pokehd@dncr.me"
+    "EMAIL_FROM": "pokehd@hearth.dncr.me"
   },
   // Cloudflare Email Service. Local dev simulates it and logs each email instead of sending.
   "send_email": [{ "name": "EMAIL" }],

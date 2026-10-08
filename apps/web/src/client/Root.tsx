@@ -1,8 +1,8 @@
 import { Suspense, lazy } from "react";
 import { App } from "./App.tsx";
 
-// The friends sign-in page (D19) and dev pages load lazily, so they never weigh on the game bundle.
-const Join = lazy(() => import("./room/Join.tsx").then((m) => ({ default: m.Join })));
+// The friends sign-in page (D23) and dev pages load lazily, so they never weigh on the game bundle.
+const Login = lazy(() => import("./room/Login.tsx").then((m) => ({ default: m.Login })));
 const EmuDebug = lazy(() => import("./dev/emu/EmuDebug.tsx").then((m) => ({ default: m.EmuDebug })));
 const LivePlayback = lazy(() => import("./dev/LivePlayback.tsx").then((m) => ({ default: m.LivePlayback })));
 const TextDebug = lazy(() => import("./dev/TextDebug.tsx").then((m) => ({ default: m.TextDebug })));
@@ -17,7 +17,8 @@ const LabelViewer = import.meta.env.DEV
 
 export function Root() {
   const path = location.pathname.replace(/\/$/, "");
-  if (path === "/join") return <Suspense><Join /></Suspense>;
+  // `/join` was the D19 page; old bookmarks still land on sign-in.
+  if (path === "/login" || path === "/join") return <Suspense><Login /></Suspense>;
   if (path === "/dev/emu") return <Suspense><EmuDebug /></Suspense>;
   if (path === "/dev/live") return <Suspense><LivePlayback /></Suspense>;
   if (path === "/dev/text") return <Suspense><TextDebug /></Suspense>;

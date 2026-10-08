@@ -1,0 +1,15 @@
+.friends h2 { margin: 0 0 .5rem; font-size: .95rem; color: var(--fg); }
+.friends ul { list-style: none; margin: 0 0 .75rem; padding: 0; display: grid; gap: .5rem; }
+.friends li { display: grid; gap: .3rem; padding-bottom: .5rem; border-bottom: 1px solid #ffffff14; }
+.friends .who { color: var(--fg); font-weight: 600; }
+.friends .email { color: var(--muted); overflow-wrap: anywhere; }
+.friends .row { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.friends form { display: grid; gap: .4rem; margin: 0; }
+.friends input {
+  font: inherit; color: var(--fg); background: #ffffff0d; border: 1px solid #ffffff26; border-radius: 6px;
+  padding: .35rem .5rem; min-width: 0; flex: 1;
+}
+.friends .link { display: flex; gap: .4rem; align-items: center; }
+.friends .link input { font-family: ui-monospace, monospace; font-size: .8em; }
+.friends .note { margin: .25rem 0 0; color: var(--muted); }
+.friends .bad { color: var(--bad); }

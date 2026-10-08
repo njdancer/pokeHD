@@ -60,7 +60,7 @@ and get the coordinator's sign-off before building on them.
 
 Done: `p0-rom`, `p0-repo`, `p0-scaffold`, `p0-deploy`, `p0-devrom`.
 In progress: `p0-ci` (Nick's Hearthstone runner PR).
-Not needed: `p0-access` (friends join with invite codes instead, D19).
+Not needed: `p0-access` (friends sign in by email with our own codes instead, D19 then D23).
 
 ### p0-symbols: typed symbol table (Track A)
 Generate `packages/rom/src/generated/symbols.ts` from `vendor/pokered/pokeblue.sym` with a
@@ -159,8 +159,8 @@ battle. Then insert artificial latency (50/100/200 ms) and find where the protoc
 (`engine/link/cable_club.asm`, `Serial_ExchangeByte`). Report what synchronisation strategy
 works before building the networked version.
 ### p3-rooms: room Durable Object, presence, friends as ghosts (Track E)
-Server first (PR 1): invite codes and players in a `Directory` Durable Object (D19), the
-`/api/join`, `/api/me` and admin routes, and a `Room` Durable Object (hibernatable WebSockets)
+Server first (PR 1): players in a `Directory` Durable Object (D19; email sign-in since D23), the
+`/api/auth/*`, `/api/me` and admin routes, and a `Room` Durable Object (hibernatable WebSockets)
 at `/api/room` that greets each player with everyone's presence and relays presence changes.
 Presence mirrors p1-state-read's `Player` plus the map ID. Room messages live in
 `packages/protocol/src/room.ts`; a `link` message carries a D17 `LinkMessage` to one named
