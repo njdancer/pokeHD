@@ -82,7 +82,7 @@ test("a new game can't erase the old save by accident", async ({ page }) => {
   // looked for a newer resume point in the cloud (isVisible doesn't wait, so wait for it).
   await page.reload();
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
-  const fromSave = page.getByRole("button", { name: "Load the save file instead" });
+  const fromSave = page.getByRole("button", { name: "Go back to my last save instead" });
   if (await fromSave.waitFor({ timeout: 15_000 }).then(() => true, () => false)) await fromSave.click();
   // Through the intro and title screen to the main menu, which loads the save to preview it, so
   // the map is the saved one only once CONTINUE / NEW GAME is up. (Clicking above restarts the

@@ -487,11 +487,11 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       hd = true;
       setMessage(
         started.resumed
-          ? "Back where you left off."
+          ? "Back where you left off (your resume point)."
           : restored
             ? "Your save came back from the cloud."
             : slot.sram
-              ? "Continuing from this browser's save."
+              ? "No resume point to go back to, so this starts from your last save: pick CONTINUE."
               : "No save in this browser yet.",
       );
       setTimeout(() => !disposed && setMessage(""), 4000);
@@ -591,7 +591,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
         <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
         <button type="button" onClick={() => setSettings((v) => !v)} aria-expanded={settings}>Settings</button>
-        {resumed && <button type="button" onClick={startFromSave}>Load the save file instead</button>}
+        {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
         {cloudNewer && <button type="button" onClick={() => setSettings(true)}>Newer save in the cloud</button>}
         {room && <RoomBadge status={room.status} friends={room.friends.length} />}
         {gifts && room?.status === "open" && (

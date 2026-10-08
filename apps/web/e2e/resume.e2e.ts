@@ -1,6 +1,6 @@
 // Resume points on the real game page: a new game walked a few steps, the tab hidden (which
 // takes a resume point) and reloaded, comes back at the same spot without passing the title
-// screen; "Load the save file instead" goes back to the title screen.
+// screen; "Go back to my last save instead" goes back to the title screen.
 // Needs the ROM at rom/pokeblue.gb. POKEHD_PLAY=1 pnpm test:e2e resume
 import { expect, test } from "@playwright/test";
 import { hasRom, loadWorld, Player, PLAY_USE, REDS_HOUSE_1F, REDS_HOUSE_2F, sleep, type Hooked } from "./game.ts";
@@ -29,7 +29,7 @@ test("a hidden tab resumes where it was after a reload", async ({ page }) => {
   await page.reload();
 
   // Offered for a while after resuming.
-  const fromSave = page.getByRole("button", { name: "Load the save file instead" });
+  const fromSave = page.getByRole("button", { name: "Go back to my last save instead" });
   await expect(fromSave).toBeVisible({ timeout: 60_000 });
   await expect.poll(() => page.evaluate(() => (window as Hooked).__pokehd?.inWorld ?? false), { timeout: 30_000 }).toBe(true);
   const after = await p.state();
@@ -57,7 +57,7 @@ test("a save after the last resume point still resumes", async ({ page }) => {
   // No hidden tab this time: the browser may not get to take a point on its way out.
   await page.reload();
 
-  await expect(page.getByRole("button", { name: "Load the save file instead" })).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: "Go back to my last save instead" })).toBeVisible({ timeout: 60_000 });
   await expect.poll(() => page.evaluate(() => (window as Hooked).__pokehd?.inWorld ?? false), { timeout: 30_000 }).toBe(true);
   const after = await p.state();
   expect(after.mapId).toBe(before.mapId);

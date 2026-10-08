@@ -70,15 +70,30 @@ describe.skipIf(!linkScenarioReady)("LinkPort between two Game Boys", () => {
     }, 300_000);
   });
 
-  /** One Game Boy alone at the receptionist, mashing A until `text` shows. */
-  function talkUntil(gb: GameBoy, text: string, port: LinkPort) {
+  /** One Game Boy alone at the receptionist, mashing A until `text` shows. True if a session started. */
+  function talkUntil(gb: GameBoy, text: string, port: LinkPort): boolean {
+    let session = false;
     for (let f = 0; !screenHas(gb, text); f++) {
       if (f > 60 * 120) throw new Error(`"${text}" never showed (waiting in ${port.waitingFor})`);
       gb.setButtons(f % 12 < 6 ? Button.A : 0);
       gb.runFrame();
+      session ||= port.inSession;
     }
     gb.setButtons(0);
+    return session;
   }
+
+  it("counts an open port as a session only once the game uses it", () => {
+    reset("trade");
+    const port = new LinkPort(gbs[0], { role: "leader", connectTimeoutFrames: 120, send: () => {} });
+    try {
+      // The room opens a port for every signed-in player; resume points must still be taken.
+      expect(port.inSession).toBe(false);
+      expect(talkUntil(gbs[0], "reserved for", port)).toBe(true);
+    } finally {
+      port.dispose();
+    }
+  }, 60_000);
 
   it("gives up at the receptionist when the friend never talks to theirs", () => {
     reset("trade");
@@ -104,5 +119,6 @@ describe.skipIf(!linkScenarioReady)("LinkPort between two Game Boys", () => {
     }
     expect(sent).toEqual(["connect", "nybble"]);
     expect(port.waitingFor).toBeUndefined();
+    expect(port.inSession).toBe(false);
   }, 60_000);
 });

@@ -103,6 +103,15 @@ export class LinkPort {
     else this.#inbox.set(message.kind, [message]);
   }
 
+  /**
+   * Whether a link session is under way: the game is waiting for the friend at a hooked routine,
+   * or is connected to them. An open port alone (the room keeps one ready) isn't a session.
+   */
+  get inSession(): boolean {
+    const status = this.#gb.read(addr("hSerialConnectionStatus"));
+    return !!this.#pending || status === USING_INTERNAL_CLOCK || status === USING_EXTERNAL_CLOCK;
+  }
+
   /** The routine the game is waiting in for the friend's message, if any. */
   get waitingFor(): LinkMessageKind | undefined {
     return this.#pending?.kind;
