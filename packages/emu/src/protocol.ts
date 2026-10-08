@@ -20,6 +20,8 @@ export type ToWorker =
   /** A save state to resume from later, if now is a moment one can be taken. */
   | { type: "resume-point"; id: number }
   | { type: "autosave"; enabled: boolean }
+  /** The page's answer to the "older file will be erased" question: true to erase. */
+  | { type: "erase-answer"; erase: boolean }
   /** Attaches a LinkPort to the worker's GameBoy (replacing any previous one). */
   | { type: "link-open"; role: LinkRole; connectTimeoutFrames?: number }
   /** The friend's next link message. */
@@ -51,6 +53,12 @@ export type FromWorker =
   | { type: "resume-point"; id: number; state: Uint8Array | null }
   /** An autosave was skipped, and why. */
   | { type: "autosave-skipped"; reason: string }
+  /** The game wrote a full save; `auto` if it was an autosave. Its SRAM follows as "sram". */
+  | { type: "saved"; auto: boolean }
+  /** The game is about to ask whether to erase the older save file (EraseGuard). */
+  | { type: "erase-prompt" }
+  /** The erase question was answered. */
+  | { type: "erase-answered"; erase: boolean }
   /** An outbound link message for the friend. */
   | { type: "link-send"; message: LinkMessage }
   | { type: "read"; id: number; bytes: Uint8Array[] }
