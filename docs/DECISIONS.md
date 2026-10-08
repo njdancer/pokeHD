@@ -407,3 +407,42 @@ that need it, and a fast machine stays sharp.
 
 Alternative: a fixed 1.5 pixel-ratio cap on phones (the first version of this tier). Simpler,
 but blurs every phone all the time, including ones with headroom.
+
+## D28. Battles are read off the screen and staged in the overworld
+
+The battle scene is rebuilt each frame from what the Game Boy draws: both Pokémon pictures from
+the tile map and VRAM (so slides, faints, substitutes, transforms and the trainer's return all
+follow the game), move effects from OAM, flashes from the palette registers and shakes from the
+scroll/window registers (`BattleScreenReader` in `packages/emu`). Pictures stand as lit
+billboards in the 3D world where the player is, coloured with the SGB palette the game would use
+(`battlePalette`); the camera swings from the overworld to a side-on battle view. Names, levels
+and HP come from `BattleState` as HD cards. The Game Boy screen stays on top, masked down to the
+menus and text, which the HD text layer (p2-text) can take over cell by cell.
+
+Why: reading the screen keeps every animation and edge case the original's, with no battle logic
+of our own, and needs no list of move animations. Staging the battle where it happens keeps the
+place's own lighting and time of day.
+
+Arena look: three styles (`field`, on the spot; `bases`, on the spot with stone bases; `stage`,
+a separate round stage). Nick picked `field` (2026-10-08): the battle plays out where the player
+stands, on the overworld's own ground. The other styles stay behind the `arena` option.
+
+Alternative: a separate arena scene per environment with its own move effects. More control of
+the look, but every effect would be ours, not the game's.
+
+## D29. The game lives at pokehd.dncr.me
+
+Nick's pick on 2026-10-08. The Worker serves `pokehd.dncr.me` as a Cloudflare custom domain
+(set in `wrangler.jsonc`), on his own `dncr.me` zone, the same one the sign-in emails come from.
+`pokehd.nick-01a.workers.dev` keeps serving the same Worker, with no redirect, so a home-screen
+app already installed from it keeps working until it's reinstalled from the new address.
+
+Moving is a one-off per device: the home-screen app, the saves kept in the browser and the
+sign-in cookie all belong to one address. On the new address a player signs in again, and the
+game restores their cloud save (p1-saves-cloud) and resume points (D25). Sign-in links use the
+address the request came in on, so both addresses work.
+
+Why: settle it now, while only a few devices have the app installed, so saves and sign-ins
+move once. Nick chose to keep the project name in the address.
+
+Alternatives: `play.dncr.me` (recommended for a neutral name), or staying on workers.dev.

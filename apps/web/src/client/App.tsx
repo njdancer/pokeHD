@@ -1,12 +1,16 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { checkRom, type RomHeader } from "@pokehd/rom";
 import { Cartridge } from "./Cartridge.tsx";
-import { GameView } from "./GameView.tsx";
 import { fetchDevRom } from "./dev-rom.ts";
 import { forgetRom, loadStoredRom, storedRomIsShared, storeRom } from "./rom-store.ts";
-import { Game } from "./game/Game.tsx";
 import { me, type Account } from "./room/account.ts";
 import { romKey } from "./saves/save-store.ts";
+
+// The game and the renderer (three.js, the emulator) are most of the app, so they load as their
+// own chunks. The game starts downloading at once, while the ROM and account are checked.
+const gameChunk = import("./game/Game.tsx");
+const Game = lazy(() => gameChunk.then((m) => ({ default: m.Game })));
+const GameView = lazy(() => import("./GameView.tsx").then((m) => ({ default: m.GameView })));
 
 type State =
   | { kind: "loading" }
@@ -64,13 +68,19 @@ export function App() {
   };
 
   if (state.kind === "ready") {
-    return <Game rom={state.rom} romKey={state.romKey} header={state.header} onForget={forget} />;
+    return (
+      <Suspense>
+        <Game rom={state.rom} romKey={state.romKey} header={state.header} onForget={forget} />
+      </Suspense>
+    );
   }
   if (state.kind === "loading") return null;
   // The look-dev scene stands behind the ROM loader until there's a game to play.
   return (
     <>
-      <GameView />
+      <Suspense>
+        <GameView />
+      </Suspense>
       <Cartridge error={state.error} account={account} onRom={accept} onShared={loadShared} />
     </>
   );

@@ -5,6 +5,9 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "e2e",
   testMatch: "*.e2e.ts",
+  // Screenshot baselines (shots.e2e.ts) are renders of the ROM's graphics: kept out of git, and
+  // per platform since renderers differ.
+  snapshotPathTemplate: "{testDir}/baselines/{platform}/{arg}{ext}",
   use: { baseURL: "http://localhost:5173" },
   webServer: { command: "pnpm dev --port 5173 --strictPort", url: "http://localhost:5173", reuseExistingServer: true },
   projects: [

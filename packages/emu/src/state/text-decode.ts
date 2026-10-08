@@ -137,10 +137,20 @@ function findBoxes(grid: Grid): Found[] {
         ) {
           bottom++;
         }
-        if (bottom >= SCREEN_ROWS || !is(x, bottom, BOX.bottomLeft) || !is(right, bottom, BOX.bottomRight)) continue;
-        let closed = true;
-        for (let i = x + 1; i < right && closed; i++) closed = is(i, bottom, BOX.horizontal);
-        if (!closed) continue;
+        if (bottom >= SCREEN_ROWS) {
+          // The bottom may be under another box down to the screen's edge (a menu under the
+          // message box): keep it, cut off there, if its sides show for a row first.
+          const hidden = (row: number) => own(x, row) === null && own(right, row) === null;
+          let first = bottom - 1;
+          while (first > y && hidden(first)) first--;
+          if (!lenient || first === bottom - 1 || first <= y) continue;
+          bottom = SCREEN_ROWS - 1;
+        } else {
+          if (!is(x, bottom, BOX.bottomLeft) || !is(right, bottom, BOX.bottomRight)) continue;
+          let closed = true;
+          for (let i = x + 1; i < right && closed; i++) closed = is(i, bottom, BOX.horizontal);
+          if (!closed) continue;
+        }
         found.push({ box: { x, y, width: right - x + 1, height: bottom - y + 1, lines: [] }, above: [...above], depth });
         added = true;
       }
@@ -156,6 +166,16 @@ function findBoxes(grid: Grid): Found[] {
 function unobscured(grid: Grid, above: readonly TextBox[]): Grid {
   if (above.length === 0) return grid;
   return grid.map((c, i) => (above.some((b) => inside(b, i % SCREEN_COLS, Math.floor(i / SCREEN_COLS))) ? null : c));
+}
+
+/** Whether a box's visible inside holds a tile that isn't text. */
+function hasPicture(grid: Grid, box: TextBox, above: readonly TextBox[]): boolean {
+  for (let y = box.y + 1; y < box.y + box.height - 1; y++) {
+    for (let x = box.x + 1; x < box.x + box.width - 1; x++) {
+      if (cell(grid, x, y) === null && !above.some((b) => inside(b, x, y))) return true;
+    }
+  }
+  return false;
 }
 
 function boxLines(grid: Grid, box: TextBox): TextLine[] {
@@ -223,7 +243,9 @@ function decodeMenu(grid: Grid, box: TextBox, watched: TextWatched): Menu | null
 function menuKind(box: TextBox, items: readonly MenuItem[]): MenuKind {
   const texts = items.map((i) => i.text);
   if (box.x === 10 && box.y === 0 && texts.at(-1) === "EXIT") return "start";
-  if (isBox(box, LIST_BOX)) return "list";
+  // A list under the message box is cut off at the bottom of the screen.
+  const clippedList = box.y + box.height === SCREEN_ROWS && box.height > LIST_BOX.height;
+  if (isBox(box, LIST_BOX) || (clippedList && isBox({ ...box, height: LIST_BOX.height }, LIST_BOX))) return "list";
   if (texts.length === 2 && texts.includes("YES") && texts.includes("NO")) return "yesNo";
   if (texts.length === 2 && box.height === 5) return "twoOption";
   return "other";
@@ -274,7 +296,7 @@ export class ScreenTextDecoder {
     const shown = (watched.windowY[0] ?? 0) < SCREEN_HEIGHT || (watched.autoTransfer[0] ?? 0) !== 0;
     if (!shown) {
       this.#dialog = null;
-      return { shown, boxes: [], dialog: null, menus: [], quantity: null, loose: [] };
+      return { shown, boxes: [], dialog: null, menus: [], quantity: null, loose: [], pictures: false };
     }
     const grid: Grid = Array.from(watched.tileMap, (code) => this.charAt(code));
     const found = findBoxes(grid);
@@ -282,8 +304,10 @@ export class ScreenTextDecoder {
     const menus: Menu[] = [];
     let quantity: QuantityPrompt | null = null;
     let dialog: Dialog | null = null;
+    let pictures = false;
     for (const { box, above } of found) {
       const view = unobscured(grid, above);
+      pictures ||= hasPicture(grid, box, above);
       box.lines = boxLines(view, box);
       boxes.push(box);
       const menu = decodeMenu(view, box, watched);
@@ -305,7 +329,7 @@ export class ScreenTextDecoder {
         if (!boxes.some((b) => inside(b, s.col, y)) && /[\p{L}\p{N}]/u.test(s.text)) loose.push(s);
       }
     }
-    return { shown, boxes, dialog, menus, quantity, loose };
+    return { shown, boxes, dialog, menus, quantity, loose, pictures };
   }
 
   #decodeDialog(grid: Grid, box: TextBox, options: number): Dialog {

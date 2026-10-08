@@ -1,5 +1,6 @@
 import { MAP_NAMES, TILESET_NAMES } from "../generated/names.ts";
 import { romOffset, SYMBOLS } from "../symbols.ts";
+import { pokedexNumber } from "../text/names.ts";
 import type { MapId } from "../world/types.ts";
 
 // The Super Game Boy palettes the game sends (D11): SuperPalettes in data/sgb/sgb_palettes.asm,
@@ -23,6 +24,7 @@ export const SGB_PAL = {
   CINNABAR: 0x09,
   INDIGO: 0x0a,
   SAFFRON: 0x0b,
+  MEWMON: 0x10,
   REDMON: 0x12,
   GRAYMON: 0x19,
   CAVE: 0x23,
@@ -74,4 +76,15 @@ export function overworldPalette(map: MapId, tileset: number, lastMap?: MapId): 
     town = lastMap ?? NUM_CITY_MAPS;
   }
   return town < NUM_CITY_MAPS ? town + 1 : SGB_PAL.ROUTE;
+}
+
+/**
+ * The palette a battle gives a Pokémon (DeterminePaletteID in engine/gfx/palettes.asm): its
+ * MonsterPalettes entry by Pokédex number, Ditto's grey once it has transformed. Species 0, an
+ * empty slot, is MonsterPalettes' first entry: the trainers' palette.
+ */
+export function battlePalette(rom: Uint8Array, species: number, transformed = false): number {
+  if (transformed) return SGB_PAL.GRAYMON;
+  const dex = species === 0 ? 0 : pokedexNumber(rom, species);
+  return rom[romOffset(SYMBOLS.MonsterPalettes) + dex] ?? SGB_PAL.MEWMON;
 }
