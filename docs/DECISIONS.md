@@ -429,3 +429,18 @@ a separate round stage). `field` is the default while Nick picks (thread "HD bat
 
 Alternative: a separate arena scene per environment with its own move effects. More control of
 the look, but every effect would be ours, not the game's.
+
+## D29. Words and menus use the Storybook look
+
+The HD text layer (p2-text) draws the game's text boxes and menus as warm cream panels with a
+soft gold edge and rounded bold letters (Nunito 800), at the places the game puts them on its
+20×18 tile grid. The cursor is an orange triangle with a soft highlight on the chosen row, and
+an item's quantity sits at the end of its own row. Settings can turn the layer off, which brings
+back the Game Boy screen for text.
+
+Why: Nick chose it (thread "HD text and menus", 2026-10-08) from three options side by side
+(`/mnt/project-files/text/text-looks.png`). It's the easiest to read for a young child on a
+phone and fits the warm Diorama/golden-hour tones.
+
+Alternatives: Lantern (serif on dark navy glass with gold lines, the classic HD-2D panel; harder
+for a beginner to read) and Game Boy letters (the ROM's own pixel font on a light panel).
