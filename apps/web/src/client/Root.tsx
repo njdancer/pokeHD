@@ -7,6 +7,8 @@ const EmuDebug = lazy(() => import("./dev/emu/EmuDebug.tsx").then((m) => ({ defa
 const LivePlayback = lazy(() => import("./dev/LivePlayback.tsx").then((m) => ({ default: m.LivePlayback })));
 const TextDebug = lazy(() => import("./dev/TextDebug.tsx").then((m) => ({ default: m.TextDebug })));
 const Bench = lazy(() => import("./dev/Bench.tsx").then((m) => ({ default: m.Bench })));
+// The ROM explorer (/explore), with its ~850 KB label table, only loads when opened.
+const Explorer = lazy(() => import("./explore/Explorer.tsx").then((m) => ({ default: m.Explorer })));
 const StyleCompare = lazy(() => import("./dev/StyleCompare.tsx").then((m) => ({ default: m.StyleCompare })));
 // Dev-only tools, left out of production builds.
 const MapViewer = import.meta.env.DEV
@@ -20,6 +22,7 @@ export function Root() {
   const path = location.pathname.replace(/\/$/, "");
   // `/join` was the D19 page; old bookmarks still land on sign-in.
   if (path === "/login" || path === "/join") return <Suspense><Login /></Suspense>;
+  if (path === "/explore") return <Suspense><Explorer /></Suspense>;
   if (path === "/dev/emu") return <Suspense><EmuDebug /></Suspense>;
   if (path === "/dev/live") return <Suspense><LivePlayback /></Suspense>;
   if (path === "/dev/text") return <Suspense><TextDebug /></Suspense>;

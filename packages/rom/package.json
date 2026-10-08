@@ -2,7 +2,14 @@
   "name": "@pokehd/rom",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc -p ." },
-  "devDependencies": { "@types/node": "^24.13.3" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./explore": "./src/explore/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3"
+  }
 }
