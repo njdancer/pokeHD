@@ -118,11 +118,11 @@ async function handle(data: ToWorker) {
           skipped: (why) => post({ type: "autosave-skipped", reason: why }),
           saved: (auto) => post({ type: "saved", auto }),
         });
-        guard = new EraseGuard(gb, {
+        guard = data.guardErase ? new EraseGuard(gb, {
           rom: data.rom,
           onPrompt: () => post({ type: "erase-prompt" }),
           onAnswered: (erase) => post({ type: "erase-answered", erase }),
-        });
+        }) : undefined;
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();
         // Before the first frame, so the page knows how the game started before it sees one.

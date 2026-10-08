@@ -9,7 +9,8 @@ export type Watch = readonly [address: number, length: number];
 
 export type ToWorker =
   /** `resume` is a resume point to start from, used only if it holds exactly `sram` as its save. */
-  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number }
+  /** `guardErase` turns on EraseGuard: the page answers the "older file will be erased" question. */
+  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean }
   /** Switches pacing to the audio clock; the port talks to the audio worklet. */
   | { type: "audio"; port: MessagePort }
   | { type: "buttons"; mask: number }

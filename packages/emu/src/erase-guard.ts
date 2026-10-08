@@ -39,7 +39,6 @@ export function erasePromptHooks(rom: Uint8Array): { prompt: RomSymbol; answered
 
 export class EraseGuard {
   readonly #gb: GameBoy;
-  readonly #options: EraseGuardOptions;
   readonly #removeHooks: (() => void)[];
   /** The player's own buttons, held back while the question is up. */
   #player = 0;
@@ -49,7 +48,6 @@ export class EraseGuard {
 
   constructor(gb: GameBoy, options: EraseGuardOptions) {
     this.#gb = gb;
-    this.#options = options;
     const { prompt, answered } = erasePromptHooks(options.rom);
     this.#removeHooks = [
       gb.addHook(prompt, () => {

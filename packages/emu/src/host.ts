@@ -29,7 +29,8 @@ export interface EmulatorHostOptions {
   onSaved?: (auto: boolean) => void;
   /**
    * The game is about to ask "The older file will be erased to save. Okay?" (NEW GAME over a
-   * save). The player's buttons are held back until `answerErase()` is called.
+   * save). Passing this turns the guard on: the player's buttons are held back until
+   * `answerErase()` is called.
    */
   onErasePrompt?: () => void;
   /** The erase question was answered (by `answerErase()`). */
@@ -128,7 +129,9 @@ export class EmulatorHost {
       }
     };
     const { rom, sram, resume } = options;
-    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate });
+    // The page answers the erase question only if it's listening for it.
+    const guardErase = !!options.onErasePrompt;
+    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase });
     if (options.autosave === false) this.setAutosave(false);
   }
 

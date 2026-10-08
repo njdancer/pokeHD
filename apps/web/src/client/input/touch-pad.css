@@ -47,7 +47,7 @@
 .touch-face { grid-area: face; }
 /* Select and Start sit centred under the rest, as on the Game Boy, so narrow phones still fit. */
 .touch-menu { grid-area: menu; display: flex; gap: 16px; justify-content: center; }
-.touch-small { padding: 6px 14px; border-radius: 999px; font-size: .75rem; letter-spacing: .05em; }
+.touch-small { min-height: 40px; min-width: 76px; padding: 6px 14px; border-radius: 999px; font-size: .8rem; letter-spacing: .05em; }
 
 .touch-face { display: flex; gap: 14px; align-items: end; }
 .touch-round {

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { cloudBackup, type CloudSave, type CloudStatus } from "./cloud-save.ts";
+import { keepSave } from "./history.ts";
+import { loadSave } from "./save-store.ts";
 
 interface Props {
   romKey: string;
@@ -23,6 +25,8 @@ export function CloudSaveStatus({ romKey, onRestored }: Props) {
 
   const restore = async (cloud: CloudSave) => {
     if (!confirm(`Replace the save in this browser with the cloud save from ${when(cloud.savedAt)}?`)) return;
+    const current = await loadSave(romKey);
+    if (current) await keepSave(romKey, current, "before-restore");
     await cloudBackup(romKey).restore(cloud);
     setStatus({ kind: "in-sync" });
     onRestored?.(cloud.sram);
