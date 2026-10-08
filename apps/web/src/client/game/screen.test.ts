@@ -19,6 +19,13 @@ describe("screenLayout", () => {
     expect(screenLayout("battle", true, false, true)).toBe("full");
   });
 
+  it("puts battles in HD once there's an HD view to show them in", () => {
+    expect(screenLayout("battle", true, false, false, "transition")).toBe("hidden");
+    expect(screenLayout("battle", true, true, false, "scene")).toBe("battle");
+    expect(screenLayout("battle", true, false, false, "menu")).toBe("full");
+    expect(screenLayout("battle", false, false, false, "scene")).toBe("full");
+  });
+
   it("follows the player's choice on the overworld", () => {
     expect(screenLayout("overworld", true, true)).toBe("corner");
     expect(screenLayout("overworld", true, false)).toBe("hidden");

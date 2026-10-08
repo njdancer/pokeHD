@@ -39,6 +39,10 @@ export interface BattleMon {
   types: [number, number];
   /** Move IDs, 0 for an empty slot. */
   moves: [number, number, number, number];
+  /** The name the game shows: the nickname, or the species name for an enemy. */
+  name: string;
+  /** Transformed (TRANSFORM): the game colours it like Ditto. */
+  transformed: boolean;
 }
 
 export interface BattleSide {
@@ -106,12 +110,14 @@ export const PARTY_LENGTH = 6;
 export const PARTY_MON_LENGTH = 44;
 /** wPartyCount, wPartySpecies (with its terminator) and wPartyMons, which are adjacent. */
 const PARTY_BLOCK_LENGTH = 1 + PARTY_LENGTH + 1 + PARTY_LENGTH * PARTY_MON_LENGTH;
+/** NAME_LENGTH: a name and its terminator. */
+const NAME_LENGTH = 11;
 /** wTileMap, the 20×18 screen buffer the game draws its menus into. */
 export const TILE_MAP_LENGTH = 20 * 18;
 
 /**
  * The memory `decodeBattleState` reads, to pass to `EmulatorHost.watch` alongside
- * `OVERWORLD_WATCHES`. About 950 bytes a frame, most of it the two parties and the tile map.
+ * `OVERWORLD_WATCHES`. About 980 bytes a frame, most of it the two parties and the tile map.
  */
 export const BATTLE_WATCHES = {
   /** 0 none, 1 wild, 2 trainer, $ff lost. */
@@ -130,6 +136,10 @@ export const BATTLE_WATCHES = {
   subanimation: sym("wSubAnimSubEntryAddr"),
   playerMon: sym("wBattleMon", BATTLE_STRUCT_LENGTH),
   enemyMon: sym("wEnemyMon", BATTLE_STRUCT_LENGTH),
+  playerName: sym("wBattleMonNick", NAME_LENGTH),
+  enemyName: sym("wEnemyMonNick", NAME_LENGTH),
+  playerStatus3: sym("wPlayerBattleStatus3"),
+  enemyStatus3: sym("wEnemyBattleStatus3"),
   playerParty: sym("wPartyCount", PARTY_BLOCK_LENGTH),
   enemyParty: sym("wEnemyPartyCount", PARTY_BLOCK_LENGTH),
   tileMap: sym("wTileMap", TILE_MAP_LENGTH),

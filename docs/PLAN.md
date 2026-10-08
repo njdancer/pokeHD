@@ -196,7 +196,10 @@ Decode the window/BG tilemap through the charmap (`constants/charmap.asm`) and r
 boxes and menus as styled overlays with a modern font; the game still drives them.
 ### p2-battles: HD battle scenes
 3D arenas per environment, lit billboarded battle sprites, move effects keyed off the
-animation the game is playing.
+animation the game is playing. Built screen-driven (D28): pictures, sprites, flashes and shakes
+read off the Game Boy screen and staged where the player stands; HD HP cards; the screen masked
+to menus and text. `/dev/battle?fixture=battle-rival|battle-wild&arena=field|bases|stage` shows
+it from states recorded by `tools/record-battles.ts`. Waiting on Nick's pick of arena look.
 
 ## Phase 3: Multiplayer
 

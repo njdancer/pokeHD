@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { Button, GameBoy } from "../core.ts";
 import { playIntro } from "../testing.ts";
 import { BattleDecoder, decodeBattleState, monStatus } from "./battle-decode.ts";
+import { BATTLE_SCREEN_WATCHES, BattleScreenReader, type BattleScreen, type BattleScreenWatched } from "./battle-screen.ts";
 import {
   BATTLE_STRUCT_LENGTH,
   BATTLE_WATCHES,
@@ -190,6 +191,8 @@ interface Turn {
 describe.skipIf(!hasRom)("decoding the first rival battle", () => {
   let gb: GameBoy;
   const states: (BattleState | null)[] = [];
+  /** The battle screen alongside each state, null outside the battle. */
+  const screens: (BattleScreen | null)[] = [];
 
   const read = (name: keyof typeof SYMBOLS) => gb.read(SYMBOLS[name].address);
   const where = () => [read("wCurMap"), read("wXCoord"), read("wYCoord")];
@@ -262,12 +265,19 @@ describe.skipIf(!hasRom)("decoding the first rival battle", () => {
     // battle menu, the move list and every text box all start on the first choice.
     walk(Button.Left, (_, x) => x === 5);
     const decoder = new BattleDecoder();
+    const reader = new BattleScreenReader();
     const decode = () => {
       const watched = {} as BattleWatched;
       for (const [name, [address, length]] of Object.entries(BATTLE_WATCHES)) {
         watched[name as keyof BattleWatched] = gb.readBytes(address, length);
       }
-      states.push(decoder.decode(watched));
+      const state = decoder.decode(watched);
+      states.push(state);
+      const screen = { tileMap: watched.tileMap } as BattleScreenWatched;
+      for (const [name, [address, length]] of Object.entries(BATTLE_SCREEN_WATCHES)) {
+        screen[name as keyof typeof BATTLE_SCREEN_WATCHES] = gb.readBytes(address, length);
+      }
+      screens.push(state ? reader.read(screen) : null);
     };
     for (let i = 0; read("wIsInBattle") === 0; i++) {
       if (i > 3000) throw new Error("No battle");
@@ -327,6 +337,24 @@ describe.skipIf(!hasRom)("decoding the first rival battle", () => {
     const middle = new Set<BattlePhase>(seq.slice(1, -2));
     expect(middle).toEqual(new Set(["menu", "message", "animation"]));
     expect(battle().at(-1)).toMatchObject({ outcome: "win", enemy: { mon: { hp: 0 }, team: ["fainted"] } });
+  });
+
+  it("reads the battle screen: both pictures and HUDs at the menu, sprites as Pokémon come out", () => {
+    const atMenu = states.flatMap((s, i) => (s?.phase === "menu" ? [screens[i]!] : []));
+    expect(atMenu.length).toBeGreaterThan(0);
+    for (const screen of atMenu) {
+      expect(screen).toMatchObject({ battle: true, huds: { enemy: true, player: true } });
+      expect(screen.enemy && screen.player).toBeTruthy();
+    }
+    const intro = states.flatMap((s, i) => (s?.phase === "intro" ? [screens[i]!] : []));
+    expect(intro.some((screen) => screen.objects.length > 0)).toBe(true);
+    // The player's trainer slides away before the Pokémon comes out.
+    expect(intro.some((screen) => screen.player && screen.player.dx < 0)).toBe(true);
+    // The last faint: the enemy's picture goes, then the rival slides back in.
+    const end = states.flatMap((s, i) => (s?.phase === "end" && screens[i]!.battle ? [screens[i]!] : []));
+    const gone = end.findIndex((screen) => screen.enemy === null);
+    expect(gone).toBeGreaterThanOrEqual(0);
+    expect(end.slice(gone).some((screen) => screen.enemy !== null)).toBe(true);
   });
 
   it("decodes each move and both sides' HP after it", () => {
