@@ -11,6 +11,7 @@ import { SaveControls } from "../saves/SaveControls.tsx";
 import { cloudBackup } from "../saves/cloud-save.ts";
 import { openSaveSlot, storeSave } from "../saves/save-store.ts";
 import { giftStorage } from "../saves/gift-store.ts";
+import { deleteResumePoint, loadAutosave, readResumePoint, saveAutosave, storeResumePoint } from "../saves/resume-store.ts";
 import { me } from "../room/account.ts";
 import { Friends } from "../room/Friends.tsx";
 import { RoomClient, type Friend, type RoomStatus } from "../room/client.ts";
@@ -44,6 +45,9 @@ interface SlowFrame {
   fade: number | null;
   layout: string;
 }
+
+/** How often a resume point is taken while playing (also whenever the page is hidden). */
+const RESUME_POINT_MS = 60_000;
 
 const PIP_KEY = "pokehd.screen.pip.v1";
 /** Toggles the picture-in-picture screen, unless the player has bound it to a button. */
@@ -105,6 +109,9 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [giftOpen, setGiftOpen] = useState(false);
   /** Another device backed up a newer save than this browser's; restoring it is in Settings. */
   const [cloudNewer, setCloudNewer] = useState(false);
+  const [autosave, setAutosave] = useState(loadAutosave);
+  /** Started from the resume point: offer the save file instead, for a while. */
+  const [resumed, setResumed] = useState(false);
   const touch = useTouchDevice();
   // Bumped by a .sav import: restarts the emulator on the imported save.
   const [boot, setBoot] = useState(0);
@@ -144,6 +151,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     let roomLink: RoomLink | null = null;
     let courier: GiftCourier | null = null;
     let raf = 0;
+    let stopResumePoints = () => {};
     const joypad = new JoypadInput({
       onChange: (mask, source) => {
         hostRef.current?.setButtons(mask);
@@ -160,7 +168,10 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     (async () => {
       const world = parseWorld(rom);
       live = createLiveWorld(world);
+      // Asks the browser not to clear the save under storage pressure (Safari's eviction).
+      void navigator.storage?.persist?.().catch(() => false);
       const slot = await openSaveSlot(romKey);
+      const resume = await readResumePoint(romKey).catch(() => null);
       if (disposed) return;
       void cloudBackup(romKey).status().then((s) => !disposed && setCloudNewer(s.kind === "newer"), () => {});
 
@@ -168,12 +179,15 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       const ctx = screenRef.current!.getContext("2d")!;
       const image = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
       const decoder = new OverworldDecoder();
-      const trackInWorld = inWorldTracker();
+      let trackInWorld = inWorldTracker();
       let latest: OverworldState | null = null;
       let emuFrames = 0;
       host = new EmulatorHost({
         rom,
         sram: slot.sram,
+        resume: resume ?? undefined,
+        autosave: loadAutosave(),
+        onAutosaveSkipped: () => setMessage("Autosave is waiting until you save this new game yourself, so it can't replace the old save."),
         onSram: slot.persist,
         onFrame: ({ pixels, watched }) => {
           image.data.set(new Uint8Array(pixels));
@@ -198,6 +212,33 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       host.watch(OVERWORLD_WATCHES);
       host.setButtons(joypad.mask);
       hostRef.current = host;
+      const started = await host.started;
+      if (disposed) return;
+      // A point the emulator turned down is stale (the save changed since) or damaged.
+      if (resume && !started.resumed) void deleteResumePoint(romKey);
+      if (started.resumed) {
+        // Before the first frame: the worker says it's ready before it runs one.
+        trackInWorld = inWorldTracker(true);
+        setResumed(true);
+        setTimeout(() => !disposed && setResumed(false), 30_000);
+      }
+
+      // Resume points: every minute, and when the page is hidden or closed. Only in the world:
+      // resuming to the title screen or intro would gain nothing.
+      const h = host;
+      const takeResumePoint = () => {
+        if (!sceneRef.current.inWorld) return;
+        void h.resumePoint().then((state) => (state && !disposed ? storeResumePoint(romKey, state) : undefined));
+      };
+      const resumeTimer = setInterval(takeResumePoint, RESUME_POINT_MS);
+      const onHidden = () => document.visibilityState === "hidden" && takeResumePoint();
+      document.addEventListener("visibilitychange", onHidden);
+      addEventListener("pagehide", takeResumePoint);
+      stopResumePoints = () => {
+        clearInterval(resumeTimer);
+        document.removeEventListener("visibilitychange", onHidden);
+        removeEventListener("pagehide", takeResumePoint);
+      };
 
       // Friends, for players signed in by email (D23); everyone else plays alone.
       void me().then(
@@ -296,12 +337,15 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       if (disposed) return created.dispose();
       engine = created;
       live.setLook(engine.look);
-      setMessage(slot.sram ? "Continuing from this browser's save." : "No save in this browser yet.");
+      setMessage(
+        started.resumed ? "Back where you left off." : slot.sram ? "Continuing from this browser's save." : "No save in this browser yet.",
+      );
       setTimeout(() => !disposed && setMessage(""), 4000);
     })().catch((e: unknown) => setMessage(`Couldn't start: ${String(e)}`));
 
     return () => {
       disposed = true;
+      stopResumePoints();
       cancelAnimationFrame(raf);
       joypad.dispose();
       unsubscribeRoom();
@@ -322,6 +366,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       setGifts(null);
       setGiftOpen(false);
       setSound(false);
+      setResumed(false);
     };
   }, [rom, romKey, boot]);
 
@@ -335,6 +380,19 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     hostRef.current?.dispose();
     hostRef.current = null;
     void storeSave(romKey, sram).then(() => setBoot((n) => n + 1));
+  };
+
+  // Back to the title screen on the save file, dropping the resume point.
+  const startFromSave = () => {
+    hostRef.current?.dispose();
+    hostRef.current = null;
+    void deleteResumePoint(romKey).then(() => setBoot((n) => n + 1));
+  };
+
+  const toggleAutosave = (on: boolean) => {
+    setAutosave(on);
+    saveAutosave(on);
+    hostRef.current?.setAutosave(on);
   };
 
   const s = stats?.state;
@@ -353,6 +411,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
         <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
         <button type="button" onClick={() => setSettings((v) => !v)} aria-expanded={settings}>Settings</button>
+        {resumed && <button type="button" onClick={startFromSave}>Load the save file instead</button>}
         {cloudNewer && <button type="button" onClick={() => setSettings(true)}>Newer save in the cloud</button>}
         {room && <RoomBadge status={room.status} friends={room.friends.length} />}
         {gifts && room?.status === "open" && (
@@ -366,6 +425,12 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             <h2>{header.title}</h2>
             <div className="row">
               <SaveControls romKey={romKey} header={header} onImported={onImported} />
+            </div>
+            <div className="row">
+              <label>
+                <input type="checkbox" checked={autosave} onChange={(e) => toggleAutosave(e.target.checked)} />
+                {" "}Autosave every 5 minutes and after battles
+              </label>
             </div>
             <div className="row">
               <button type="button" onClick={onForget}>Forget ROM</button>

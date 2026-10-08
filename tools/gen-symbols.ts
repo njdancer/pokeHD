@@ -160,6 +160,11 @@ export const ALLOWLIST: readonly string[] = [
   "wMonDataLocation",
   "wPlayerID",
   "wPlayerName",
+  // Autosave: where the save file keeps its checksummed data and trainer ID
+  "sGameData",
+  "sGameDataEnd",
+  "sMainData",
+  "wMainDataStart",
 ];
 
 export interface ParsedSymbol {

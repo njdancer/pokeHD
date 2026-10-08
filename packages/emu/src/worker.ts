@@ -4,8 +4,10 @@
 // sound queued in the worklet and runs a frame whenever the queue drops below that, so sound
 // never starves and video follows at the core's own ~59.73 Hz. Without audio (no user gesture
 // yet, or muted), a wall-clock timer runs frames at FRAME_RATE instead.
+import { AutoSave, loadResumePoint } from "./autosave.ts";
 import { FRAME_RATE, GameBoy } from "./core.ts";
 import { GiftDesk } from "./gifts/desk.ts";
+import { SafePoint } from "./gifts/safepoint.ts";
 import { LinkPort } from "./link.ts";
 import type { FromWorker, FromWorklet, ToWorker, ToWorklet, Watch } from "./protocol.ts";
 
@@ -28,6 +30,7 @@ let watches: Record<string, Watch> = {};
 let lastSramFlush = 0;
 let link: LinkPort | undefined;
 let desk: GiftDesk | undefined;
+let autosave: AutoSave | undefined;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
 
@@ -35,6 +38,7 @@ function runOneFrame() {
   if (!gb) return;
   gb.runFrame();
   frames++;
+  autosave?.frame();
 
   const pcm = gb.drainAudio();
   if (audio) {
@@ -94,12 +98,24 @@ async function handle(data: ToWorker) {
   try {
     switch (data.type) {
       case "start": {
-        gb = await GameBoy.create({ rom: data.rom, sram: data.sram, sampleRate: data.sampleRate });
-        desk = new GiftDesk(gb, { rom: data.rom, emit: (event) => post({ type: "gift", event }) });
+        const create = () => GameBoy.create({ rom: data.rom, sram: data.sram, sampleRate: data.sampleRate });
+        gb = await create();
+        const reason = data.resume && loadResumePoint(gb, data.resume, data.sram);
+        // A failed load may have left half a state behind: start clean on the save instead.
+        if (reason) gb = await create();
+        desk = new GiftDesk(gb, {
+          rom: data.rom,
+          emit: (event) => {
+            if (event.type === "landed") autosave?.prompt();
+            post({ type: "gift", event });
+          },
+        });
+        autosave = new AutoSave(gb, { rom: data.rom, skipped: (why) => post({ type: "autosave-skipped", reason: why }) });
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();
+        // Before the first frame, so the page knows how the game started before it sees one.
+        post({ type: "ready", resumed: !!data.resume && !reason, ...(reason ? { reason } : {}) });
         tick();
-        post({ type: "ready" });
         break;
       }
       case "audio":
@@ -126,6 +142,17 @@ async function handle(data: ToWorker) {
         break;
       case "load-state":
         gb?.loadState(data.state);
+        break;
+      case "resume-point": {
+        // Not mid-way through one of our calls, a link session, or a gift the room would resend.
+        const g = gb && !link && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        // Hand over any newer save first, so the stored save matches the one in the state.
+        if (g?.sramDirty) flushSram();
+        post({ type: "resume-point", id: data.id, state: g ? g.saveState() : null });
+        break;
+      }
+      case "autosave":
+        if (autosave) autosave.enabled = data.enabled;
         break;
       case "link-open":
         link?.dispose();

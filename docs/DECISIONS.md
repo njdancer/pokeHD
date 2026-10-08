@@ -303,3 +303,29 @@ the recovery path D19 lacked: a lost cookie no longer loses the player.
 Alternative: **Cloudflare Access** (reconsidered). Its sign-in page can't be ours (only logo and
 colours), sessions last at most a month, and sign-in leaves for `*.cloudflareaccess.com`, which
 breaks out of an iPhone home-screen app.
+
+## D24. Autosave with the game's own save, plus resume points that never beat the save file
+
+Nick's call on 2026-10-08: quality-of-life features such as autosave are in scope; the "game
+behaviour is the original" rule protects play (stats, RNG, AI, glitches), not every detail of
+the software. Two layers:
+
+- **Autosave** runs `SaveGameData` (what the start menu's SAVE calls) through D20's overworld
+  idle point, so it writes a normal save file. It runs every 5 minutes of play, and after a
+  battle ends, a map change or a gift landing, at most once a minute. Any save by hand restarts
+  the clock. It never replaces another trainer's save: if the save file holds a valid save with
+  a different trainer ID or name (NEW GAME over an old save), it waits until the player saves
+  the new game once themselves, as the game's own "older file will be erased" prompt would
+  have them do. Settings has a switch to turn it off.
+- **Resume points** are emulator save states, taken every minute in the world and whenever the
+  page is hidden, kept in IndexedDB next to the save with a SHA-1. On start-up the emulator
+  uses one only if it loads and its battery RAM is byte-for-byte the stored save; otherwise it
+  boots on the save as usual and the point is deleted. So a save made later, an imported .sav
+  or a cloud restore all make a point stale, and a damaged one can never win over the save
+  file. None is taken during a link session, mid-way through a safe-point call, or while a gift
+  sits in the game unsaved (the room would resend it). After resuming, "Load the save file
+  instead" goes back to the title screen.
+
+Why two: Nick doesn't want to rely on a memory dump alone, and the save file alone loses play
+since the last save when a tab closes. Resume points stay on the device for now; a cloud copy
+can follow.

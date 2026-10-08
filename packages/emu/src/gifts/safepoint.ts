@@ -95,6 +95,11 @@ export class SafePoint {
     return this.#queue.length + (this.#running ? 1 : 0);
   }
 
+  /** True while a job's routine is mid-call (the game is running our call, not its own code). */
+  get calling(): boolean {
+    return this.#running !== undefined;
+  }
+
   /** Removes the hook; queued jobs never run. */
   dispose(): void {
     this.#remove();
