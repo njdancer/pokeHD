@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { SYMBOLS } from "../generated/symbols.ts";
 import { labelDb } from "./db.ts";
 import { bankListing, lineIndexOf, romOffset } from "./listing.ts";
@@ -60,8 +60,12 @@ describe("labelDb", () => {
 });
 
 describe.skipIf(!existsSync(ROM_PATH))("with the ROM", () => {
-  const rom = new Uint8Array(readFileSync(ROM_PATH));
+  // Read lazily: a skipped describe still runs its body when collecting tests.
+  let rom: Uint8Array;
   const db = labelDb();
+  beforeAll(() => {
+    rom = new Uint8Array(readFileSync(ROM_PATH));
+  });
 
   it("lists bank 0 with resolved far calls", () => {
     const lines = bankListing(rom, db, 0);
