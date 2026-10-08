@@ -367,3 +367,29 @@ app, and never losing progress comes first. Made while Nick was away; flagged fo
   iPhone a home-screen app has its own cookies, separate from Safari, so sign in from inside
   the app by typing the emailed code (the login page says so there); the email's link would
   sign in Safari instead. Home-screen apps are exempt from Safari's 7-day storage clearing.
+
+## D26. Friends Nick invites play on his cartridge
+
+Nick's call on 2026-10-08, after inviting Charlie, who could sign in but then had to find a ROM
+of his own before they could play together. Nick's ROM was already in the private R2 bucket for
+his own testing (D23); now every player Nick adds may load it too.
+
+- `GET /api/rom` (`/api/dev-rom` stays as an alias for tools) serves it to a signed-in player
+  who is Nick or has `romAccess`. Everyone else, signed out included, gets the same 404.
+- `romAccess` is a per-player flag in the Directory, on by default: every friend Nick adds, and
+  every player already there when this shipped, gets it. Nick turns it off or back on per
+  friend in Friends ("Stop sharing" / "Share cartridge"); players can't change their own.
+- The browser keeps the shared ROM in IndexedDB like one the player loaded, marked as shared,
+  so the game starts offline and quickly. On each start, if the server says the player is
+  signed out or no longer allowed it, the shared copy is deleted and they're asked for their
+  own. A device that never comes back online keeps its copy; that's the limit of revoking.
+- The ROM screen knows who's signed in: signed out, it offers sign-in ("you won't need a ROM of
+  your own"); signed in with access, a Play button loads the cartridge; signed in without it,
+  it says to load their own. A ROM a player loads themselves still never leaves their browser.
+
+Why: asking friends to find a ROM of their own is the step that stops them playing together. Sharing stays limited to people Nick added
+by email, and he can take it back.
+
+Alternative: friends always bring their own ROM (the original rule). Kept as an option on the
+same screen, and the default for anyone Nick stops sharing with.
+

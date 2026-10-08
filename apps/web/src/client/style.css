@@ -22,6 +22,13 @@ html[data-standalone] input { -webkit-user-select: text; user-select: text; }
 @media (max-width: 600px) { .cartridge { margin: 8vh 16px 0; } }
 .cartridge h1 { margin: 0 0 .5rem; font-size: 2rem; letter-spacing: .02em; }
 .cartridge p { color: var(--muted); line-height: 1.5; }
+.cartridge a { color: var(--accent); }
+.cartridge .who { color: var(--fg); }
+.cartridge button.primary {
+  font: inherit; font-weight: 600; color: var(--bg); background: var(--accent); border: 1px solid var(--accent);
+  border-radius: 8px; padding: .6rem 1.4rem; cursor: pointer;
+}
+.cartridge button.primary:disabled { opacity: .6; cursor: default; }
 .drop {
   position: relative; display: grid; place-items: center; min-height: 8rem; margin-top: 1rem; padding: 1rem;
   text-align: center; border: 2px dashed #ffffff33; border-radius: 10px; cursor: pointer;
