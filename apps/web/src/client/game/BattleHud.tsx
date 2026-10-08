@@ -2,11 +2,7 @@
 // HUDs, which the battle overlay masks out. Each card shows only while the game draws its HUD.
 import type { BattleMon, BattleState } from "@pokehd/emu";
 import type { Side } from "@pokehd/engine/battle";
-
-/** The HP bar's width in the game, in pixels, and the colour thresholds GetHealthBarColor uses. */
-const BAR_PIXELS = 48;
-const GREEN_FROM = 27;
-const YELLOW_FROM = 10;
+import { barColour } from "./battle.ts";
 
 const STATUS: Record<BattleMon["status"], string | null> = {
   ok: null,
@@ -16,11 +12,6 @@ const STATUS: Record<BattleMon["status"], string | null> = {
   freeze: "FRZ",
   paralysis: "PAR",
 };
-
-export function barColour(hp: number, maxHp: number): "green" | "yellow" | "red" {
-  const pixels = maxHp > 0 ? Math.floor((hp * BAR_PIXELS) / maxHp) : 0;
-  return pixels >= GREEN_FROM ? "green" : pixels >= YELLOW_FROM ? "yellow" : "red";
-}
 
 function Card({ side, mon }: { side: Side; mon: BattleMon }) {
   const fraction = mon.maxHp > 0 ? Math.min(mon.hp / mon.maxHp, 1) : 0;

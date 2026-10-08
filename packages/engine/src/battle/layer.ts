@@ -72,7 +72,7 @@ const CAMERA_TURN = 28;
 /** Picture centres on the Game Boy screen (home cells + half a picture), in pixels. */
 const SCREEN_CENTRE: Record<Side, { x: number; y: number }> = {
   player: { x: 1 * 8 + PIC / 2, y: 5 * 8 + PIC / 2 },
-  enemy: { x: 12 * 8 + PIC / 2, y: 0 * 8 + PIC / 2 },
+  enemy: { x: 12 * 8 + PIC / 2, y: PIC / 2 },
 };
 
 /** Base and stage colours: top, side. */
@@ -223,7 +223,11 @@ export function createBattleLayer(initial: ArenaStyle = "field"): BattleLayer {
     pic.mesh.position.copy(at);
   };
 
+  let objectsShown = 0;
   const showObjects = (all: BattleView) => {
+    // Most of a battle has no sprites: skip the upload until there are some.
+    if (all.objects.length === 0 && objectsShown === 0) return;
+    objectsShown = all.objects.length;
     const data = atlas.image.data as Uint8Array;
     data.fill(0);
     const width = 8 * OBJECT_SLOTS;

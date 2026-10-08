@@ -54,6 +54,8 @@ const SIDES: Record<Side, SideLayout> = {
 };
 /** How far a picture may slide from home, in tiles, and still count as that picture. */
 const MAX_SLIDE = PIC_TILES;
+/** Slides are counted by a key, (dy + SLIDE_KEY) * 64 + dx + SLIDE_KEY. */
+const SLIDE_KEY = 32;
 
 /**
  * Each HUD's cells, and two of its border tiles that only it draws, at fixed spots, so it counts
@@ -200,7 +202,7 @@ export class BattleScreenReader {
         stray++;
         continue;
       }
-      const key = dy * 64 + dx;
+      const key = (dy + SLIDE_KEY) * 64 + dx + SLIDE_KEY;
       offsets[side].set(key, (offsets[side].get(key) ?? 0) + 1);
     }
     const huds = { enemy: hudShown(tileMap, "enemy"), player: hudShown(tileMap, "player") };
@@ -231,16 +233,16 @@ export class BattleScreenReader {
       const { first, home } = SIDES[side];
       // The window follows the picture when most of its tiles agree on a slide; a picture drawn
       // from a subset of its tiles (growing out of the Poké Ball) stays home.
-      let best = 0;
+      let best = SLIDE_KEY * 64 + SLIDE_KEY;
       let bestCount = 0;
       let total = 0;
       for (const [key, count] of offsets[side]) {
         total += count;
         if (count > bestCount) [best, bestCount] = [key, count];
       }
-      const slide = bestCount * 2 > total && bestCount >= PIC_TILES ? best : 0;
-      const dy = Math.round(slide / 64);
-      const dx = slide - dy * 64;
+      const slide = bestCount * 2 > total && bestCount >= PIC_TILES ? best : SLIDE_KEY * 64 + SLIDE_KEY;
+      const dy = Math.floor(slide / 64) - SLIDE_KEY;
+      const dx = (slide % 64) - SLIDE_KEY;
       const kept = this.#cells[side];
       let any = false;
       for (let cy = 0; cy < PIC_TILES; cy++) {

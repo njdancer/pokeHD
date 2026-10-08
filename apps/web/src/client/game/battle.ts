@@ -134,3 +134,14 @@ export function maskBattleScreen(data: Uint8ClampedArray, screen: BattleScreen):
     }
   }
 }
+
+/** The HP bar's width in the game, in pixels, and the colour thresholds GetHealthBarColor uses. */
+const BAR_PIXELS = 48;
+const GREEN_FROM = 27;
+const YELLOW_FROM = 10;
+
+/** The HP bar's colour, as the game picks it. */
+export function barColour(hp: number, maxHp: number): "green" | "yellow" | "red" {
+  const pixels = maxHp > 0 ? Math.floor((hp * BAR_PIXELS) / maxHp) : 0;
+  return pixels >= GREEN_FROM ? "green" : pixels >= YELLOW_FROM ? "yellow" : "red";
+}
