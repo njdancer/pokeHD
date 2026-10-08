@@ -57,6 +57,32 @@ Max's compute and a twelfth of its memory bandwidth, so take 8–10× per unit o
 That's at full clocks. Phones throttle the GPU within minutes of sustained load, which puts it at
 roughly 40–45 fps: under the 16.7 ms a 60 Hz frame allows, which matches what Nick saw.
 
+## Main-thread CPU per frame
+
+Measured in `/dev/live` (Pallet Town) on the cloud sandbox's CPU, engine `stats` medians:
+
+| | Before | After |
+|---|---|---|
+| Colour grade LUT bake (32³ texels) | 8.3 ms, every frame | ≈1 ms, at most 10 times a second |
+| Rendering: building and submitting 33 passes, ~120 draws | 5.7 ms | 6.0 ms |
+| World update (sprites, chunks) | 0.2 ms | 0.2 ms |
+| **Engine total** | **14.2 ms** | **8.0 ms** |
+
+The day cycle blends the grade a little every frame, and the LUT was re-baked whenever any grade
+value changed: 32,768 texels through `gradeColor` every frame, then a 128 KB texture upload. On
+a phone that alone used half the 16.7 ms budget, before the emulator's messages, HD text and
+React got their turn, so the phone was CPU-bound and dynamic resolution couldn't help. The bake
+now tabulates the per-channel steps once per axis (same output, texel for texel; 7.5 → 0.9 ms)
+and runs at most every 100 ms while the grade drifts.
+
+The rest of the CPU is three.js preparing passes and draws: bloom (12 passes) and depth of
+field (10) are about a quarter of it each, shadows half the draw calls. The governor now gets the
+engine's CPU time and won't lower resolution for a window whose frames are mostly CPU work.
+
+Ambient motion costs no CPU: grass sway and water ripples are a time uniform evaluated in the
+vertex and fragment shaders. Stepping them to a few frames a second wouldn't save GPU time
+either, since every frame is redrawn anyway (the camera follows the player).
+
 ## Dynamic resolution and the mobile tier
 
 Two layers keep a phone near 60 fps without costing a fast machine anything.
