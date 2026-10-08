@@ -15,6 +15,10 @@ const StyleCompare = lazy(() => import("./dev/StyleCompare.tsx").then((m) => ({ 
 const MapViewer = import.meta.env.DEV
   ? lazy(() => import("./dev/MapViewer.tsx").then((m) => ({ default: m.MapViewer })))
   : null;
+// The screenshot regression tests' page (e2e/shots.e2e.ts).
+const Shots = import.meta.env.DEV
+  ? lazy(() => import("./dev/Shots.tsx").then((m) => ({ default: m.Shots })))
+  : null;
 const LabelViewer = import.meta.env.DEV
   ? lazy(() => import("./dev/LabelViewer.tsx").then((m) => ({ default: m.LabelViewer })))
   : null;
@@ -30,6 +34,7 @@ export function Root() {
   if (path === "/dev/battle") return <Suspense><BattleDev /></Suspense>;
   if (path === "/dev/bench") return <Suspense><Bench /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;
+  if (Shots && path === "/dev/shots") return <Suspense><Shots /></Suspense>;
   if (MapViewer && location.hash === "#maps") return <Suspense><MapViewer /></Suspense>;
   if (LabelViewer && location.hash === "#labels") return <Suspense><LabelViewer /></Suspense>;
   return <App />;

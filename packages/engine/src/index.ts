@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
 import { fog, rangeFogFactor, uniform } from "three/tsl";
+import { sceneTime } from "./scene-time.ts";
 import { createSky } from "./sky.ts";
 import { createDayClock, stepDay, wrapNow } from "./look/clock.ts";
 import { blendCycle, type DayCycle } from "./look/cycle.ts";
@@ -266,6 +267,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     if (stats.width === 0 || stats.height === 0) return; // not laid out yet
     const t0 = performance.now();
     if (params.time.animate) elapsed += dt;
+    sceneTime.value = elapsed;
     const p = params;
 
     stepDay(p.time, clock, dt);

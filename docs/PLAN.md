@@ -3,6 +3,32 @@
 The roadmap, task specs and coordination rules. Task IDs match the status dashboard
 (`tasks/<id>` documents). Read `CLAUDE.md` and `docs/DECISIONS.md` first.
 
+## Where things stand (2026-10-08)
+
+**Done and live:** ROM data (symbols, maps, tilesets, sprites, SGB palettes, charmap) and the
+label tables; the emulator (SameBoy, D14); the look and day cycle (D15, D16); the Hybrid world
+style (D18); live play in HD from Pallet Town to Viridian City; input; saves (local, cloud,
+autosave and resume points, kid-proofing: D24, D25); place colour (D22); email sign-in (D23);
+sharing Nick's cartridge (D26); friends' ghosts (D21), gifts (D20), and trades and battles over
+the network (D17); the mobile quality tier and dynamic resolution (D27); the ROM explorer at
+`/explore`; CI on the Mac runner with deploy on push to `main`. Text and battles are decoded into
+data (`p2-text-read`, `p2-battle-read`), but nothing draws them in HD yet.
+
+**In progress** (one thread each):
+
+| Task | What | Waits on |
+|---|---|---|
+| `p1-interiors` | 2–3 interior looks (open room, dollhouse, walls down) side by side | Nick's pick |
+| `p1-labels-more` | Labels for the remaining tilesets (forest, gates/museum and caves merged in #51) | — |
+| `p1-transitions` | Hitches between maps, and the slow first frame without WebGPU | — |
+| `p2-text` | HD text boxes and menus | Nick's pick of font and box style |
+| `p2-battles` | HD battle arenas | Nick's pick of arena look |
+| `p4-bundle` | Code-splitting and Playwright screenshot regression tests | — |
+| `p4-vlm-colour` | Sprite colour and relief models, on Nick's Mac (brief: project file `plan/vision-model.md`) | Bake-off results for Nick |
+
+**Left after that:** a full end-to-end HD playthrough on Nick's Mac, and the open questions at
+the end of this file.
+
 ## How work is organised
 
 ### Roles
@@ -58,8 +84,8 @@ and get the coordinator's sign-off before building on them.
 
 ## Phase 0: Foundations and look-dev
 
-Done: `p0-rom`, `p0-repo`, `p0-scaffold`, `p0-deploy`, `p0-devrom`.
-In progress: `p0-ci` (Nick's Hearthstone runner PR).
+Done: everything in this phase. `p0-ci` runs on Nick's Mac runner (since 2026-10-07); the look
+is D15 and D16, the style D18 (Hybrid).
 Not needed: `p0-access` (friends sign in by email with our own codes instead, D19 then D23).
 
 ### p0-symbols: typed symbol table (Track A)
@@ -120,6 +146,11 @@ same camera presets.
 
 ## Phase 1: Playable HD overworld
 
+Done: `p1-emu`, `p1-state` (as `p1-state-read`, `p1-state-render` and `p1-play`), `p1-input`,
+`p1-saves` (local and cloud), `p1-autosave`, `p1-kidproof`, `p1-colour`, and labels for the
+interiors on the route and for the forest, gates/museum and caves.
+In progress: `p1-interiors`, `p1-labels-more`, `p1-transitions` (see the table at the top).
+
 ### p1-emu: choose and integrate a WASM Game Boy core (Track B)
 Spike first: compare candidates (e.g. binjgb, SameBoy, Gambatte compiled to wasm) on accuracy,
 serial/link support, memory read/write API, ability to hook on PC (breakpoints or a patchable
@@ -141,12 +172,24 @@ warps (doors, cave entrances). Smoothly interpolate movement.
 ### p1-kidproof: never lose progress on a child's phone (Track B + F, D25)
 Cloud resume points, a save history with "Go back", the big erase question, a "Saved" toast,
 a locked-down home-screen app and a grown-ups check in Settings.
+### p1-interiors: interior looks (Track D)
+Houses, Oak's lab and Pokémon Centers use a plain placeholder look. Build 2–3 options (open
+room, dollhouse with side walls, walls down) in Red's house, Oak's lab and a Pokémon Center,
+side by side for Nick to pick; record the pick as a decision.
+### p1-labels-more: labels for the remaining tilesets (Track A)
+Every tileset the game uses gets a label table, so nothing past Viridian renders flat.
+### p1-transitions: smooth map transitions (Track D)
+No hitch when crossing into a connected map or through a warp, and a faster first frame on
+browsers without WebGPU (about 2.6 s today).
 ### p1-colour: SGB palette baseline (Track C)
 Extract SGB palettes (`data/sgb/sgb_palettes.asm`, `SetPal_Overworld` in
 `engine/gfx/palettes.asm`) and map each 4-shade ramp to a richer ramp. Per-town grading derived
 from the town's palette.
 
 ## Phase 2: Text, menus and battles
+
+Done: the data side, `p2-text-read` (`ScreenText`, `/dev/text`) and `p2-battle-read`
+(`BattleState`). In progress: `p2-text` and `p2-battles`, each needing Nick's pick of a look.
 
 ### p2-text: re-typeset text boxes and menus
 Decode the window/BG tilemap through the charmap (`constants/charmap.asm`) and render text
@@ -156,6 +199,10 @@ boxes and menus as styled overlays with a modern font; the game still drives the
 animation the game is playing.
 
 ## Phase 3: Multiplayer
+
+Done: everything in this phase (`p3-link-spike`, `p3-link-hooks`, `p3-rooms`, `p3-rooms-client`,
+`p3-ghosts`, `p3-gifts`, `p3-link`). A 60 fps check of ghosts in the HD view on the Mac is folded
+into the end-to-end playthrough.
 
 ### p3-link-spike: link cable feasibility (Track E, start right after p1-emu)
 Two emulator instances in one page joined by an in-memory serial bridge; complete a trade and a
@@ -176,9 +223,16 @@ presence from the state decoder) and ghosts drawn by `LiveWorld` on the same map
 
 ## Phase 4: Polish
 
+Both in progress. `p4-vlm-colour` grew (Nick, 2026-10-08): big models on Nick's Mac teach a
+small model that ships and runs on the player's ROM at runtime; it outputs colour plus a face
+(top, front, side) and height per pixel for relief. No baked model output is ever shipped.
+
 ### p4-bundle: code-split three.js; Playwright screenshot regression tests
 ### p4-vlm-colour: offline vision-model colourisation of sprites (see D11)
 
 ## Open questions for Nick
 
-- Name and URL: keep `pokehd.nick-01a.workers.dev` or add a custom domain?
+- Name and URL: keep `pokehd.nick-01a.workers.dev` or add a custom domain? Worth settling
+  before more devices install the home-screen app: its saves in the browser, its sign-in and
+  the app itself belong to one address, so a later move means reinstalling and restoring from
+  the cloud on each device. Asked again in the thread "Plan tidy-up" (2026-10-08).

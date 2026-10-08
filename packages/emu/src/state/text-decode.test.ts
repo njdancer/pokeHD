@@ -67,6 +67,39 @@ describe("ScreenTextDecoder", () => {
     expect(text.quantity?.value).toBe(1);
   });
 
+  it("keeps a menu whose bottom is under the message box", () => {
+    const decoder = new ScreenTextDecoder(glyphs);
+    const text = decoder.decode(
+      screen([
+        "",
+        "",
+        "....┌──────────────┐",
+        "....│▷POTION       │",
+        "....│        × 3   │",
+        "....│ CANCEL       │",
+        "....│              │",
+        "....│              │",
+        "....│              │",
+        "....│              │",
+        "....│              │",
+        "....│              │",
+        "┌──────────────────┐",
+        "│                  │",
+        "│HELLO             │",
+        "│                  │",
+        "│THERE            ▼│",
+        "└──────────────────┘",
+      ]),
+    );
+    expect(text.loose).toEqual([]);
+    expect(text.boxes.map((b) => [b.x, b.y, b.width, b.height])).toEqual([
+      [4, 2, 16, 16],
+      [0, 12, 20, 6],
+    ]);
+    expect(text.menus[0]).toMatchObject({ kind: "list", active: false, items: [{ text: "POTION" }, { text: "CANCEL" }] });
+    expect(text.dialog?.lines).toEqual(["HELLO", "THERE"]);
+  });
+
   it("follows the message box from printing to waiting", () => {
     const decoder = new ScreenTextDecoder(glyphs);
     const box = (first: string, second: string, arrow = false) =>

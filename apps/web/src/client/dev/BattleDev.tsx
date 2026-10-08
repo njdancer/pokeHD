@@ -89,7 +89,7 @@ export function BattleDev() {
         const fight = tracker.frame(watched);
         live!.setBattle(fight.scene ? fight.view : null);
         masked = fight.scene === "scene" ? fight.screen : null;
-        setLayout(screenLayout("battle", true, false, fight.scene));
+        setLayout(screenLayout("battle", true, false, false, fight.scene));
         setHud(masked && fight.state ? { state: fight.state, huds: masked.huds } : null);
         setStatus(fight.state ? `frame ${frame} · ${fight.state.phase}${fight.state.animation ? ` · animation ${fight.state.animation.id}` : ""}` : `frame ${frame}`);
       };

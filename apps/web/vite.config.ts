@@ -65,6 +65,25 @@ function devShots(): Plugin {
 export default defineConfig({
   plugins: [devRom(), devShots(), react(), cloudflare()],
   environments: {
+    client: {
+      build: {
+        // three.js (~1 MB) and the lazy ROM explorer (its label table) are big by nature;
+        // tools/check-bundle.ts guards what loads first instead.
+        chunkSizeWarningLimit: 1100,
+        rolldownOptions: {
+          output: {
+            // Libraries that change far less often than our code get chunks of their own, so a
+            // deploy doesn't make phones download three.js (~1.2 MB) or React again.
+            codeSplitting: {
+              groups: [
+                { name: "three", test: /[\\/]node_modules[\\/]three[\\/]/ },
+                { name: "react", test: /[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/ },
+              ],
+            },
+          },
+        },
+      },
+    },
     // The Worker reaches valibot through @pokehd/protocol (workspace source, which Vite doesn't
     // scan), so it found it on the first request and re-bundled mid-request: a 500 from /api/me
     // on every fresh dev-server start. Bundle it up front.

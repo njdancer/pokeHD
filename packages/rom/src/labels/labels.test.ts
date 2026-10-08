@@ -67,6 +67,18 @@ describe.skipIf(!existsSync(ROM_PATH))("labels", () => {
     ["FOREST_GATE", ["VIRIDIAN_FOREST_SOUTH_GATE", "VIRIDIAN_FOREST_NORTH_GATE"]],
     ["MUSEUM", ["MUSEUM_1F", "MUSEUM_2F"]],
     ["CAVERN", ["MT_MOON_1F", "ROCK_TUNNEL_1F", "VICTORY_ROAD_1F", "SEAFOAM_ISLANDS_B4F", "DIGLETTS_CAVE"]],
+    // The rest of the game.
+    ["SHIP", ["SS_ANNE_1F", "SS_ANNE_BOW", "SS_ANNE_KITCHEN", "SS_ANNE_CAPTAINS_ROOM"]],
+    ["SHIP_PORT", ["VERMILION_DOCK"]],
+    ["CEMETERY", ["POKEMON_TOWER_1F", "POKEMON_TOWER_7F", "AGATHAS_ROOM"]],
+    ["INTERIOR", ["BILLS_HOUSE", "POKEMON_FAN_CLUB", "SILPH_CO_11F"]],
+    ["LOBBY", ["CELADON_MART_1F", "CELADON_MART_ROOF", "GAME_CORNER", "CELADON_DINER", "ROCKET_HIDEOUT_ELEVATOR"]],
+    ["MANSION", ["CELADON_MANSION_1F", "CELADON_MANSION_ROOF", "CELADON_CHIEF_HOUSE"]],
+    ["LAB", ["CINNABAR_LAB", "CINNABAR_LAB_FOSSIL_ROOM", "WARDENS_HOUSE", "FUCHSIA_MEETING_ROOM"]],
+    ["CLUB", ["BIKE_SHOP", "TRADE_CENTER", "COLOSSEUM"]],
+    ["FACILITY", ["POWER_PLANT", "POKEMON_MANSION_1F", "SAFFRON_GYM", "SILPH_CO_1F", "ROCKET_HIDEOUT_B1F"]],
+    ["PLATEAU", ["INDIGO_PLATEAU", "ROUTE_23"]],
+    ["UNDERGROUND", ["UNDERGROUND_PATH_NORTH_SOUTH", "UNDERGROUND_PATH_WEST_EAST"]],
   ];
 
   it.each(INTERIORS)("labels every %s tile", (name, maps) => {
@@ -104,8 +116,14 @@ describe.skipIf(!existsSync(ROM_PATH))("labels", () => {
     }
   });
 
+  const REST = ["SHIP", "SHIP_PORT", "CEMETERY", "INTERIOR", "LOBBY", "MANSION", "LAB", "CLUB", "FACILITY", "PLATEAU", "UNDERGROUND"];
+
+  it("hand-labels every tileset", () => {
+    expect(world.tilesets.filter((t) => !LABEL_TABLES[t.name]).map((t) => t.name)).toEqual([]);
+  });
+
   it("only overrides interior tiles that are labelled differently already", () => {
-    for (const name of ["REDS_HOUSE_1", "HOUSE", "POKECENTER", "GYM", "FOREST", "GATE", "CAVERN"]) {
+    for (const name of ["REDS_HOUSE_1", "HOUSE", "POKECENTER", "GYM", "FOREST", "GATE", "CAVERN", ...REST]) {
       const tileset = world.tilesets.find((t) => t.name === name)!;
       const tiles = tileLabels(tileset);
       for (const [b, positions] of Object.entries(LABEL_TABLES[name]!.blocks)) {
