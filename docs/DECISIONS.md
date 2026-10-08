@@ -429,3 +429,20 @@ stands, on the overworld's own ground. The other styles stay behind the `arena` 
 
 Alternative: a separate arena scene per environment with its own move effects. More control of
 the look, but every effect would be ours, not the game's.
+
+## D29. The game lives at pokehd.dncr.me
+
+Nick's pick on 2026-10-08. The Worker serves `pokehd.dncr.me` as a Cloudflare custom domain
+(set in `wrangler.jsonc`), on his own `dncr.me` zone, the same one the sign-in emails come from.
+`pokehd.nick-01a.workers.dev` keeps serving the same Worker, with no redirect, so a home-screen
+app already installed from it keeps working until it's reinstalled from the new address.
+
+Moving is a one-off per device: the home-screen app, the saves kept in the browser and the
+sign-in cookie all belong to one address. On the new address a player signs in again, and the
+game restores their cloud save (p1-saves-cloud) and resume points (D25). Sign-in links use the
+address the request came in on, so both addresses work.
+
+Why: settle it now, while only a few devices have the app installed, so saves and sign-ins
+move once. Nick chose to keep the project name in the address.
+
+Alternatives: `play.dncr.me` (recommended for a neutral name), or staying on workers.dev.
