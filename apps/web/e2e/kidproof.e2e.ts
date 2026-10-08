@@ -78,14 +78,21 @@ test("a new game can't erase the old save by accident", async ({ page }) => {
   await p.clearDialogs();
 
   // Back to the title screen and NEW GAME.
+  // The page resumes where the last session left off, then offers the save file once it has
+  // looked for a newer resume point in the cloud (isVisible doesn't wait, so wait for it).
   await page.reload();
+  await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   const fromSave = page.getByRole("button", { name: "Load the save file instead" });
-  if (await fromSave.isVisible({ timeout: 15_000 }).catch(() => false)) await fromSave.click();
-  await sleep(4000);
-  for (let i = 0; i < 6; i++) {
-    await p.tap("z"); // title screen, then the copyright and intro
+  if (await fromSave.waitFor({ timeout: 15_000 }).then(() => true, () => false)) await fromSave.click();
+  // Through the intro and title screen to the main menu, which loads the save to preview it, so
+  // the map is the saved one only once CONTINUE / NEW GAME is up. (Clicking above restarts the
+  // emulator, so fixed timings don't line up.)
+  for (const end = Date.now() + 60_000; ((await p.state())?.mapId ?? 0) === 0; ) {
+    if (Date.now() > end) throw new Error("Never reached the main menu");
+    await p.tap("z");
     await sleep(700);
   }
+  await sleep(500);
   await p.tap("ArrowDown"); // CONTINUE → NEW GAME
   await sleep(300);
   await p.tap("z");

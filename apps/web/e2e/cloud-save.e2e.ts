@@ -1,5 +1,5 @@
 // Cloud saves across devices on the real game page (p1-saves-cloud): one player saves in the game
-// on one device, signs in a second device with a device code, restores the cloud save there and
+// on one device, signs in on a second device, which restores the cloud save by itself, and
 // continues from the same spot. Two browser contexts stand in for the two devices.
 // Needs the ROM, and an admin token to add the player: run the dev server with ADMIN_TOKEN in
 // apps/web/.dev.vars and the same value in POKEHD_ADMIN_TOKEN.
@@ -79,14 +79,13 @@ test("a save made on one device continues on another", async ({ browser, baseURL
   const deviceB = await browser.newContext({ ...PLAY_USE, baseURL });
   await signInWith(deviceB.request, await friendLink(deviceB.request, friend.player.id));
   const pageB = await deviceB.newPage();
-  pageB.on("dialog", (d) => void d.accept());
   await pageB.goto("/?stats");
-  await pageB.getByRole("button", { name: "Newer save in the cloud" }).click({ timeout: 60_000 });
-  await pageB.getByRole("button", { name: "Restore from cloud" }).click();
+  await expect(pageB.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
 
-  // The emulator restarts on the restored save: Continue from the title screen.
+  // With no save of its own, the device restores the cloud's before the game starts (D25), so
+  // there's nothing to offer: Continue from the title screen, or the cloud's resume point.
   const b = new Player(pageB, world);
-  await expect(pageB.getByRole("button", { name: "Newer save in the cloud" })).toBeHidden({ timeout: 30_000 });
+  await expect(pageB.getByRole("button", { name: "Newer save in the cloud" })).toBeHidden();
   const inWorld = () => pageB.evaluate(() => (window as { __pokehd?: { inWorld: boolean } }).__pokehd?.inWorld ?? false);
   for (let i = 0; i < 600 && !(await inWorld()); i++) {
     await b.tap("z", 33);
