@@ -168,6 +168,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     (async () => {
       const world = parseWorld(rom);
       live = createLiveWorld(world);
+      // Asks the browser not to clear the save under storage pressure (Safari's eviction).
+      void navigator.storage?.persist?.().catch(() => false);
       const slot = await openSaveSlot(romKey);
       const resume = await readResumePoint(romKey).catch(() => null);
       if (disposed) return;
