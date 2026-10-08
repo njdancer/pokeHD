@@ -304,15 +304,17 @@ Alternative: **Cloudflare Access** (reconsidered). Its sign-in page can't be our
 colours), sessions last at most a month, and sign-in leaves for `*.cloudflareaccess.com`, which
 breaks out of an iPhone home-screen app.
 
-## D24. Phones get a mobile quality tier (made while Nick was away, flagged for review)
+## D24. Phones get a mobile quality tier, and everyone gets dynamic resolution
 
-Touch-only devices (coarse pointer, no hover) render with a patch over every look: pixel-ratio
-cap 1.5 instead of 2, ambient occlusion at quarter resolution, FXAA instead of SMAA.
-`?quality=full|mobile` overrides the guess. Colours, light, framing and every effect stay.
+Touch-only devices (coarse pointer, no hover) render with a patch over every look: ambient
+occlusion at quarter resolution and FXAA instead of SMAA (`?quality=full|mobile` overrides).
+On every device, dynamic resolution lowers the render scale in steps down to 50% while frames
+miss 60 fps, then drops depth of field as the last step, and climbs back when there's headroom
+(`?dynres=0` turns it off). Details in `docs/PERF.md`.
 
-Why: the iPhone 13 Pro ran under 60 fps. The patch halves the GPU cost of a frame (4.20 → 2.21 ms
-on the 1440p reference) by trimming what's least visible on a small, dense screen. Numbers and
-the full budget are in `docs/PERF.md`.
+Why: the iPhone 13 Pro ran under 60 fps. Nick (2026-10-08) prefers a slight blur to a low frame
+rate, but not blur where it isn't needed, so resolution drops only on a device and in a scene
+that need it, and a fast machine stays sharp.
 
-Alternative: also dropping depth of field on phones (−68% instead of −47%). Held back because
-it's a visible change; it's the next lever if the tier isn't enough.
+Alternative: a fixed 1.5 pixel-ratio cap on phones (the first version of this tier). Simpler,
+but blurs every phone all the time, including ones with headroom.

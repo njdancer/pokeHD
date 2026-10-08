@@ -57,26 +57,38 @@ Max's compute and a twelfth of its memory bandwidth, so take 8–10× per unit o
 That's at full clocks. Phones throttle the GPU within minutes of sustained load, which puts it at
 roughly 40–45 fps: under the 16.7 ms a 60 Hz frame allows, which matches what Nick saw.
 
-## Mobile quality tier
+## Dynamic resolution and the mobile tier
 
-`QUALITY_PATCHES.mobile` (`packages/engine/src/look/quality.ts`) lays a patch over every look on
-touch-only devices (`?quality=full|mobile` overrides): pixel-ratio cap 1.5 instead of 2, AO at
-quarter resolution, FXAA instead of SMAA. Colours, light, framing and every effect stay.
+Two layers keep a phone near 60 fps without costing a fast machine anything.
 
-| | 1440p-class (M1 Max) | iPhone estimate |
+**Mobile tier.** `QUALITY_PATCHES.mobile` (`packages/engine/src/look/quality.ts`) lays a patch
+over every look on touch-only devices (`?quality=full|mobile` overrides): AO at quarter
+resolution and FXAA instead of SMAA. Neither shows on a small, dense screen.
+
+**Dynamic resolution.** A governor (`packages/engine/src/look/governor.ts`) watches the time
+between display frames and steps down a ladder when more than a fifth of frames in half a second
+miss 60 fps: render scale 100, 90, 80, 70, 60, 50%, then 50% without depth of field. After 3 s
+of clean frames it tries a rung up; a rung up that fails waits twice as long next time. Vsync
+hides how close a frame came, so it can't judge a single step; instead, a whole descent that
+leaves frames no faster (iOS Low Power Mode's 30 fps cap, or a CPU-bound page) is undone and held
+off for 30 s, then 60, 120 and so on. Stalls over 100 ms (map builds, a hidden tab) are ignored.
+`?dynres=0` turns it off; `?stats` and `/dev/live` show the current scale.
+
+| Rung (M1 Max, 1440p-class) | Frame | iPhone estimate |
 |---|---|---|
 | Shipped | 4.20 ms | 17–21 ms |
-| Mobile tier | 2.21 ms (−47%) | 11–14 ms |
-| Mobile tier without depth of field | 1.36 ms (−68%) | 9–11 ms |
+| Mobile tier at 75% | 2.21 ms (−47%) | 11–14 ms |
+| Mobile tier at 75% without depth of field | 1.36 ms (−68%) | 9–11 ms |
 
-## What's left after the tier
+On the estimate, an iPhone 13 Pro should settle around 80–90% scale with depth of field on.
+
+## What's left
 
 - **Geometry is next.** About a million triangles a frame: the voxel trees are 1,824 triangles
   each and there are about a thousand in Pallet Town's loaded neighbourhood (2.3M triangles
   across the loaded maps, all casting shadows). Tile-based phone GPUs pay for every triangle in
-  both the shadow pass and the scene. A greedy mesher (merging tops in 2D, not just along rows)
-  or a simpler distant-tree shape would cut this without changing the close-up look. The back
-  half of each tree can't simply be dropped: its upward faces form the top of the crown.
-- **Depth of field** is the single biggest post effect. The tilt-shift band already gives the
-  miniature blur, so dropping DoF on phones is the next lever, but it is a look change.
+  both the shadow pass and the scene, and resolution doesn't touch that cost. A greedy mesher
+  (merging tops in 2D, not just along rows) or a simpler distant-tree shape would cut it without
+  changing the close-up look. The back half of each tree can't simply be dropped: its upward
+  faces form the top of the crown.
 - **Battles and menus** still render the full HD view behind the Game Boy screen.
