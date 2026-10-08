@@ -67,6 +67,7 @@ export const SYMBOLS = {
   hWhoseTurn: { bank: 0x00, address: 0xfff3 },
   sGameData: { bank: 0x01, address: 0xa598 },
   sGameDataEnd: { bank: 0x01, address: 0xb523 },
+  sHallOfFame: { bank: 0x00, address: 0xa598 },
   sMainData: { bank: 0x01, address: 0xa5a3 },
   sMainDataCheckSum: { bank: 0x01, address: 0xb523 },
   wAnimSoundID: { bank: 0x00, address: 0xcf07 },

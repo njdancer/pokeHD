@@ -135,6 +135,10 @@ describe.skipIf(!existsSync(ROM_PATH))("autosave and resume points", () => {
     const newer = sram.slice();
     newer[0x2010] = (newer[0x2010] ?? 0) ^ 0xff;
     expect(loadResumePoint(await boot(newer), point, newer)).toMatch(/changed/);
+    // Pictures the game decompressed into SRAM since (a battle, the Pokédex) change no save.
+    const pictures = sram.slice();
+    pictures[0x0100] = (pictures[0x0100] ?? 0) ^ 0xff;
+    expect(loadResumePoint(await boot(pictures), point, pictures)).toBeUndefined();
     // A damaged point is refused.
     expect(loadResumePoint(await boot(sram), point.slice(0, 100), sram)).toBeDefined();
   }, 60_000);

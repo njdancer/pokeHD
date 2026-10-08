@@ -191,6 +191,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     let courier: GiftCourier | null = null;
     let raf = 0;
     let stopResumePoints = () => {};
+    /** Takes a resume point once a save has finished, so the newest point always holds it. */
+    let pointAfterSave = () => {};
     const joypad = new JoypadInput({
       onChange: (mask, source) => {
         hostRef.current?.setButtons(mask);
@@ -244,7 +246,10 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         autosave: loadAutosave(),
         onAutosaveSkipped: () => setMessage("Autosave is waiting until you save this new game yourself, so it can't replace the old save."),
         onSram: slot.persist,
-        onSaved: (auto) => auto && setSavedAt(Date.now()),
+        onSaved: (auto) => {
+          if (auto) setSavedAt(Date.now());
+          pointAfterSave();
+        },
         onErasePrompt: () => {
           // Keep the old save before anything can replace it, then ask.
           void loadSave(romKey).then((old) => {
@@ -302,12 +307,20 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         });
       };
       const resumeTimer = setInterval(takeResumePoint, RESUME_POINT_MS);
+      // A save makes every earlier point stale (it no longer holds the stored save), so take a
+      // new one straight after; the delay lets the save routine finish its last writes.
+      let saveTimer: ReturnType<typeof setTimeout> | undefined;
+      pointAfterSave = () => {
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(() => takeResumePoint(), 2000);
+      };
       const onHidden = () => document.visibilityState === "hidden" && takeResumePoint(true);
       const onPageHide = () => takeResumePoint(true);
       document.addEventListener("visibilitychange", onHidden);
       addEventListener("pagehide", onPageHide);
       stopResumePoints = () => {
         clearInterval(resumeTimer);
+        clearTimeout(saveTimer);
         document.removeEventListener("visibilitychange", onHidden);
         removeEventListener("pagehide", onPageHide);
       };
