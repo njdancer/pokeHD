@@ -61,6 +61,12 @@ describe.skipIf(!existsSync(ROM_PATH))("labels", () => {
     ["POKECENTER", ["VIRIDIAN_POKECENTER"]],
     ["MART", ["VIRIDIAN_MART"]],
     ["GYM", ["VIRIDIAN_GYM"]],
+    // Past Viridian: the forest, the gates and museum, and the caves.
+    ["FOREST", ["VIRIDIAN_FOREST", "SAFARI_ZONE_CENTER"]],
+    ["GATE", ["ROUTE_2_GATE", "ROUTE_22_GATE"]],
+    ["FOREST_GATE", ["VIRIDIAN_FOREST_SOUTH_GATE", "VIRIDIAN_FOREST_NORTH_GATE"]],
+    ["MUSEUM", ["MUSEUM_1F", "MUSEUM_2F"]],
+    ["CAVERN", ["MT_MOON_1F", "ROCK_TUNNEL_1F", "VICTORY_ROAD_1F", "SEAFOAM_ISLANDS_B4F", "DIGLETTS_CAVE"]],
   ];
 
   it.each(INTERIORS)("labels every %s tile", (name, maps) => {
@@ -70,7 +76,7 @@ describe.skipIf(!existsSync(ROM_PATH))("labels", () => {
     expect(labels.map((l, t) => (l ? null : t)).filter((t) => t !== null)).toEqual([]);
   });
 
-  it("labels every tile the route's interiors draw, after block overrides", () => {
+  it("labels every tile these maps draw, after block overrides", () => {
     for (const [name, maps] of INTERIORS) {
       const tileset = world.tilesets.find((t) => t.name === name)!;
       const blocks = blockLabels(tileset);
@@ -99,7 +105,7 @@ describe.skipIf(!existsSync(ROM_PATH))("labels", () => {
   });
 
   it("only overrides interior tiles that are labelled differently already", () => {
-    for (const name of ["REDS_HOUSE_1", "HOUSE", "POKECENTER", "GYM"]) {
+    for (const name of ["REDS_HOUSE_1", "HOUSE", "POKECENTER", "GYM", "FOREST", "GATE", "CAVERN"]) {
       const tileset = world.tilesets.find((t) => t.name === name)!;
       const tiles = tileLabels(tileset);
       for (const [b, positions] of Object.entries(LABEL_TABLES[name]!.blocks)) {
@@ -111,7 +117,7 @@ describe.skipIf(!existsSync(ROM_PATH))("labels", () => {
   });
 
   it("shares a table between tilesets that share graphics", () => {
-    for (const [a, b] of [["REDS_HOUSE_1", "REDS_HOUSE_2"], ["POKECENTER", "MART"], ["GYM", "DOJO"]] as const) {
+    for (const [a, b] of [["REDS_HOUSE_1", "REDS_HOUSE_2"], ["POKECENTER", "MART"], ["GYM", "DOJO"], ["GATE", "MUSEUM"], ["GATE", "FOREST_GATE"]] as const) {
       const ta = world.tilesets.find((t) => t.name === a)!;
       const tb = world.tilesets.find((t) => t.name === b)!;
       expect(tb.tiles).toBe(ta.tiles);

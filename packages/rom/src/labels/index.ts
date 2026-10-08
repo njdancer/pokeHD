@@ -1,4 +1,7 @@
 import type { Tileset } from "../world/types.ts";
+import { CAVERN } from "./cavern.ts";
+import { FOREST } from "./forest.ts";
+import { GATE } from "./gate.ts";
 import { GYM } from "./gym.ts";
 import { HOUSE } from "./house.ts";
 import { OVERWORLD } from "./overworld.ts";
@@ -21,6 +24,11 @@ export const LABEL_TABLES: Partial<Record<string, TilesetLabelTable>> = {
   MART: POKECENTER,
   GYM,
   DOJO: GYM,
+  FOREST,
+  GATE,
+  MUSEUM: GATE,
+  FOREST_GATE: GATE,
+  CAVERN,
 };
 
 /** Labels the ROM's own lists imply: doors, tall grass, ledges. */
