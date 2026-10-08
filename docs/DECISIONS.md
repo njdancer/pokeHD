@@ -303,3 +303,16 @@ the recovery path D19 lacked: a lost cookie no longer loses the player.
 Alternative: **Cloudflare Access** (reconsidered). Its sign-in page can't be ours (only logo and
 colours), sessions last at most a month, and sign-in leaves for `*.cloudflareaccess.com`, which
 breaks out of an iPhone home-screen app.
+
+## D24. Phones get a mobile quality tier (made while Nick was away, flagged for review)
+
+Touch-only devices (coarse pointer, no hover) render with a patch over every look: pixel-ratio
+cap 1.5 instead of 2, ambient occlusion at quarter resolution, FXAA instead of SMAA.
+`?quality=full|mobile` overrides the guess. Colours, light, framing and every effect stay.
+
+Why: the iPhone 13 Pro ran under 60 fps. The patch halves the GPU cost of a frame (4.20 → 2.21 ms
+on the 1440p reference) by trimming what's least visible on a small, dense screen. Numbers and
+the full budget are in `docs/PERF.md`.
+
+Alternative: also dropping depth of field on phones (−68% instead of −47%). Held back because
+it's a visible change; it's the next lever if the tier isn't enough.
