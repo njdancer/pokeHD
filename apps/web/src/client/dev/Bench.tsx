@@ -33,6 +33,8 @@ const ALL_POST_OFF = {
   render: { antialias: "none" },
 };
 
+const MOBILE = { ao: { resolution: 0.25 }, render: { antialias: "fxaa" } };
+
 const VARIANTS: Variant[] = [
   { id: "shipped", label: "Shipped look" },
   { id: "no-smaa", label: "− SMAA (no AA)", patch: { render: { antialias: "none" } } },
@@ -50,6 +52,9 @@ const VARIANTS: Variant[] = [
   { id: "no-sprite-shadows", label: "− sprite shadows", patch: { shadows: { spriteShadows: false } } },
   { id: "scale-75", label: "Render at 75% size", scale: 0.75 },
   { id: "scale-50", label: "Render at 50% size", scale: 0.5 },
+  // The mobile tier (QUALITY_PATCHES.mobile); its 1.5 pixel-ratio cap is the 75% scale.
+  { id: "mobile", label: "Mobile tier", patch: MOBILE, scale: 0.75 },
+  { id: "mobile-no-dof", label: "Mobile tier − depth of field", patch: { ...MOBILE, dof: { enabled: false } }, scale: 0.75 },
   { id: "scene-only", label: "Scene + shadows, no post", patch: ALL_POST_OFF },
   { id: "bare", label: "Scene only (no post, no shadows)", patch: { ...ALL_POST_OFF, shadows: { enabled: false } } },
 ];
@@ -96,7 +101,7 @@ export function Bench() {
       const world = parseWorld(rom);
       const map = MAP_NAMES.indexOf((query.get("map") ?? "PALLET_TOWN").toUpperCase());
       live = createLiveWorld(world);
-      engine = await createEngine(canvas, { world: live });
+      engine = await createEngine(canvas, { world: live, quality: "full" });
       if (disposed) return engine.dispose();
       live.setLook(engine.look);
 

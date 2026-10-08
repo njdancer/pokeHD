@@ -8,11 +8,13 @@ import { DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 import { createPlaceholder } from "./look/placeholder.ts";
 import { NEUTRAL_TINT, normTint } from "./look/grade.ts";
 import { createPost } from "./look/post.ts";
+import { defaultQuality, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
 import { createRig } from "./look/rig.ts";
 import { webgpuViewsWork } from "./webgpu-probe.ts";
 
 export type { DayCycle } from "./look/cycle.ts";
 export type { LookParams } from "./look/params.ts";
+export { QUALITY_PATCHES, type Quality } from "./look/quality.ts";
 export { BUILT_IN_PRESETS, DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 
 export interface LookController {
@@ -78,6 +80,9 @@ export interface BenchResult {
 export interface Engine {
   backend: "WebGPU" | "WebGL2";
   look: LookController;
+  /** The quality tier laid over every look; see `QUALITY_PATCHES`. */
+  readonly quality: Quality;
+  setQuality(quality: Quality): void;
   stats: EngineStats;
   /** Pins the drawing buffer to an exact size (e.g. 2560×1440 for perf checks); null follows the canvas. */
   setFixedSize(size: { width: number; height: number } | null): void;
@@ -100,6 +105,8 @@ export interface EngineOptions {
   forceWebGL?: boolean;
   /** Content to render instead of the look-dev placeholder. */
   world?: WorldContent;
+  /** Defaults to `?quality=`, else mobile on touch-only devices. */
+  quality?: Quality;
 }
 
 // The newest engine created on a canvas owns it. React StrictMode mounts, unmounts and
@@ -180,6 +187,10 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   world.setCompiler?.(compile);
 
   const clock = createDayClock(params.time);
+  let quality = options.quality ?? defaultQuality();
+  /** The look as loaded, before the quality patch: what setQuality re-applies to. */
+  let source: { cycle: DayCycle } | { look: unknown } = { cycle: DEFAULT_CYCLE };
+  const tiered = (look: unknown) => mergeLook(mergeLook(DEFAULT_LOOK, look), QUALITY_PATCHES[quality]);
   let cycle: DayCycle | null = null;
   const look: LookController = {
     params,
@@ -190,17 +201,15 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       wrapNow(params.time, clock, instant);
     },
     setCycle(next) {
-      cycle = next && {
-        morning: mergeLook(DEFAULT_LOOK, next.morning),
-        midday: mergeLook(DEFAULT_LOOK, next.midday),
-        evening: mergeLook(DEFAULT_LOOK, next.evening),
-      };
+      source = next ? { cycle: next } : { look: structuredClone(params) };
+      cycle = next && { morning: tiered(next.morning), midday: tiered(next.midday), evening: tiered(next.evening) };
       if (cycle) blendCycle(cycle, params.time.phase, params);
       rebuild();
     },
     set(next) {
+      source = { look: next };
       // Copy into the existing group objects: the panel holds references to them.
-      const merged = mergeLook(DEFAULT_LOOK, next);
+      const merged = tiered(next);
       cycle = null;
       for (const group of Object.keys(merged) as (keyof LookParams)[]) Object.assign(params[group], merged[group]);
       rebuild();
@@ -214,6 +223,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     },
   };
 
+  Object.assign(params.render, tiered({ render: DEFAULT_LOOK.render }).render);
   look.setCycle(DEFAULT_CYCLE);
 
   const placeTint: [number, number, number] = [...NEUTRAL_TINT];
@@ -288,6 +298,15 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     backend: isWebGPU ? "WebGPU" : "WebGL2",
     look,
     stats,
+    get quality() {
+      return quality;
+    },
+    setQuality(next) {
+      quality = next;
+      Object.assign(params.render, tiered({ render: DEFAULT_LOOK.render }).render);
+      if ("cycle" in source) look.setCycle(source.cycle);
+      else look.set({ ...(source.look as object), time: params.time, camera: params.camera });
+    },
     setWorld(next) {
       scene.remove(world.root);
       world.setCompiler?.(null);
@@ -309,7 +328,12 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     async benchmark(frames) {
       await gpuIdle();
       const t0 = performance.now();
+      // Passes render once per node frame, which only the animation loop advances; step it here
+      // too, or every frame after the first would skip the scene and post-processing.
+      const nodeFrame = (renderer as unknown as { _nodes: { nodeFrame: { update(): void; frameId: number } } })._nodes.nodeFrame;
       for (let i = 0; i < frames; i++) {
+        nodeFrame.update();
+        (renderer.info as { frame: number }).frame = nodeFrame.frameId;
         if (i === frames - 1) renderer.info.reset();
         renderFrame(0);
       }
