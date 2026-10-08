@@ -23,11 +23,12 @@ const SCENES: { name: string; query: string }[] = [
 
 for (const { name, query } of SCENES) {
   test(name, async ({ page }) => {
-    test.setTimeout(180_000);
+    // Minutes on a software renderer (a sandbox with no GPU); seconds on a real one.
+    test.setTimeout(900_000);
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(`/dev/shots?${query}`);
-    await expect(page.getByTestId("shots-status")).toHaveText(/^Ready/, { timeout: 150_000 });
+    await expect(page.getByTestId("shots-status")).toHaveText(/^Ready/, { timeout: 840_000 });
     const png = await page.evaluate(async () => {
       const shots = (window as { __shots?: { capture(): Promise<string> } }).__shots!;
       return (await shots.capture()).split(",")[1]!;
