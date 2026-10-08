@@ -64,6 +64,17 @@ export interface EngineStats {
   height: number;
 }
 
+export interface BenchResult {
+  /** Wall time per frame until the GPU finished: the frame's real cost when GPU-bound, ms. */
+  frameMs: number;
+  /** CPU time per frame to build and submit it, ms. */
+  cpuMs: number;
+  /** Render passes (scene, shadow and post-processing passes) in one frame. */
+  passes: number;
+  drawCalls: number;
+  triangles: number;
+}
+
 export interface Engine {
   backend: "WebGPU" | "WebGL2";
   look: LookController;
@@ -74,6 +85,11 @@ export interface Engine {
   setWorld(world: WorldContent): void;
   /** Renders one frame and returns it as a PNG. */
   capture(): Promise<Blob>;
+  /**
+   * Renders `frames` frames back to back, then waits for the GPU to finish them, so the cost
+   * isn't hidden by vsync (the /dev/bench page). Time stands still while it runs.
+   */
+  benchmark(frames: number): Promise<BenchResult>;
   dispose(): void;
 }
 
@@ -255,6 +271,17 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   });
 
   const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
+  /** Resolves once the GPU has finished everything submitted so far. */
+  const gpuIdle = async () => {
+    const backend = renderer.backend as unknown as { device?: { queue: { onSubmittedWorkDone(): Promise<void> } }; gl?: WebGL2RenderingContext };
+    if (isWebGPU) return backend.device!.queue.onSubmittedWorkDone();
+    // WebGL2: a fence, polled between tasks (browsers only update sync status then).
+    const gl = backend.gl!;
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)!;
+    gl.flush();
+    while (gl.clientWaitSync(sync, 0, 0) === gl.TIMEOUT_EXPIRED) await new Promise((r) => setTimeout(r, 0));
+    gl.deleteSync(sync);
+  };
   let disposePanel: (() => void) | undefined;
 
   const engine: Engine = {
@@ -278,6 +305,19 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       return new Promise((resolve, reject) =>
         canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("capture failed"))), "image/png"),
       );
+    },
+    async benchmark(frames) {
+      await gpuIdle();
+      const t0 = performance.now();
+      for (let i = 0; i < frames; i++) {
+        if (i === frames - 1) renderer.info.reset();
+        renderFrame(0);
+      }
+      const cpuMs = (performance.now() - t0) / frames;
+      await gpuIdle();
+      const frameMs = (performance.now() - t0) / frames;
+      const { frameCalls, drawCalls, triangles } = renderer.info.render;
+      return { frameMs, cpuMs, passes: frameCalls, drawCalls, triangles };
     },
     dispose() {
       world.setCompiler?.(null);

@@ -74,3 +74,11 @@ html, body, #root { margin: 0; height: 100%; background: var(--bg); color: var(-
 .styles-panel .sliders label { display: grid; grid-template-columns: 6.5rem 1fr 2.5rem; gap: .4rem; align-items: center; }
 .styles-panel output { text-align: right; color: var(--fg); }
 .live-page { position: fixed; inset: 0; }
+.bench-panel {
+  position: absolute; left: .5rem; top: .5rem; max-width: calc(100% - 1rem); max-height: calc(100% - 1rem); overflow: auto;
+  padding: .4rem .6rem; background: #0d1117e0; border-radius: 8px; font-size: .75rem;
+}
+.bench-panel p { margin: 0 0 .3rem; }
+.bench-panel table { border-collapse: collapse; }
+.bench-panel td, .bench-panel th { padding: .05rem .4rem; text-align: right; white-space: nowrap; }
+.bench-panel td:first-child, .bench-panel th:first-child { text-align: left; }
