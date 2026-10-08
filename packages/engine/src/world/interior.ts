@@ -30,7 +30,7 @@ export const INTERIOR_LOOKS = {
 
 export type InteriorLook = keyof typeof INTERIOR_LOOKS;
 
-/** Not yet picked by Nick: the dev page shows all three. */
+/** Nick's pick (D30). The others stay on the dev page for comparison. */
 export const DEFAULT_INTERIOR_LOOK: InteriorLook = "dollhouse";
 
 /** Tiles drawn as a front elevation: they stand up at their group's front edge. */
