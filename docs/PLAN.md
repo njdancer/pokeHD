@@ -235,7 +235,4 @@ small model that ships and runs on the player's ROM at runtime; it outputs colou
 
 ## Open questions for Nick
 
-- Name and URL: keep `pokehd.nick-01a.workers.dev` or add a custom domain? Worth settling
-  before more devices install the home-screen app: its saves in the browser, its sign-in and
-  the app itself belong to one address, so a later move means reinstalling and restoring from
-  the cloud on each device. Asked again in the thread "Plan tidy-up" (2026-10-08).
+- None right now. (Name and URL: settled as `pokehd.dncr.me`, D29.)
