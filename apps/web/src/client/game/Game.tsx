@@ -10,10 +10,14 @@ import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../inpu
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { cloudBackup } from "../saves/cloud-save.ts";
 import { openSaveSlot, storeSave } from "../saves/save-store.ts";
+import { giftStorage } from "../saves/gift-store.ts";
 import { me } from "../room/account.ts";
 import { RoomClient, type Friend, type RoomStatus } from "../room/client.ts";
 import { RoomLink } from "../room/link.ts";
 import { LinkPicker } from "../room/LinkPicker.tsx";
+import { GiftCourier } from "../room/gifts.ts";
+import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
+import { GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, screenLayout, type ScreenLayout } from "./screen.ts";
 import "./game.css";
@@ -93,6 +97,9 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [room, setRoom] = useState<{ status: RoomStatus; friends: Friend[] } | null>(null);
   /** The link cable over the room, once the room has said who we are. */
   const [link, setLink] = useState<RoomLink | null>(null);
+  /** Gifts to and from friends (D20), once the room is set up. */
+  const [gifts, setGifts] = useState<GiftCourier | null>(null);
+  const [giftOpen, setGiftOpen] = useState(false);
   /** Another device backed up a newer save than this browser's; restoring it is in Settings. */
   const [cloudNewer, setCloudNewer] = useState(false);
   const touch = useTouchDevice();
@@ -132,6 +139,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     let roomClient: RoomClient | null = null;
     let unsubscribeRoom = () => {};
     let roomLink: RoomLink | null = null;
+    let courier: GiftCourier | null = null;
     let raf = 0;
     const joypad = new JoypadInput({
       onChange: (mask, source) => {
@@ -182,6 +190,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           }
         },
         onError: (text) => setMessage(`Emulator error: ${text}`),
+        onGift: (event) => courier?.onGiftEvent(event),
       });
       host.watch(OVERWORLD_WATCHES);
       host.setButtons(joypad.mask);
@@ -194,6 +203,11 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           if (!player) return setRoom({ status: "signed-out", friends: [] });
           const client = new RoomClient();
           roomClient = client;
+          // Before connecting, so the first welcome resends anything still in the outbox.
+          if (host) {
+            courier = new GiftCourier({ room: client, host, storage: giftStorage(slot) });
+            setGifts(courier);
+          }
           const show = ({ status, friends }: { status: RoomStatus; friends: Record<string, Friend> }) =>
             setRoom({ status, friends: Object.values(friends) });
           unsubscribeRoom = client.store.subscribe((next, prev) => {
@@ -288,6 +302,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       joypad.dispose();
       unsubscribeRoom();
       roomLink?.dispose();
+      courier?.dispose();
       roomClient?.close();
       host?.dispose();
       hostRef.current = null;
@@ -300,11 +315,15 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       setNoHd(false);
       setRoom(null);
       setLink(null);
+      setGifts(null);
+      setGiftOpen(false);
       setSound(false);
     };
   }, [rom, romKey, boot]);
 
   const onTouch = useMemo(() => (mask: number) => input?.setTouchMask(mask), [input]);
+  // Without an emulator (it's restarting) the panel just stays on "Reading your game…".
+  const readGiftables = useMemo(() => () => hostRef.current?.read(GIFTABLE_RANGES) ?? new Promise<Uint8Array[]>(() => {}), []);
 
   // The old emulator could still write its save after the import, so stop it first, then
   // store the imported save again before restarting on it.
@@ -332,6 +351,9 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         <button type="button" onClick={() => setSettings((v) => !v)} aria-expanded={settings}>Settings</button>
         {cloudNewer && <button type="button" onClick={() => setSettings(true)}>Newer save in the cloud</button>}
         {room && <RoomBadge status={room.status} friends={room.friends.length} />}
+        {gifts && room?.status === "open" && (
+          <button type="button" onClick={() => setGiftOpen((v) => !v)} aria-expanded={giftOpen}>Gift</button>
+        )}
         {message && <span role="status">{message}</span>}
       </div>
       {settings && (
@@ -364,6 +386,16 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         </pre>
       )}
       {link && room && <LinkPicker link={link} players={room.friends} />}
+      {gifts && room && giftOpen && (
+        <GiftPanel
+          rom={rom}
+          courier={gifts}
+          friends={room.friends}
+          read={readGiftables}
+          onClose={() => setGiftOpen(false)}
+        />
+      )}
+      {gifts && <GiftNotices rom={rom} courier={gifts} />}
       {input && touch && <TouchPad onChange={onTouch} />}
     </div>
   );

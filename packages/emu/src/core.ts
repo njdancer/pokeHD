@@ -58,7 +58,9 @@ export type HookCallback = (gb: GameBoy) => void;
  */
 export class GameBoy {
   readonly #m: SameBoyModule;
-  readonly #hooks = new Map<number, HookCallback>();
+  /** Callbacks per native hook ID; several hooks on one instruction share a native hook. */
+  readonly #hooks = new Map<number, Set<HookCallback>>();
+  readonly #hookIds = new Map<string, number>();
   #nextHookId = 1;
   #buttons = 0;
 
@@ -81,7 +83,7 @@ export class GameBoy {
   runFrame(): void {
     for (;;) {
       const event = this.#m._emu_run(0);
-      if (event & EV_HOOK) this.#hooks.get(this.#m._emu_hook_hit())?.(this);
+      if (event & EV_HOOK) this.#fire(this.#m._emu_hook_hit());
       if (event & EV_FRAME) return;
     }
   }
@@ -98,7 +100,7 @@ export class GameBoy {
       const event = this.#m._emu_run(Math.max(remaining, 1));
       remaining -= this.#m._emu_last_cycles();
       if (event & EV_HOOK) {
-        this.#hooks.get(this.#m._emu_hook_hit())?.(this);
+        this.#fire(this.#m._emu_hook_hit());
         if (remaining > 0) continue;
         return false;
       }
@@ -162,13 +164,39 @@ export class GameBoy {
    */
   addHook(target: SymbolName | RomSymbol, callback: HookCallback): () => void {
     const sym = typeof target === "string" ? SYMBOLS[target] : target;
-    const id = this.#nextHookId++;
-    if (!this.#m._emu_add_hook(sym.bank, sym.address, id)) throw new Error("Too many hooks");
-    this.#hooks.set(id, callback);
+    const key = `${sym.bank}:${sym.address}`;
+    let id = this.#hookIds.get(key);
+    if (id === undefined) {
+      id = this.#nextHookId++;
+      if (!this.#m._emu_add_hook(sym.bank, sym.address, id)) throw new Error("Too many hooks");
+      this.#hookIds.set(key, id);
+      this.#hooks.set(id, new Set());
+    }
+    // A wrapper, so the same function added twice is two hooks.
+    const entry: HookCallback = (gb) => callback(gb);
+    const callbacks = this.#hooks.get(id)!;
+    callbacks.add(entry);
     return () => {
+      callbacks.delete(entry);
+      if (callbacks.size > 0 || this.#hookIds.get(key) !== id) return;
       this.#hooks.delete(id);
+      this.#hookIds.delete(key);
       this.#m._emu_remove_hook(id);
     };
+  }
+
+  /**
+   * Calls a native hook's callbacks in the order they were added. One that moves PC (calls or
+   * returns from a routine) ends the round: the rest would see a different instruction.
+   */
+  #fire(id: number): void {
+    const callbacks = this.#hooks.get(id);
+    if (!callbacks) return;
+    const pc = this.registers.pc;
+    for (const callback of [...callbacks]) {
+      callback(this);
+      if (this.registers.pc !== pc) return;
+    }
   }
 
   /** The last completed frame as RGBA bytes (160×144), a view into wasm memory. */

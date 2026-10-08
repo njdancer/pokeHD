@@ -1,0 +1,38 @@
+.gift-panel {
+  position: fixed; z-index: 4; left: 50%; top: 50%; translate: -50% -50%;
+  width: min(24rem, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 1rem 1.25rem;
+  background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(12px);
+  border: 1px solid #ffffff1a; border-radius: 12px; font-size: .9rem;
+}
+.gift-panel h2 { margin: 0 0 .75rem; font-size: 1.1rem; }
+.gift-panel p { color: var(--muted); }
+.gift-panel button, .gift-panel select, .gift-panel input {
+  font: inherit; color: var(--fg); background: #ffffff14; border: 1px solid #ffffff26;
+  border-radius: 6px; padding: .3rem .6rem;
+}
+.gift-panel button { cursor: pointer; }
+.gift-panel button:disabled { cursor: default; opacity: .5; }
+.gift-panel input[type="number"] { width: 5rem; }
+.gift-to { display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem; }
+.gift-tabs { display: flex; gap: .4rem; margin-bottom: .75rem; }
+.gift-tabs button[aria-selected="true"] { border-color: var(--accent); }
+.gift-panel ul { display: grid; gap: .4rem; margin: 0 0 .5rem; padding: 0; list-style: none; }
+.gift-panel li { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.gift-panel li > span:last-child { display: flex; gap: .4rem; }
+.gift-panel small { color: var(--muted); }
+.gift-money { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.gift-money span { flex-basis: 100%; color: var(--muted); }
+.gift-note { font-size: .8rem; }
+.gift-close { float: right; }
+
+.gift-notices {
+  position: fixed; z-index: 3; left: 16px; bottom: 16px; display: grid; gap: .4rem; margin: 0; padding: 0;
+  list-style: none; width: min(24rem, calc(100% - 32px)); font-size: .85rem;
+}
+.with-touch-pad .gift-notices { bottom: auto; top: 52px; }
+.gift-notices li {
+  display: flex; gap: .5rem; align-items: start; justify-content: space-between; padding: .45rem .6rem;
+  color: var(--fg); background: #0d1117e6; border: 1px solid #ffffff1a; border-radius: 8px;
+}
+.gift-notices li[data-kind="waiting"] { border-color: var(--accent); }
+.gift-notices button { font: inherit; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 0 .2rem; }

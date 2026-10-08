@@ -5,6 +5,7 @@
 // never starves and video follows at the core's own ~59.73 Hz. Without audio (no user gesture
 // yet, or muted), a wall-clock timer runs frames at FRAME_RATE instead.
 import { FRAME_RATE, GameBoy } from "./core.ts";
+import { GiftDesk } from "./gifts/desk.ts";
 import { LinkPort } from "./link.ts";
 import type { FromWorker, FromWorklet, ToWorker, ToWorklet, Watch } from "./protocol.ts";
 
@@ -26,6 +27,7 @@ let frames = 0;
 let watches: Record<string, Watch> = {};
 let lastSramFlush = 0;
 let link: LinkPort | undefined;
+let desk: GiftDesk | undefined;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
 
@@ -47,12 +49,16 @@ function runOneFrame() {
   const pixels = gb.frame.slice().buffer;
   post({ type: "frame", pixels, count: frames, watched }, [pixels]);
 
-  const now = performance.now();
-  if (gb.sramDirty && now - lastSramFlush > SRAM_FLUSH_MS) {
-    gb.clearSramDirty();
-    lastSramFlush = now;
-    post({ type: "sram", sram: gb.saveSram() });
-  }
+  if (gb.sramDirty && performance.now() - lastSramFlush > SRAM_FLUSH_MS) flushSram();
+}
+
+/** Hands the save to the page; gifts that landed before it are now in a save. */
+function flushSram() {
+  if (!gb) return;
+  gb.clearSramDirty();
+  lastSramFlush = performance.now();
+  post({ type: "sram", sram: gb.saveSram() });
+  desk?.saved();
 }
 
 /** Audio-driven pacing: top the worklet's queue up to the lead. */
@@ -75,11 +81,21 @@ function tick() {
   setTimeout(tick, Math.max(0, nextFrameAt - performance.now()));
 }
 
-scope.onmessage = async ({ data }) => {
+// "start" awaits the core. Messages that need the Game Boy (a friend's gift, a read) wait for
+// it rather than find none; settings apply at once, so the first frame already has its watches.
+let started: Promise<void> = Promise.resolve();
+scope.onmessage = ({ data }) => {
+  if (data.type === "start") started = handle(data);
+  else if (data.type === "watch" || data.type === "pause") void handle(data);
+  else void started.then(() => handle(data));
+};
+
+async function handle(data: ToWorker) {
   try {
     switch (data.type) {
       case "start": {
         gb = await GameBoy.create({ rom: data.rom, sram: data.sram, sampleRate: data.sampleRate });
+        desk = new GiftDesk(gb, { rom: data.rom, emit: (event) => post({ type: "gift", event }) });
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();
         tick();
@@ -126,8 +142,29 @@ scope.onmessage = async ({ data }) => {
         link?.dispose();
         link = undefined;
         break;
+      case "read":
+        if (gb) {
+          const g = gb;
+          post({ type: "read", id: data.id, bytes: data.ranges.map(([address, length]) => g.readBytes(address, length)) });
+        }
+        break;
+      case "gift-give":
+        desk?.give(data.id, data.gift);
+        break;
+      case "gift-take": {
+        const { id } = data;
+        desk?.take(data.spec, (result) => {
+          if (!result.ok || !gb) return post({ type: "gift-taken", id, result });
+          // The game has just saved: the page stores this save before the gift goes out.
+          gb.clearSramDirty();
+          lastSramFlush = performance.now();
+          post({ type: "gift-taken", id, result, sram: gb.saveSram() });
+          desk?.saved();
+        });
+        break;
+      }
     }
   } catch (err) {
     post({ type: "error", message: err instanceof Error ? err.message : String(err) });
   }
-};
+}

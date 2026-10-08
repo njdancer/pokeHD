@@ -49,15 +49,23 @@ export interface SaveBackup {
  */
 export async function openSaveSlot(key: string, backup: SaveBackup | null = defaultBackup(key)) {
   let queue: Promise<unknown> = Promise.resolve();
+  /** Runs `op` after every write queued before it. */
+  const enqueue = <T>(op: () => Promise<T>): Promise<T> => {
+    const next = queue.then(op);
+    queue = next.catch((err) => console.error("[pokeHD] couldn't store the save", err));
+    return next;
+  };
   return {
+    key,
     sram: (await loadSave(key)) ?? undefined,
     persist(sram: Uint8Array): Promise<void> {
-      const next = queue.then(() => storeSave(key, sram)).then(() => backup?.onSram(sram));
-      queue = next.catch((err) => console.error("[pokeHD] couldn't store the save", err));
-      return next.then(() => undefined);
+      return enqueue(() => storeSave(key, sram)).then(() => backup?.onSram(sram));
     },
+    enqueue,
+    backup,
   };
 }
+export type SaveSlot = Awaited<ReturnType<typeof openSaveSlot>>;
 
 function defaultBackup(key: string): SaveBackup | null {
   return typeof window === "undefined" ? null : cloudBackup(key);

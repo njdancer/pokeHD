@@ -1,6 +1,7 @@
 // Messages between a client and the room (p3-rooms). JSON text frames, validated with valibot on
 // the way in.
 import * as v from "valibot";
+import { GiftIdSchema, GiftSchema, type Gift } from "./gift.ts";
 import { LinkMessageSchema, type LinkMessage } from "./link.ts";
 
 const int = (min: number, max: number) => v.pipe(v.number(), v.integer(), v.minValue(min), v.maxValue(max));
@@ -38,6 +39,18 @@ export const ClientMessageSchema = v.variant("type", [
     to: v.pipe(v.string(), v.maxLength(64)),
     message: LinkMessageSchema,
   }),
+  /**
+   * A gift for player `to`, already taken out of the sender's game and saved there (D20). The
+   * room keeps it until the receiver acknowledges it; resending the same `id` is harmless.
+   */
+  v.strictObject({
+    type: v.literal("gift"),
+    to: v.pipe(v.string(), v.maxLength(64)),
+    id: GiftIdSchema,
+    gift: GiftSchema,
+  }),
+  /** A gift addressed to me is in a save: the room can forget it. */
+  v.strictObject({ type: v.literal("gift-ack"), id: GiftIdSchema }),
 ]);
 export type ClientMessage = v.InferOutput<typeof ClientMessageSchema>;
 
@@ -54,6 +67,13 @@ export type ServerMessage =
   | { type: "presence"; id: string; presence: Presence | null }
   /** A link cable message from the friend with player ID `from`, in the order they sent it. */
   | { type: "link"; from: string; message: LinkMessage }
+  /**
+   * A gift for me, sent on arrival and again on every connect until I `gift-ack` it. `from`
+   * is the sender as they were when they sent it.
+   */
+  | { type: "gift"; id: string; from: PlayerInfo; gift: Gift }
+  /** The room has stored the gift I sent with this `id`; the sender can drop it from its outbox. */
+  | { type: "gift-stored"; id: string }
   /**
    * `bad-message`: a frame that wasn't a valid message. `not-here`: a link message for someone
    * who isn't connected (it was dropped; `to` says who). `replaced`: the same player connected
@@ -107,6 +127,8 @@ export const ServerMessageSchema = v.variant("type", [
   v.object({ type: v.literal("left"), id: v.string() }),
   v.object({ type: v.literal("presence"), id: v.string(), presence: v.nullable(PresenceSchema) }),
   v.object({ type: v.literal("link"), from: v.string(), message: LinkMessageSchema }),
+  v.object({ type: v.literal("gift"), id: GiftIdSchema, from: PlayerInfoSchema, gift: GiftSchema }),
+  v.object({ type: v.literal("gift-stored"), id: GiftIdSchema }),
   v.variant("reason", [
     v.object({ type: v.literal("error"), reason: v.literal("bad-message") }),
     v.object({ type: v.literal("error"), reason: v.literal("replaced") }),

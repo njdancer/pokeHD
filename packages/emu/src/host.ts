@@ -1,6 +1,8 @@
 // Main-thread handle on an emulator running in a Web Worker.
 import { createAudioOutput } from "./audio.ts";
-import type { LinkMessage } from "@pokehd/protocol";
+import type { Gift, LinkMessage } from "@pokehd/protocol";
+import type { GiftEvent } from "./gifts/desk.ts";
+import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { LinkPortOptions } from "./link.ts";
 import type { FrameMessage, FromWorker, ToWorker, Watch } from "./protocol.ts";
 
@@ -19,6 +21,14 @@ export interface EmulatorHostOptions {
   /** Called (at most about once a second) when the game has written its save. */
   onSram?: (sram: Uint8Array) => void;
   onError?: (message: string) => void;
+  /** Received gifts landing, waiting and reaching a save (D20). */
+  onGift?: (event: GiftEvent) => void;
+}
+
+/** A taken gift and, on success, the save the game wrote straight after (store it first). */
+export interface TakenGift {
+  result: TakeResult;
+  sram?: Uint8Array;
 }
 
 /**
@@ -31,6 +41,8 @@ export class EmulatorHost {
   #audioNode: AudioWorkletNode | undefined;
   #nextId = 1;
   readonly #pending = new Map<number, (state: Uint8Array) => void>();
+  readonly #reads = new Map<number, (bytes: Uint8Array[]) => void>();
+  readonly #takes = new Map<number, (taken: TakenGift) => void>();
   #linkSend: ((message: LinkMessage) => void) | undefined;
 
   constructor(options: EmulatorHostOptions) {
@@ -50,6 +62,17 @@ export class EmulatorHost {
           break;
         case "link-send":
           this.#linkSend?.(data.message);
+          break;
+        case "read":
+          this.#reads.get(data.id)?.(data.bytes);
+          this.#reads.delete(data.id);
+          break;
+        case "gift":
+          options.onGift?.(data.event);
+          break;
+        case "gift-taken":
+          this.#takes.get(data.id)?.({ result: data.result, sram: data.sram });
+          this.#takes.delete(data.id);
           break;
         case "error":
           options.onError?.(data.message);
@@ -114,6 +137,32 @@ export class EmulatorHost {
         this.#post({ type: "link-close" });
       },
     };
+  }
+
+  /** Reads memory ranges once, between frames. */
+  read(ranges: readonly Watch[]): Promise<Uint8Array[]> {
+    const id = this.#nextId++;
+    return new Promise((resolve) => {
+      this.#reads.set(id, resolve);
+      this.#post({ type: "read", id, ranges });
+    });
+  }
+
+  /** Queues a friend's gift for the game's next overworld idle point (D20). Repeats are ignored. */
+  giveGift(id: string, gift: Gift): void {
+    this.#post({ type: "gift-give", id, gift });
+  }
+
+  /**
+   * Takes a gift out of the game at its next overworld idle point and saves (D20). Resolves
+   * once that's happened, or with the reason it couldn't (the item was used meanwhile, …).
+   */
+  takeGift(spec: GiftSpec): Promise<TakenGift> {
+    const id = this.#nextId++;
+    return new Promise((resolve) => {
+      this.#takes.set(id, resolve);
+      this.#post({ type: "gift-take", id, spec });
+    });
   }
 
   dispose(): void {

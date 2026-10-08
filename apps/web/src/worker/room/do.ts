@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import type { PlayerInfo, Presence, ServerMessage } from "@pokehd/protocol";
-import { join, leave, receive, type Peer } from "./room.ts";
+import { join, leave, receive, type GiftStore, type Peer, type StoredGift } from "./room.ts";
 
 /** Headers the Worker sets on the upgrade request it forwards, after checking the session. */
 export const PLAYER_ID_HEADER = "x-pokehd-player-id";
@@ -17,8 +17,11 @@ interface Attachment {
  * attachment and survive hibernation.
  */
 export class Room extends DurableObject<Env> {
+  readonly #gifts: GiftStore;
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.#gifts = giftStore(ctx.storage.kv);
     // Keepalives are answered without waking the room.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
@@ -32,12 +35,12 @@ export class Room extends DurableObject<Env> {
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
     server.serializeAttachment({ player: { id, name: decodeURIComponent(name) }, presence: null } satisfies Attachment);
-    join(this.#peers(), peer(server));
+    join(this.#peers(), peer(server), this.#gifts);
     return new Response(null, { status: 101, webSocket: client });
   }
 
   override webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): void {
-    receive(this.#peers(), peer(ws), message);
+    receive(this.#peers(), peer(ws), message, this.#gifts);
   }
 
   override webSocketClose(ws: WebSocket, code: number): void {
@@ -89,4 +92,30 @@ function peer(ws: WebSocket): Peer {
   };
   wrappers.set(ws, p);
   return p;
+}
+
+/**
+ * Gifts in the room's SQLite-backed key-value storage, keyed `gift:<to>:<sent at>:<id>` so a
+ * receiver's gifts list in the order they were sent. An index key maps a gift ID to its full
+ * key, which makes a resend a no-op and an acknowledgement a single lookup.
+ */
+function giftStore(kv: SyncKvStorage): GiftStore {
+  const index = (to: string, id: string) => `gift-id:${to}:${id}`;
+  return {
+    put(to, gift) {
+      if (kv.get(index(to, gift.id)) !== undefined) return;
+      const key = `gift:${to}:${Date.now().toString().padStart(15, "0")}:${gift.id}`;
+      kv.put(key, gift);
+      kv.put(index(to, gift.id), key);
+    },
+    list(to) {
+      return [...kv.list<StoredGift>({ prefix: `gift:${to}:` })].map(([, gift]) => gift);
+    },
+    delete(to, id) {
+      const key = kv.get<string>(index(to, id));
+      if (key === undefined) return;
+      kv.delete(key);
+      kv.delete(index(to, id));
+    },
+  };
 }

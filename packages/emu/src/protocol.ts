@@ -1,5 +1,7 @@
 // Messages between EmulatorHost (main thread) and the emulator Web Worker.
-import type { LinkMessage } from "@pokehd/protocol";
+import type { Gift, LinkMessage } from "@pokehd/protocol";
+import type { GiftEvent } from "./gifts/desk.ts";
+import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { LinkRole } from "./link.ts";
 
 /** A memory range read after every frame and sent with it: [address, length]. */
@@ -18,7 +20,13 @@ export type ToWorker =
   | { type: "link-open"; role: LinkRole; connectTimeoutFrames?: number }
   /** The friend's next link message. */
   | { type: "link-receive"; message: LinkMessage }
-  | { type: "link-close" };
+  | { type: "link-close" }
+  /** Reads memory once (e.g. the party and bag for the gift picker). */
+  | { type: "read"; id: number; ranges: readonly Watch[] }
+  /** A friend's gift, for the next overworld idle point (D20). */
+  | { type: "gift-give"; id: string; gift: Gift }
+  /** Takes a gift out of the game at the next idle point, then saves. */
+  | { type: "gift-take"; id: number; spec: GiftSpec };
 
 export interface FrameMessage {
   type: "frame";
@@ -37,6 +45,10 @@ export type FromWorker =
   | { type: "state"; id: number; state: Uint8Array }
   /** An outbound link message for the friend. */
   | { type: "link-send"; message: LinkMessage }
+  | { type: "read"; id: number; bytes: Uint8Array[] }
+  | { type: "gift"; event: GiftEvent }
+  /** On success, `sram` is the save the game just wrote: store it before sending the gift. */
+  | { type: "gift-taken"; id: number; result: TakeResult; sram?: Uint8Array }
   | { type: "error"; message: string };
 
 /** Worker → audio worklet: interleaved stereo float32. Worklet → worker: frames consumed. */
