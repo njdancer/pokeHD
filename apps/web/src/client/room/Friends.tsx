@@ -29,7 +29,7 @@ interface Made extends Invite {
 /**
  * Nick's friends list (D23): add a friend by email and either email them a sign-in link or copy
  * it to send yourself; make a fresh link; give a D19 player an email; stop sharing the cartridge
- * with someone, or share it again (D25); remove someone.
+ * with someone, or share it again (D26); remove someone.
  */
 export function Friends() {
   const [friends, setFriends] = useState<FriendEntry[] | null>(null);

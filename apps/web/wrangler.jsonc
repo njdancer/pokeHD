@@ -8,7 +8,7 @@
     "run_worker_first": ["/api/*"]
   },
   // Private bucket holding Nick's cartridge, served only to Nick and the friends he shares it
-  // with (D25), or to DEV_ROM_TOKEN (a Worker secret) for tools. The single deliberate exception
+  // with (D26), or to DEV_ROM_TOKEN (a Worker secret) for tools. The single deliberate exception
   // to "no Nintendo data on servers".
   // SAVES: players' battery-save backups (p1-saves-cloud), keyed by player ID and ROM SHA-1.
   "r2_buckets": [

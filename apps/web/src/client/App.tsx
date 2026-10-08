@@ -27,7 +27,7 @@ export function App() {
     setState({ kind: "ready", rom, header: check.header, romKey: await romKey(rom) });
   };
 
-  /** Loads Nick's cartridge (D25), for Nick and the friends he shares it with. */
+  /** Loads Nick's cartridge (D26), for Nick and the friends he shares it with. */
   const loadShared = async () => {
     const rom = await fetchDevRom();
     if (rom) return accept(rom, true);

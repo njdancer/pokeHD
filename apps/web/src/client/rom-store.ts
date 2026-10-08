@@ -9,7 +9,7 @@ export async function loadStoredRom(): Promise<Uint8Array | null> {
     return null;
   }
 }
-/** `shared`: the ROM is Nick's cartridge (D25), so it goes if he stops sharing it with this player. */
+/** `shared`: the ROM is Nick's cartridge (D26), so it goes if he stops sharing it with this player. */
 export async function storeRom(rom: Uint8Array, shared = false) {
   await run("rom", "readwrite", (s) => s.put(rom.slice().buffer, "rom"));
   if (shared) await run("rom", "readwrite", (s) => s.put(true, "shared"));

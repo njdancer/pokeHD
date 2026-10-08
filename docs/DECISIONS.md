@@ -330,7 +330,7 @@ Why two: Nick doesn't want to rely on a memory dump alone, and the save file alo
 since the last save when a tab closes. Resume points stay on the device for now; a cloud copy
 can follow.
 
-## D25. Friends Nick invites play on his cartridge
+## D26. Friends Nick invites play on his cartridge
 
 Nick's call on 2026-10-08, after inviting Charlie, who could sign in but then had to find a ROM
 of his own before they could play together. Nick's ROM was already in the private R2 bucket for

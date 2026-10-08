@@ -6,7 +6,7 @@ interface Props {
   /** Who's signed in: undefined while asking, null if nobody. */
   account: Account | null | undefined;
   onRom(rom: Uint8Array): void;
-  /** Loads the cartridge Nick shares with the friends he invites (D25). */
+  /** Loads the cartridge Nick shares with the friends he invites (D26). */
   onShared(): Promise<void>;
 }
 

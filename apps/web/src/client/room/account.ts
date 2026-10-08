@@ -8,7 +8,7 @@ export interface Account {
   email: string | null;
   /** Nick: can add and remove friends. */
   admin: boolean;
-  /** May load Nick's cartridge (D25): Nick, and friends he invited unless he stopped it. */
+  /** May load Nick's cartridge (D26): Nick, and friends he invited unless he stopped it. */
   romAccess: boolean;
 }
 
@@ -87,7 +87,7 @@ export async function setFriendEmail(id: string, email: string): Promise<{ ok: t
   return result.ok ? { ok: true } : { error: result.error as AddError };
 }
 
-/** Lets a friend load Nick's cartridge, or stops them (D25). */
+/** Lets a friend load Nick's cartridge, or stops them (D26). */
 export async function setFriendRomAccess(id: string, romAccess: boolean): Promise<boolean> {
   return (await post(`/api/admin/players/${encodeURIComponent(id)}`, { romAccess }, "PATCH")).ok;
 }

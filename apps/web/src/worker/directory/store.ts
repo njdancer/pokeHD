@@ -15,7 +15,7 @@ export interface Player {
   name: string;
   /** Null only for players who joined with a D19 invite code and haven't had one added. */
   email: string | null;
-  /** Whether they may load Nick's cartridge (D25). New players may; Nick can take it away. */
+  /** Whether they may load Nick's cartridge (D26). New players may; Nick can take it away. */
   romAccess: boolean;
 }
 
@@ -107,7 +107,7 @@ export class DirectoryStore {
     if (!sql.exec("PRAGMA table_info(players)").some((c) => c.name === "email")) {
       sql.exec("ALTER TABLE players ADD COLUMN email TEXT");
     }
-    // D25: everyone Nick invited may load his cartridge unless he says otherwise.
+    // D26: everyone Nick invited may load his cartridge unless he says otherwise.
     if (!sql.exec("PRAGMA table_info(players)").some((c) => c.name === "rom_access")) {
       sql.exec("ALTER TABLE players ADD COLUMN rom_access INTEGER NOT NULL DEFAULT 1");
     }
@@ -287,7 +287,7 @@ export class DirectoryStore {
       }));
   }
 
-  /** Lets a player load Nick's cartridge, or stops them (D25). */
+  /** Lets a player load Nick's cartridge, or stops them (D26). */
   setRomAccess(playerId: string, allowed: boolean): boolean {
     if (!this.#activePlayer(playerId)) return false;
     this.#sql.exec("UPDATE players SET rom_access = ? WHERE id = ?", allowed ? 1 : 0, playerId);

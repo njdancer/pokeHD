@@ -16,7 +16,7 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
   **One deliberate exception: Nick's cartridge.** His ROM sits in the private R2 bucket
   `pokehd-private` and `GET /api/rom` (old name `/api/dev-rom`) returns it only to signed-in
   players allowed it: Nick (the admin email in `wrangler.jsonc`, D23) and the friends he invited,
-  unless he turned it off for them in Friends (D25); or to tools with
+  unless he turned it off for them in Friends (D26); or to tools with
   `Authorization: Bearer <DEV_ROM_TOKEN>` (Worker secret). A browser whose player is allowed it
   loads it when it has no ROM. Locally, the Vite dev server serves `rom/pokeblue.gb` at
   `/__dev/rom` and the app auto-loads it. Never expose the ROM any other way (no public assets,

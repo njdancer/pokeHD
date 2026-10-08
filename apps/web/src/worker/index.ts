@@ -20,7 +20,7 @@ const app = new Hono<{ Bindings: Bindings }>().basePath("/api");
 app.get("/health", (c) => c.json({ ok: true }));
 
 /**
- * Serves Nick's cartridge (D25): to Nick, to friends he invited and hasn't stopped (romAccess),
+ * Serves Nick's cartridge (D26): to Nick, to friends he invited and hasn't stopped (romAccess),
  * and to tools with DEV_ROM_TOKEN (`pnpm rom:fetch` in a sandbox with no browser). `/dev-rom`
  * is its old name, kept for tools.
  */
@@ -142,7 +142,7 @@ app.post("/admin/players/:id/link", async (c) => {
 
 /**
  * Changes a player: `email` gives one to a friend who joined with a D19 invite code;
- * `romAccess` lets them load Nick's cartridge or stops them (D25).
+ * `romAccess` lets them load Nick's cartridge or stops them (D26).
  */
 app.patch("/admin/players/:id", async (c) => {
   const body = await c.req.json<{ email?: unknown; romAccess?: unknown }>().catch(() => ({}) as never);
@@ -193,7 +193,7 @@ function isAdmin(c: Ctx, player: Player | null): boolean {
   return !!player?.email && player.email === adminEmail(c);
 }
 
-/** Whether `player` may load Nick's cartridge: Nick, or a friend he hasn't stopped (D25). */
+/** Whether `player` may load Nick's cartridge: Nick, or a friend he hasn't stopped (D26). */
 function romAccess(c: Ctx, player: Player | null): boolean {
   return !!player && (isAdmin(c, player) || player.romAccess);
 }
