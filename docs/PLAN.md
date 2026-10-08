@@ -12,7 +12,7 @@ autosave and resume points, kid-proofing: D24, D25); place colour (D22); email s
 sharing Nick's cartridge (D26); friends' ghosts (D21), gifts (D20), and trades and battles over
 the network (D17); the mobile quality tier and dynamic resolution (D27); the ROM explorer at
 `/explore`; CI on the Mac runner with deploy on push to `main`. Text and battles are decoded into
-data (`p2-text-read`, `p2-battle-read`), but nothing draws them in HD yet.
+data (`p2-text-read`, `p2-battle-read`); battles draw in HD (`p2-battles`, D28).
 
 **In progress** (one thread each):
 
@@ -22,7 +22,6 @@ data (`p2-text-read`, `p2-battle-read`), but nothing draws them in HD yet.
 | `p1-labels-more` | Labels for the remaining tilesets (forest, gates/museum and caves merged in #51) | — |
 | `p1-transitions` | Hitches between maps, and the slow first frame without WebGPU | — |
 | `p2-text` | HD text boxes and menus | Nick's pick of font and box style |
-| `p2-battles` | HD battle arenas | Nick's pick of arena look |
 | `p4-bundle` | Code-splitting and Playwright screenshot regression tests | — |
 | `p4-vlm-colour` | Sprite colour and relief models, on Nick's Mac (brief: project file `plan/vision-model.md`) | Bake-off results for Nick |
 
@@ -189,7 +188,7 @@ from the town's palette.
 ## Phase 2: Text, menus and battles
 
 Done: the data side, `p2-text-read` (`ScreenText`, `/dev/text`) and `p2-battle-read`
-(`BattleState`). In progress: `p2-text` and `p2-battles`, each needing Nick's pick of a look.
+(`BattleState`), and `p2-battles`. In progress: `p2-text`, needing Nick's pick of a look.
 
 ### p2-text: re-typeset text boxes and menus
 Decode the window/BG tilemap through the charmap (`constants/charmap.asm`) and render text
@@ -199,7 +198,7 @@ boxes and menus as styled overlays with a modern font; the game still drives the
 animation the game is playing. Built screen-driven (D28): pictures, sprites, flashes and shakes
 read off the Game Boy screen and staged where the player stands; HD HP cards; the screen masked
 to menus and text. `/dev/battle?fixture=battle-rival|battle-wild&arena=field|bases|stage` shows
-it from states recorded by `tools/record-battles.ts`. Waiting on Nick's pick of arena look.
+it from states recorded by `tools/record-battles.ts`. Nick picked the on-the-spot arena (`field`, D28).
 
 ## Phase 3: Multiplayer
 
