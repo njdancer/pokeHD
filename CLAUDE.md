@@ -74,7 +74,8 @@ gifts land only at safe moments; (3) bigger ROM patches, shipped as a patch appl
 - Commands: `pnpm dev` (client + Worker on :5173), `pnpm typecheck`, `pnpm test`, `pnpm lint`,
   `pnpm build`, `pnpm run deploy` (bare `pnpm deploy` is a pnpm builtin).
 - Pushes to `main` run CI (`.github/workflows/ci.yml`: lint, typecheck, test and build on the mise
-  toolchain), then deploy to https://pokehd.nick-01a.workers.dev. Deploy needs the
+  toolchain), then deploy to https://pokehd.dncr.me (D29; the old
+  `pokehd.nick-01a.workers.dev` still serves the same Worker). Deploy needs the
   `CLOUDFLARE_API_TOKEN` repo secret.
 - **Plan and decisions:** `docs/PLAN.md` (roadmap, task specs, tracks, coordination rules) and
   `docs/DECISIONS.md` (settled decisions with reasons). Read both before starting work.

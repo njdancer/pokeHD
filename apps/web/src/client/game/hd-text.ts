@@ -1,6 +1,6 @@
 // Whether the HD text layer can stand in for the Game Boy screen (p2-text), and the player's
 // choice of how it looks. The game still draws every box and moves every cursor; this only
-// decides who shows it. The look is Storybook (D29).
+// decides who shows it. The look is Storybook (D31).
 import type { OverworldMode, ScreenText } from "@pokehd/emu";
 
 const HD_TEXT_KEY = "pokehd.text.look.v1";

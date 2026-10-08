@@ -424,13 +424,41 @@ of our own, and needs no list of move animations. Staging the battle where it ha
 place's own lighting and time of day.
 
 Arena look: three styles (`field`, on the spot; `bases`, on the spot with stone bases; `stage`,
-a separate round stage). `field` is the default while Nick picks (thread "HD battle scenes",
-`/mnt/project-files/battles/arena-options.png`); switching is the `arena` option.
+a separate round stage). Nick picked `field` (2026-10-08): the battle plays out where the player
+stands, on the overworld's own ground. The other styles stay behind the `arena` option.
 
 Alternative: a separate arena scene per environment with its own move effects. More control of
 the look, but every effect would be ours, not the game's.
 
-## D29. Words and menus use the Storybook look
+## D29. The game lives at pokehd.dncr.me
+
+Nick's pick on 2026-10-08. The Worker serves `pokehd.dncr.me` as a Cloudflare custom domain
+(set in `wrangler.jsonc`), on his own `dncr.me` zone, the same one the sign-in emails come from.
+`pokehd.nick-01a.workers.dev` keeps serving the same Worker, with no redirect, so a home-screen
+app already installed from it keeps working until it's reinstalled from the new address.
+
+Moving is a one-off per device: the home-screen app, the saves kept in the browser and the
+sign-in cookie all belong to one address. On the new address a player signs in again, and the
+game restores their cloud save (p1-saves-cloud) and resume points (D25). Sign-in links use the
+address the request came in on, so both addresses work.
+
+Why: settle it now, while only a few devices have the app installed, so saves and sign-ins
+move once. Nick chose to keep the project name in the address.
+
+Alternatives: `play.dncr.me` (recommended for a neutral name), or staying on workers.dev.
+
+## D30. Interiors are dollhouses
+
+Indoors, the Hybrid style builds the room rather than laying it flat. The back wall, shelves and
+machines stand up at their front edge with their drawing on the front face (the Game Boy draws
+them as elevations). Tables, counters and chairs become raised slabs, and plants and statues
+become voxel volumes. The filler blocks around a room are left out. Of three enclosures (open
+room, dollhouse, walls down; `/dev/styles?map=OAKS_LAB&interiors=all`), Nick picked
+**dollhouse** on 2026-10-08: a tall back wall, and side walls that step down toward the camera,
+so the room reads as a room without hiding the floor or the exit. He found the differences
+small, so this is easy to revisit.
+
+## D31. Words and menus use the Storybook look
 
 The HD text layer (p2-text) draws the game's text boxes and menus as warm cream panels with a
 soft gold edge and rounded bold letters (Nunito 800), at the places the game puts them on its

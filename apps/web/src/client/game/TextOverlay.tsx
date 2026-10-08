@@ -7,7 +7,7 @@ import { SCREEN_COLS, SCREEN_ROWS, type Menu, type ScreenText, type TextBox, typ
 import { CURSOR } from "@pokehd/rom";
 import "./text-overlay.css";
 
-/** The Storybook look (D29): rounded letters on warm paper. */
+/** The Storybook look (D31): rounded letters on warm paper. */
 export function TextOverlay({ text }: { text: ScreenText }) {
   return (
     <div className="hd-text" data-testid="hd-text" aria-live="polite">

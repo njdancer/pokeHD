@@ -29,17 +29,8 @@ export function grass(tiles: { tx: number; ty: number }[], params: StyleParams):
   blade.setIndex([0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4, 4, 5, 6]);
   blade.computeVertexNormals();
 
-  const ramp = LABEL_RAMPS["tall-grass"];
-  const material = new THREE.MeshStandardNodeMaterial({ side: THREE.DoubleSide, roughness: 0.8 });
-  const t = uv().y;
-  material.colorNode = mix(color(ramp[3]), mix(color(ramp[2]), color(ramp[1]), t), smoothstep(0, 0.35, t));
-  const phase = hash(instanceIndex).mul(6.283);
-  const bend = positionLocal.y.mul(positionLocal.y);
-  const sway = sin(time.mul(1.8).add(phase)).mul(0.12).mul(bend);
-  material.positionNode = positionLocal.add(vec3(sway, 0, sway.mul(0.4)));
-
   const count = Math.round(tiles.length * params.grassDensity);
-  const mesh = new THREE.InstancedMesh(blade, material, count);
+  const mesh = new THREE.InstancedMesh(blade, grassMaterial(), count);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const e = new THREE.Euler();
@@ -75,6 +66,29 @@ export function water(tiles: { tx: number; ty: number }[], y: number): THREE.Mes
   g.setIndex(idx);
   g.computeVertexNormals();
 
+  const mesh = new THREE.Mesh(g, waterMaterial());
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+// The node materials, made by name so a chunk built in a worker can be rebuilt here (./chunk.ts).
+
+/** Grass blades: shaded root to tip, swaying per instance. */
+export function grassMaterial(): THREE.MeshStandardNodeMaterial {
+  const ramp = LABEL_RAMPS["tall-grass"];
+  const material = new THREE.MeshStandardNodeMaterial({ side: THREE.DoubleSide, roughness: 0.8 });
+  const t = uv().y;
+  material.colorNode = mix(color(ramp[3]), mix(color(ramp[2]), color(ramp[1]), t), smoothstep(0, 0.35, t));
+  const phase = hash(instanceIndex).mul(6.283);
+  const bend = positionLocal.y.mul(positionLocal.y);
+  const sway = sin(time.mul(1.8).add(phase)).mul(0.12).mul(bend);
+  material.positionNode = positionLocal.add(vec3(sway, 0, sway.mul(0.4)));
+  material.userData["recipe"] = "grass";
+  return material;
+}
+
+/** Water rippling on the 16-px-per-unit pixel grid. */
+export function waterMaterial(): THREE.MeshStandardNodeMaterial {
   const ramp = LABEL_RAMPS.water;
   const q = floor(positionWorld.xz.mul(16)).div(16);
   const t = time;
@@ -84,7 +98,6 @@ export function water(tiles: { tx: number; ty: number }[], y: number): THREE.Mes
   const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.12, metalness: 0 });
   const base = mix(color(ramp[2]), color(ramp[1]), smoothstep(-1.5, 1.5, wave));
   material.colorNode = mix(base, color(ramp[0]), smoothstep(float(2.1), float(2.6), wave));
-  const mesh = new THREE.Mesh(g, material);
-  mesh.receiveShadow = true;
-  return mesh;
+  material.userData["recipe"] = "water";
+  return material;
 }

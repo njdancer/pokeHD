@@ -162,7 +162,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [savedAt, setSavedAt] = useState(0);
   const touch = useTouchDevice();
   const glyphs = useMemo(() => readGlyphs(rom), [rom]);
-  /** Words and menus drawn in HD (Storybook, D29), or on the Game Boy screen. */
+  /** Words and menus drawn in HD (Storybook, D31), or on the Game Boy screen. */
   const [hdTextOn, setHdTextOn] = useState(loadHdTextOn);
   const hdTextOnRef = useRef(hdTextOn);
   /** The text on screen, while the HD text layer can show it. */

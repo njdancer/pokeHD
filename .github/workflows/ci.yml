@@ -35,7 +35,7 @@ jobs:
     concurrency: deploy-production
     environment:
       name: production
-      url: https://pokehd.nick-01a.workers.dev
+      url: https://pokehd.dncr.me
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5

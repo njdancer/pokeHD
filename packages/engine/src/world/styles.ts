@@ -3,6 +3,7 @@ import { LABELS, type Label } from "@pokehd/rom";
 import { BUILDING_LABELS, findBuildings, findProps, findTrees, PROP_LABELS, tilesWith, type StepProp } from "./analyse.ts";
 import { cutOut } from "./cutout.ts";
 import { grass, water } from "./effects.ts";
+import { buildInterior, DEFAULT_INTERIOR_LOOK, isInterior, type InteriorLook } from "./interior.ts";
 import { colourRegion, commonTile, DMG_RAMP } from "./palette.ts";
 import type { StyleParams } from "./params.ts";
 import type { PlaceColours } from "./place.ts";
@@ -45,7 +46,7 @@ function common(region: Region, ramps: PlaceColours["ramps"] | undefined) {
 }
 
 /**
- * The plain fallback for maps without labels (interiors until they get a style of their own):
+ * The plain fallback for maps without labels:
  * the map flat on the ground in DMG greens.
  */
 export function buildFlat(region: Region): THREE.Group {
@@ -56,8 +57,18 @@ export function buildFlat(region: Region): THREE.Group {
   return group;
 }
 
-/** `colours`: the place's SGB colours (./place.ts); without them, the base label ramps. */
-export function buildStyle(id: StyleId, region: Region, params: StyleParams, colours?: PlaceColours): THREE.Group {
+/**
+ * `colours`: the place's SGB colours (./place.ts); without them, the base label ramps. Indoors,
+ * the Hybrid style builds the room with `interior`'s look.
+ */
+export function buildStyle(
+  id: StyleId,
+  region: Region,
+  params: StyleParams,
+  colours?: PlaceColours,
+  interior: InteriorLook = DEFAULT_INTERIOR_LOOK,
+): THREE.Group {
+  if (id === "hybrid" && isInterior(region)) return buildInterior(region, params, interior, colours);
   const group = new THREE.Group();
   group.name = id;
   const c = common(region, colours?.ramps);

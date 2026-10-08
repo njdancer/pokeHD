@@ -42,7 +42,7 @@
 .hd-pick { border-radius: calc(var(--tile) * .5); margin-block: calc(var(--tile) * -.25); padding-block: calc(var(--tile) * .25); }
 .hd-pick.selected { background: var(--hd-pick); }
 
-/* Storybook (D29): rounded letters on warm paper, like a picture book. */
+/* Storybook (D31): rounded letters on warm paper, like a picture book. */
 .hd-box {
   --hd-accent: #e0702a; --hd-pick: #f2b46a55;
   color: #3e2a1c; font: 800 calc(var(--tile) * 1.12) / 1 Nunito, ui-rounded, system-ui, sans-serif;
