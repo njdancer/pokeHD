@@ -237,6 +237,9 @@ export function buildInterior(region: Region, params: StyleParams, look: Interio
     const z1 = bounds.y1 * TILE_UNITS;
     const t = 0.18;
     const side = look === "dollhouse" ? tall : 0.45;
+    // One continuous back wall behind the drawn ones, so the room's back reads as a single
+    // wall even where the drawing breaks it up (machines and posters between wall runs).
+    group.add(slab(x0 - t, z0 - t / 2, x1 + t, z0 - t / 2, tall, t, wallColour));
     // Side walls: full height at the back, stepping down toward the camera in the dollhouse so
     // the room stays open; knee-high all the way with walls down.
     if (look === "dollhouse") {

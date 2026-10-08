@@ -119,7 +119,11 @@ export function StyleCompare() {
       }
       if (disposed) return;
       session.current = { region, focuses, views, params, focus };
-      applyCamera(views, VIEW_PRESETS[INITIAL_VIEW]);
+      // &yaw=, &pitch= and &distance= nudge the starting view (for screenshots).
+      const nudge = Object.fromEntries(
+        (["yaw", "pitch", "distance"] as const).flatMap((k) => (query.has(k) ? [[k, Number(query.get(k))]] : [])),
+      );
+      applyCamera(views, { ...VIEW_PRESETS[INITIAL_VIEW], ...nudge });
       applyPhase(views, INITIAL_PHASE);
       setReady({ focuses, backend: views[0]?.engine.backend ?? "" });
     })().catch((e: unknown) => setError(String(e)));
