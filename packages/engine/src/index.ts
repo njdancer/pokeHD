@@ -154,6 +154,8 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   scene.add(world.root);
   const post = createPost(renderer, scene, camera);
   const compile = (object: THREE.Object3D) => post.compile(object);
+  const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
+  const warmup = nonBlockingShaders(renderer, scene, canvas, !isWebGPU);
 
   const fogNear = uniform(30);
   const fogFar = uniform(100);
@@ -252,8 +254,9 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   let elapsed = 0;
   const frameHooks: { before?: () => void; after?: () => void } = {};
 
-  const renderFrame = (dt: number) => {
-    if (stats.width === 0 || stats.height === 0) return; // not laid out yet
+  /** Renders a frame, unless the canvas isn't laid out yet; says whether it did. */
+  const renderFrame = (dt: number): boolean => {
+    if (stats.width === 0 || stats.height === 0) return false; // not laid out yet
     const t0 = performance.now();
     if (params.time.animate) elapsed += dt;
     const p = params;
@@ -289,6 +292,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     post.render();
     stats.renderMs = performance.now() - tRender;
     stats.cpuMs = performance.now() - t0;
+    return true;
 
   };
 
@@ -309,11 +313,12 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     }
     frameHooks.before?.();
     // The first delta can be negative (rAF time vs. the timer's clock); clamp long stalls too.
-    renderFrame(Math.min(Math.max(delta, 0), 0.1));
+    warmup.beforeFrame();
+    const rendered = renderFrame(Math.min(Math.max(delta, 0), 0.1));
+    warmup.afterFrame(rendered);
     frameHooks.after?.();
   });
 
-  const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
   /** Resolves once the GPU has finished everything submitted so far. */
   const gpuIdle = async () => {
     const backend = renderer.backend as unknown as { device?: { queue: { onSubmittedWorkDone(): Promise<void> } }; gl?: WebGL2RenderingContext };
@@ -392,4 +397,50 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     disposePanel = mountLookdevPanel(engine, frameHooks);
   }
   return engine;
+}
+
+type Pipelines = { getForRender(renderObject: unknown, promises?: Promise<void>[] | null): unknown; updateForRender(renderObject: unknown): void };
+
+/**
+ * Shaders compile the first time something draws with them. WebGL2 links each program on the
+ * main thread, so the first frame (dozens of programs for the scene, shadows and post-processing)
+ * froze the page for seconds; WebGPU stalls the GPU instead, and only for what wasn't
+ * precompiled (a new map chunk's shadow pass, say). This asks for pipelines the way
+ * `compileAsync` does: a draw whose pipeline isn't ready is skipped instead of waited for, so an
+ * object in `scene` can turn up a frame or two late. (WebGL2 needs KHR_parallel_shader_compile
+ * for that; without it a link still blocks.) Post-processing passes are the exception, since one
+ * that skipped its draw would flash: with `hideUntilReady` (WebGL2's first frame) the canvas
+ * stays hidden until every pass has drawn, and otherwise a pass waits for its pipeline as before.
+ */
+function nonBlockingShaders(renderer: THREE.WebGPURenderer, scene: THREE.Scene, canvas: HTMLCanvasElement, hideUntilReady: boolean) {
+  const pipelines = (renderer as unknown as { _pipelines: Pipelines })._pipelines;
+  let warm = !hideUntilReady;
+  /** Post-processing programs still linking, and ones this frame started. */
+  let linking = 0;
+  let started = 0;
+  pipelines.updateForRender = (renderObject) => {
+    const inScene = (renderObject as { scene: unknown }).scene === scene;
+    if (warm && !inScene) return void pipelines.getForRender(renderObject);
+    const promises: Promise<void>[] = [];
+    pipelines.getForRender(renderObject, promises);
+    if (inScene) return;
+    for (const p of promises) {
+      linking++;
+      started++;
+      void p.then(() => linking--);
+    }
+  };
+  if (!warm) canvas.style.visibility = "hidden";
+  let complete = false;
+  return {
+    beforeFrame() {
+      complete = linking === 0;
+      started = 0;
+    },
+    afterFrame(rendered: boolean) {
+      if (warm || !rendered || !complete || started > 0) return;
+      warm = true;
+      canvas.style.visibility = "";
+    },
+  };
 }
