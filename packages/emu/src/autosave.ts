@@ -20,6 +20,8 @@ export interface AutoSaveOptions {
   minGapFrames?: number;
   /** Called with the reason when an autosave was skipped (another trainer's save, …). */
   skipped?: (reason: string) => void;
+  /** Called when any full save has been written; `auto` says it was an autosave. */
+  saved?: (auto: boolean) => void;
 }
 
 const addr = (name: SymbolName) => SYMBOLS[name].address;
@@ -35,6 +37,44 @@ export function hasSave(sram: Uint8Array): boolean {
   let sum = 0;
   for (let i = start; i < end; i++) sum = (sum + sram[i]!) & 0xff;
   return (~sum & 0xff) === sram[sramOffset("sMainDataCheckSum")];
+}
+
+/** What a save file holds, for telling saves apart in a list. */
+export interface SaveSummary {
+  /** The trainer's name bytes (decode with `decodeText`) and ID: together, whose save it is. */
+  name: Uint8Array;
+  id: number;
+  badges: number;
+  /** Pokémon caught (the Pokédex's owned count). */
+  owned: number;
+  hours: number;
+  minutes: number;
+}
+
+const bitCount = (bytes: Uint8Array) => bytes.reduce((n, b) => n + [...b.toString(2)].filter((c) => c === "1").length, 0);
+
+/** The trainer, badges and play time in a battery RAM image, or null if it holds no valid save. */
+export function saveSummary(sram: Uint8Array): SaveSummary | null {
+  if (!hasSave(sram)) return null;
+  const main = sramOffset("sMainData");
+  const at = (name: SymbolName, length = 1) => {
+    const o = main + addr(name) - addr("wMainDataStart");
+    return sram.subarray(o, o + length);
+  };
+  const id = at("wPlayerID", 2);
+  return {
+    name: sram.slice(sramOffset("sGameData"), sramOffset("sGameData") + 11),
+    id: (id[0]! << 8) | id[1]!,
+    badges: bitCount(at("wObtainedBadges")),
+    owned: bitCount(at("wPokedexOwned", 19)),
+    hours: at("wPlayTimeHours")[0]!,
+    minutes: at("wPlayTimeMinutes")[0]!,
+  };
+}
+
+/** Whether two saves are the same trainer's (the same name and ID). */
+export function sameTrainer(a: SaveSummary, b: SaveSummary): boolean {
+  return a.id === b.id && a.name.every((v, i) => v === b.name[i]);
 }
 
 /** Why saving now would replace a save that isn't this game's, or undefined if it's safe. */
@@ -73,6 +113,7 @@ export class AutoSave {
   readonly #interval: number;
   readonly #minGap: number;
   readonly #skipped: ((reason: string) => void) | undefined;
+  readonly #onSaved: ((auto: boolean) => void) | undefined;
   readonly #removeHook: () => void;
   #enabled = true;
   #sinceSave = 0;
@@ -87,6 +128,7 @@ export class AutoSave {
     this.#interval = options.intervalFrames ?? Math.round(5 * 60 * FRAME_RATE);
     this.#minGap = options.minGapFrames ?? Math.round(60 * FRAME_RATE);
     this.#skipped = options.skipped;
+    this.#onSaved = options.saved;
     // Any save restarts the clock: by hand, a gift's, a trade's, or ours. SaveMainData's
     // checksum write is the one every full save passes.
     const main = saveCommits(options.rom)[0]!;
@@ -149,5 +191,7 @@ export class AutoSave {
   #saved(): void {
     this.#sinceSave = 0;
     this.#prompted = false;
+    // Our job is the one running while it's queued; any other save is the player's or a gift's.
+    this.#onSaved?.(this.#queued);
   }
 }

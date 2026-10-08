@@ -6,6 +6,7 @@
 // yet, or muted), a wall-clock timer runs frames at FRAME_RATE instead.
 import { AutoSave, loadResumePoint } from "./autosave.ts";
 import { FRAME_RATE, GameBoy } from "./core.ts";
+import { EraseGuard } from "./erase-guard.ts";
 import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
 import { LinkPort } from "./link.ts";
@@ -31,11 +32,13 @@ let lastSramFlush = 0;
 let link: LinkPort | undefined;
 let desk: GiftDesk | undefined;
 let autosave: AutoSave | undefined;
+let guard: EraseGuard | undefined;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
 
 function runOneFrame() {
   if (!gb) return;
+  guard?.frame();
   gb.runFrame();
   frames++;
   autosave?.frame();
@@ -110,7 +113,16 @@ async function handle(data: ToWorker) {
             post({ type: "gift", event });
           },
         });
-        autosave = new AutoSave(gb, { rom: data.rom, skipped: (why) => post({ type: "autosave-skipped", reason: why }) });
+        autosave = new AutoSave(gb, {
+          rom: data.rom,
+          skipped: (why) => post({ type: "autosave-skipped", reason: why }),
+          saved: (auto) => post({ type: "saved", auto }),
+        });
+        guard = data.guardErase ? new EraseGuard(gb, {
+          rom: data.rom,
+          onPrompt: () => post({ type: "erase-prompt" }),
+          onAnswered: (erase) => post({ type: "erase-answered", erase }),
+        }) : undefined;
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();
         // Before the first frame, so the page knows how the game started before it sees one.
@@ -128,7 +140,11 @@ async function handle(data: ToWorker) {
         fillAudio();
         break;
       case "buttons":
-        gb?.setButtons(data.mask);
+        if (guard) guard.setButtons(data.mask);
+        else gb?.setButtons(data.mask);
+        break;
+      case "erase-answer":
+        guard?.answer(data.erase);
         break;
       case "watch":
         watches = data.watches;
@@ -145,7 +161,7 @@ async function handle(data: ToWorker) {
         break;
       case "resume-point": {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.
-        const g = gb && !link && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        const g = gb && !link && !guard?.asking && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
         // Hand over any newer save first, so the stored save matches the one in the state.
         if (g?.sramDirty) flushSram();
         post({ type: "resume-point", id: data.id, state: g ? g.saveState() : null });

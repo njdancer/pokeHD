@@ -138,6 +138,9 @@ warps (doors, cave entrances). Smoothly interpolate movement.
 ### p1-input: keyboard, gamepad and touch (Track F)
 ### p1-saves: SRAM persistence in IndexedDB, plus cloud backup to R2 per player (Track B + F)
 ### p1-autosave: autosave through the idle point and resume points (Track B + F, D24)
+### p1-kidproof: never lose progress on a child's phone (Track B + F, D25)
+Cloud resume points, a save history with "Go back", the big erase question, a "Saved" toast,
+a locked-down home-screen app and a grown-ups check in Settings.
 ### p1-colour: SGB palette baseline (Track C)
 Extract SGB palettes (`data/sgb/sgb_palettes.asm`, `SetPal_Overworld` in
 `engine/gfx/palettes.asm`) and map each 4-shade ramp to a richer ramp. Per-town grading derived
