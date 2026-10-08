@@ -101,4 +101,14 @@ describe("createGovernor", () => {
     expect(g.rung).toBeGreaterThanOrEqual(2);
     expect(g.rung).toBeLessThanOrEqual(4);
   });
+
+  it("doesn't blur a CPU-bound page: a smaller image wouldn't help", () => {
+    const g = createGovernor();
+    let now = 0;
+    for (let i = 0; i < 1800; i++) {
+      now += (2 * VSYNC) / 1000;
+      g.sample(2 * VSYNC, now, 22); // 22 ms of main-thread work a frame
+    }
+    expect(g.rung).toBe(0);
+  });
 });

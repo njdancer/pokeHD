@@ -25,6 +25,13 @@ const TONE_MAPPING: Record<ToneMappingName, THREE.ToneMapping> = {
   reinhard: THREE.ReinhardToneMapping,
 };
 
+/**
+ * Seconds between LUT bakes while the grade drifts (the day cycle, easing into a place's tint):
+ * ten a second is smooth for changes that take seconds, and keeps a bake (about 1 ms, plus a
+ * 128 KB upload) off most frames.
+ */
+const LUT_EVERY = 0.1;
+
 type Disposable = { dispose(): void };
 type Vec4 = THREE.Node<"vec4">;
 // The TSL typings don't model every effect node as a vec4; they all are at runtime.
@@ -57,6 +64,7 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
   lut.wrapS = lut.wrapT = lut.wrapR = THREE.ClampToEdgeWrapping;
   lut.unpackAlignment = 1;
   let lutKey = "";
+  let sinceBake = 0;
 
   let owned: Disposable[] = [];
   let scenePass: ReturnType<typeof pass> | undefined;
@@ -121,9 +129,11 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
     build,
     /**
      * Per-frame uniform updates. `focusDistance` is the camera-to-target distance; `fade` 1 is
-     * black; `place` is the place tint (a `normTint`).
+     * black; `place` is the place tint (a `normTint`). `dt` is the frame's seconds: while time
+     * runs, the grade drifts a little every frame, and the LUT is re-baked at most every
+     * LUT_EVERY seconds; 0 (a capture, a benchmark) bakes any change at once.
      */
-    update(p: LookParams, focusDistance: number, fade: number, place: Readonly<[number, number, number]> = NEUTRAL_TINT) {
+    update(p: LookParams, focusDistance: number, fade: number, place: Readonly<[number, number, number]> = NEUTRAL_TINT, dt = 0) {
       u.fade.value = fade;
       renderer.toneMappingExposure = p.grade.exposure;
       u.aoIntensity.value = p.ao.intensity;
@@ -148,9 +158,11 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
       u.vignetteRadius.value = p.vignette.radius;
       u.vignetteSmoothness.value = p.vignette.smoothness;
 
+      sinceBake += dt;
       const key = JSON.stringify(p.grade) + place.map((v) => v.toFixed(3)).join();
-      if (key !== lutKey) {
+      if (key !== lutKey && (dt === 0 || sinceBake >= LUT_EVERY)) {
         lutKey = key;
+        sinceBake = 0;
         bakeLut(p.grade, LUT_SIZE, lutData, place);
         lut.needsUpdate = true;
       }

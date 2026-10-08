@@ -300,7 +300,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     const want = world.placeTint ? normTint(world.placeTint) : NEUTRAL_TINT;
     const k = 1 - Math.exp(-dt / PLACE_TINT_SECONDS);
     for (let i = 0; i < 3; i++) placeTint[i]! += (want[i]! - placeTint[i]!) * k;
-    post.update(p, camera.position.distanceTo(world.target), clock.fade, placeTint);
+    post.update(p, camera.position.distanceTo(world.target), clock.fade, placeTint, dt);
     const tRender = performance.now();
     post.render();
     stats.renderMs = performance.now() - tRender;
@@ -314,7 +314,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     timer.update(t);
     const delta = timer.getDelta();
     // The raw interval, vsync and all, is what the governor judges.
-    const changed = governor && !fixedSize ? governor.sample(delta * 1000, t / 1000) : null;
+    const changed = governor && !fixedSize ? governor.sample(delta * 1000, t / 1000, stats.cpuMs) : null;
     if (changed !== null) {
       const next = RUNGS[changed]!;
       const dofChanged = next.dof !== rung.dof;

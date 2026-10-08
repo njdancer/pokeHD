@@ -26,6 +26,19 @@ describe("colour grade", () => {
     expect([...lut.subarray(lut.length - 4)]).toEqual([255, 255, 255, 255]);
   });
 
+  it("bakes exactly what gradeColor gives, texel for texel", () => {
+    const place = normTint("#ade75a");
+    for (const preset of Object.values(BUILT_IN_PRESETS)) {
+      const lut = bakeLut(preset.grade, 8, undefined, place);
+      let i = 0;
+      for (let z = 0; z < 8; z++) for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+        const want = gradeColor(preset.grade, [x / 7, y / 7, z / 7], place).map((v) => Math.round(v * 255));
+        expect([...lut.subarray(i, i + 3)]).toEqual(want);
+        i += 4;
+      }
+    }
+  });
+
   it("leans midtones toward the place's colour and leaves black and white alone", () => {
     const green = normTint("#ade75a");
     const [r, g, b] = gradeColor({ ...neutral, placeTint: 0.5 }, [0.5, 0.5, 0.5], green);

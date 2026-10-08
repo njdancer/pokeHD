@@ -49,7 +49,11 @@ export interface GovernorOptions {
 export interface Governor {
   readonly rung: number;
   /** Feeds one display frame interval (ms) at time `now` (s). Returns the new rung when it changes. */
-  sample(intervalMs: number, now: number): number | null;
+  /**
+   * `cpuMs` is the main thread's own work on the frame, when known: a window whose frames are
+   * mostly CPU work never steps down, since a smaller image wouldn't make them any faster.
+   */
+  sample(intervalMs: number, now: number, cpuMs?: number): number | null;
   /** Back to full resolution (the scene changed completely, e.g. a new device size). */
   reset(now: number): void;
 }
@@ -63,6 +67,8 @@ const CLEAN = 0.03;
 const STALL_MS = 100;
 /** A window with more stalls than this share of its frames says nothing about the steady load. */
 const STALLY = 0.1;
+/** Main-thread work over this share of the budget (median) makes a window CPU-bound. */
+const CPU_BOUND = 0.8;
 /** A step down within this many seconds of a step up marks that step up as failed. */
 const PROBE_S = 15;
 
@@ -78,6 +84,7 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
   let quietUntil = 0;
   let windowStart = -1;
   let frames: number[] = [];
+  let cpu: number[] = [];
   let cleanSince = -1;
   /** Seconds to wait before stepping up from each rung. */
   const upHold = RUNGS.map(() => baseUpHold);
@@ -121,20 +128,26 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
       quietUntil = now + settle;
       cleanSince = -1;
       frames = [];
+      cpu = [];
       stalls = 0;
       windowStart = -1;
     },
-    sample(intervalMs, now) {
+    sample(intervalMs, now, cpuMs) {
       if (now < quietUntil || intervalMs <= 0) return null;
       if (windowStart < 0) windowStart = now;
       if (intervalMs > STALL_MS) stalls++;
-      else frames.push(intervalMs);
+      else {
+        frames.push(intervalMs);
+        if (cpuMs !== undefined) cpu.push(cpuMs);
+      }
       if (now - windowStart < windowS || frames.length < 8) return null;
 
       const stally = stalls > (frames.length + stalls) * STALLY;
       const missed = frames.filter((ms) => ms > budget * MISS).length / frames.length;
       const meanMs = frames.reduce((a, b) => a + b, 0) / frames.length;
+      const cpuBound = cpu.length > 0 && cpu.sort((a, b) => a - b)[cpu.length >> 1]! > budget * CPU_BOUND;
       frames = [];
+      cpu = [];
       stalls = 0;
       windowStart = now;
       if (stally) return null;
@@ -153,7 +166,7 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
       }
 
       if (missed > DOWN) {
-        if (rung >= floor) return null;
+        if (rung >= floor || cpuBound) return null;
         return move(rung + 1, now, meanMs);
       }
       if (missed < CLEAN && rung > 0) {
