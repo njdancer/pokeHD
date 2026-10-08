@@ -25,6 +25,16 @@ export interface EmulatorHostOptions {
   autosave?: boolean;
   /** Called with the reason when an autosave was skipped (another trainer's save, …). */
   onAutosaveSkipped?: (reason: string) => void;
+  /** Called when the game wrote a full save (`auto` for an autosave), before its SRAM arrives. */
+  onSaved?: (auto: boolean) => void;
+  /**
+   * The game is about to ask "The older file will be erased to save. Okay?" (NEW GAME over a
+   * save). Passing this turns the guard on: the player's buttons are held back until
+   * `answerErase()` is called.
+   */
+  onErasePrompt?: () => void;
+  /** The erase question was answered (by `answerErase()`). */
+  onEraseAnswered?: (erase: boolean) => void;
   /** Called for every emulated frame, in the order they were produced. */
   onFrame?: (frame: FrameMessage) => void;
   /** Called (at most about once a second) when the game has written its save. */
@@ -80,6 +90,15 @@ export class EmulatorHost {
         case "autosave-skipped":
           options.onAutosaveSkipped?.(data.reason);
           break;
+        case "saved":
+          options.onSaved?.(data.auto);
+          break;
+        case "erase-prompt":
+          options.onErasePrompt?.();
+          break;
+        case "erase-answered":
+          options.onEraseAnswered?.(data.erase);
+          break;
         case "frame":
           options.onFrame?.(data);
           break;
@@ -110,12 +129,19 @@ export class EmulatorHost {
       }
     };
     const { rom, sram, resume } = options;
-    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate });
+    // The page answers the erase question only if it's listening for it.
+    const guardErase = !!options.onErasePrompt;
+    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase });
     if (options.autosave === false) this.setAutosave(false);
   }
 
   setAutosave(enabled: boolean): void {
     this.#post({ type: "autosave", enabled });
+  }
+
+  /** Answers the erase question (see `onErasePrompt`): true erases the old save, false keeps it. */
+  answerErase(erase: boolean): void {
+    this.#post({ type: "erase-answer", erase });
   }
 
   /**

@@ -330,6 +330,44 @@ Why two: Nick doesn't want to rely on a memory dump alone, and the save file alo
 since the last save when a tab closes. Resume points stay on the device for now; a cloud copy
 can follow.
 
+## D25. Kid-proofing: nothing a child taps loses a save
+
+Nick, 2026-10-08: the game is mostly for his young son, on an iPhone 13 Pro as a home-screen
+app, and never losing progress comes first. Made while Nick was away; flagged for his review.
+
+- **Resume points in the cloud too.** For signed-in players each resume point (D24) also goes
+  to R2 (`saves/<player>/<rom>.resume`, gzipped, a few KB), with the SHA-1 of the save it holds.
+  At start-up the page picks the newest point, local or cloud, that holds the save it has; the
+  emulator still checks it byte for byte. A device with no save at all (new phone, storage
+  cleared) restores the cloud save automatically before the game starts, instead of offering
+  it in Settings, since there's nothing local to lose.
+- **Earlier saves.** The page keeps a copy of the battery save at most every 30 minutes of
+  play (the newest 20), and always before anything replaces it: a different trainer's save
+  (NEW GAME), an import, a cloud restore or going back (the newest 10 of those). Each is copied
+  to R2 (`…/history/`), where the server keeps the newest 30. Settings, under Grown-ups, lists
+  both with trainer, badges, Pokémon caught and play time, and "Go back" restores one (keeping
+  the current save in the list first). Periodic rather than every save, so a long session's
+  autosaves don't push the interesting copies out.
+- **The erase question.** When the game is about to ask "The older file will be erased to
+  save. Okay?", the page shows its own: one big "Keep my old adventure" button, and a smaller
+  one that has to be held for 2 seconds to erase. The player's buttons don't reach the game
+  until it's answered, then the page presses A (YES) or B (NO) for them the game's own way, so
+  the game's logic is untouched. The old save is copied to Earlier saves before the question
+  even shows.
+- **"Saved" toast** when an autosave lands (a manual save already says so in the game).
+- **Home-screen app.** A web manifest (`display: standalone`) and an icon of our own; no pinch
+  or double-tap zoom, no pull-to-refresh or rubber-banding, and touches starting on the screen's
+  side edges are cancelled so a swipe can't go back a page. Touch targets are at least 44 px
+  (Select and Start were 26).
+- **Grown-ups check.** Import save, Export, cloud restore, Earlier saves, the autosave switch,
+  Forget ROM (now also confirmed) and Nick's friends list sit behind a multiplication question
+  (6–9 × 3–8). Not security, just enough that a curious child doesn't wander in.
+- **Sign-in stays put.** Checked, no change needed: the session cookie lasts 400 days (the most
+  browsers allow) and every start-up pushes it out again; server sessions don't expire. On
+  iPhone a home-screen app has its own cookies, separate from Safari, so sign in from inside
+  the app by typing the emailed code (the login page says so there); the email's link would
+  sign in Safari instead. Home-screen apps are exempt from Safari's 7-day storage clearing.
+
 ## D26. Friends Nick invites play on his cartridge
 
 Nick's call on 2026-10-08, after inviting Charlie, who could sign in but then had to find a ROM

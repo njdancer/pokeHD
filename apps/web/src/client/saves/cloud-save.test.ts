@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
 import { beforeEach, describe, expect, it } from "vitest";
+import { memoryBucket } from "../../worker/saves/memory-bucket.ts";
 import { savesApi, type SaveBucket } from "../../worker/saves/saves.ts";
 import { closeDb } from "../idb.ts";
 import { CloudBackup } from "./cloud-save.ts";
@@ -11,18 +12,7 @@ const sram = (seed: number) => Uint8Array.from({ length: 32768 }, (_, i) => (i *
 
 /** The real saves route over an in-memory bucket, as a `fetch` for one signed-in player. */
 function server() {
-  const objects = new Map<string, { body: ArrayBuffer; uploaded: Date }>();
-  let now = 1_700_000_000_000;
-  const SAVES: SaveBucket = {
-    async get(key) {
-      const o = objects.get(key);
-      return o ? { uploaded: o.uploaded, arrayBuffer: async () => o.body.slice(0) } : null;
-    },
-    async put(key, body) {
-      objects.set(key, { body: body.slice(0), uploaded: new Date((now += 1000)) });
-      return { uploaded: objects.get(key)!.uploaded };
-    },
-  };
+  const { bucket: SAVES, objects } = memoryBucket();
   let signedIn = true;
   const api = savesApi<{ SAVES: SaveBucket }>(async () => (signedIn ? { id: "sam" } : null));
   const fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>

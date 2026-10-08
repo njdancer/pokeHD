@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { me, requestCode, signOut, verifyCode, type Account, type SignInError } from "./account.ts";
 import { Friends } from "./Friends.tsx";
+import { standalone } from "../standalone.ts";
 import "./login.css";
 
 const messages: Record<SignInError, string> = {
@@ -98,6 +99,10 @@ function SignInForm({ initialError, onSignedIn }: { initialError: SignInError | 
         <p>
           If <strong className="who">{sentTo}</strong> is on the list, a six-digit code is on its way. Enter it here.
         </p>
+        {standalone() && (
+          // Home-screen apps keep their own sign-in: the email's link would sign in Safari instead.
+          <p>Type the code rather than opening the link, so this app stays signed in.</p>
+        )}
         <label>
           Code
           <input

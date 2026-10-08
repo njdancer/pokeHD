@@ -165,6 +165,13 @@ export const ALLOWLIST: readonly string[] = [
   "sGameDataEnd",
   "sMainData",
   "wMainDataStart",
+  // Kid-proofing: the save menu's "older file will be erased" prompt, and what a save shows
+  "OlderFileWillBeErasedText",
+  "SaveMenu",
+  "SaveTheGame_YesOrNo",
+  "wObtainedBadges",
+  "wPlayTimeHours",
+  "wPlayTimeMinutes",
 ];
 
 export interface ParsedSymbol {
