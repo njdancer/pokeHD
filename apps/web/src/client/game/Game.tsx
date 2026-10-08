@@ -659,7 +659,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       )}
       {gifts && <GiftNotices rom={rom} courier={gifts} />}
       {battleHud && !noHd && layout === "battle" && <BattleHud state={battleHud.state} huds={battleHud.huds} />}
-      {input && touch && <TouchPad onChange={onTouch} />}
+      {/* The pad hides while Settings is open so it can't cover the panel's forms (and unmounting releases any held button). */}
+      {input && touch && !settings && <TouchPad onChange={onTouch} />}
       {savedAt > 0 && <SavedToast shownAt={savedAt} />}
       {erasing && <EraseConfirm old={erasing.old} onAnswer={answerErase} />}
     </div>
