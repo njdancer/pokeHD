@@ -14,25 +14,40 @@ async function centre(page: Page, label: string) {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2, w: box.width, h: box.height };
 }
 
-test("touch: D-pad rolls between directions, and fingers combine", async ({ page }) => {
+test("touch: the stick appears under the thumb, turns cleanly, and fingers combine", async ({ page }) => {
   await page.goto("/dev/emu");
   await expect(page.getByTestId("touch-pad")).toBeVisible();
   const send = await touches(page);
-  const dpad = await centre(page, "D-pad");
+  const zone = await centre(page, "Joystick");
   const a = await centre(page, "A");
   const width = page.viewportSize()!.width;
-  for (const label of ["D-pad", "B", "A", "Select", "Start"]) {
+  for (const label of ["Joystick", "B", "A", "Select", "Start"]) {
     const c = await centre(page, label);
     expect(c.x - c.w / 2, `${label} fits on screen`).toBeGreaterThanOrEqual(0);
     expect(c.x + c.w / 2, `${label} fits on screen`).toBeLessThanOrEqual(width);
   }
 
-  await send("touchStart", [{ x: dpad.x, y: dpad.y - dpad.h * 0.4, id: 1 }]);
+  // The thumb lands anywhere in the zone; the stick centres there and presses nothing yet.
+  const x = zone.x - zone.w * 0.2;
+  const y = zone.y;
+  const r = 50;
+  await send("touchStart", [{ x, y, id: 1 }]);
+  await expect(held(page)).toHaveText("none");
+  await send("touchMove", [{ x, y: y - r, id: 1 }]);
   await expect(held(page)).toHaveText("Up");
-  await send("touchMove", [{ x: dpad.x + dpad.w * 0.4, y: dpad.y, id: 1 }]);
+  // Wobbling just past the diagonal keeps walking up; a clear lean turns.
+  await send("touchMove", [{ x: x + r * 0.75, y: y - r * 0.7, id: 1 }]);
+  await expect(held(page)).toHaveText("Up");
+  await send("touchMove", [{ x: x + r, y: y - r * 0.2, id: 1 }]);
+  await expect(held(page)).toHaveText("Right");
+  // Sliding far past the edge drags the stick along, so coming back a little turns straight around.
+  await send("touchMove", [{ x: x + r * 4, y, id: 1 }]);
+  await send("touchMove", [{ x: x + r * 2, y, id: 1 }]);
+  await expect(held(page)).toHaveText("Left");
+  await send("touchMove", [{ x: x + r * 4, y, id: 1 }]);
   await expect(held(page)).toHaveText("Right");
   await send("touchStart", [
-    { x: dpad.x + dpad.w * 0.4, y: dpad.y, id: 1 },
+    { x: x + r * 4, y, id: 1 },
     { x: a.x, y: a.y, id: 2 },
   ]);
   await expect(held(page)).toHaveText("Right A");

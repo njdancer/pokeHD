@@ -8,7 +8,7 @@ import {
   loadKeyBindings,
   saveKeyBindings,
 } from "./bindings.ts";
-import { directionMask, dropOpposites, pressInto } from "./direction.ts";
+import { directionMask, dropOpposites, pressInto, stickDirection } from "./direction.ts";
 import { gamepadMask, type PadLike } from "./gamepad.ts";
 import { JoypadInput, type InputEnvironment } from "./joypad.ts";
 
@@ -143,6 +143,32 @@ describe("directions", () => {
     expect(at(-40)).toBe(Button.Right | Button.Up);
     expect(at(65)).toBe(Button.Down);
     expect(at(200)).toBe(Button.Left);
+  });
+});
+
+describe("touch stick", () => {
+  const D = 0.3;
+  it("holds the axis the thumb leans furthest along, after the dead zone", () => {
+    expect(stickDirection(0.2, 0.1, 0, D)).toBe(0);
+    expect(stickDirection(1, 0.4, 0, D)).toBe(Button.Right);
+    expect(stickDirection(-0.3, -0.9, 0, D)).toBe(Button.Up);
+    expect(stickDirection(-0.9, 0.3, 0, D)).toBe(Button.Left);
+    expect(stickDirection(0.2, 0.7, 0, D)).toBe(Button.Down);
+  });
+  it("keeps a held direction across the diagonal until the thumb clearly turns", () => {
+    expect(stickDirection(0.6, 0.7, Button.Right, D)).toBe(Button.Right);
+    expect(stickDirection(0.6, 0.6, Button.Down, D)).toBe(Button.Down);
+    expect(stickDirection(0.5, 0.8, Button.Right, D)).toBe(Button.Down);
+    expect(stickDirection(-0.7, -0.6, Button.Up, D)).toBe(Button.Up);
+    expect(stickDirection(-0.9, -0.5, Button.Up, D)).toBe(Button.Left);
+  });
+  it("lets go a little inside the dead zone, not right at it", () => {
+    expect(stickDirection(0.25, 0, 0, D)).toBe(0);
+    expect(stickDirection(0.25, 0, Button.Right, D)).toBe(Button.Right);
+    expect(stickDirection(0.15, 0, Button.Right, D)).toBe(0);
+  });
+  it("flips straight through the centre to the opposite direction", () => {
+    expect(stickDirection(-0.8, 0.1, Button.Right, D)).toBe(Button.Left);
   });
 });
 
