@@ -49,3 +49,18 @@ describe("DialogJoiner", () => {
     expect(k.frame(screen(["Hey! You came from", "PALLET TOWN?"], "waiting"))).toEqual({ lines: null, press: false });
   });
 });
+
+describe("DialogJoiner told what follows", () => {
+  it("lets a scroll finish a 3-line sentence and never taps past the end", () => {
+    const j = new DialogJoiner();
+    expect(j.frame(screen(["If you caught 10", "kinds of POKéMON,"], "waiting"), "scroll").press).toBe(true);
+    j.frame(screen(["kinds of POKéMON,", ""], "printing"));
+    expect(j.frame(screen(["kinds of POKéMON,", "I'm supposed to"], "waiting"), "scroll").press).toBe(true);
+    j.frame(screen(["I'm supposed to", ""], "printing"));
+    expect(j.frame(screen(["I'm supposed to", "give you an"], "waiting"), "scroll")).toEqual({
+      lines: ["If you caught 10", "kinds of POKéMON,", "I'm supposed to", "give you an"],
+      press: false,
+    });
+    expect(new DialogJoiner().frame(screen(["INDIGO PLATEAU", ""], "waiting"), "end").press).toBe(false);
+  });
+});
