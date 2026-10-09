@@ -195,6 +195,56 @@ describe("createLiveWorld readiness", () => {
   });
 });
 
+describe("createLiveWorld doors", () => {
+  const camera = new THREE.PerspectiveCamera();
+  camera.position.set(0, 20, 20);
+
+  it("builds the map behind a nearby door ahead, so going through finds it drawn", async () => {
+    const world = fakeWorld();
+    world.maps[0]!.warps.push({ x: 2, y: 2, to: 2 as never, toWarp: 0 });
+    const local = inPlaceBuilder(world);
+    const queue: { job: ChunkJob; resolve: (r: ChunkResult) => void }[] = [];
+    const builder: ChunkBuilder = { build: (job) => new Promise((resolve) => queue.push({ job, resolve })), dispose() {} };
+    const flush = async () => {
+      for (const q of queue.splice(0)) q.resolve(local.build(q.job) as ChunkResult);
+      await Promise.resolve();
+      await Promise.resolve();
+    };
+    const live = createLiveWorld(world, { builder });
+    const tick = () => live.update(0, camera, new THREE.Vector3(), false);
+    const base = walk()[0]!;
+    live.push(base, 0);
+    for (let i = 0; i < 4; i++) {
+      tick();
+      await flush();
+    }
+    expect(live.builds.map((b) => b.map)).toEqual([0, 1, 2]); // the door's map, after A and B
+    expect(live.chunks.has(2)).toBe(false); // built ahead, kept aside
+    live.push({ ...base, mapId: 2, player: { ...base.player, x: 0, y: 0 } }, GB_FRAME_SECONDS);
+    tick();
+    expect(live.chunks.get(2)).toBe("built");
+    expect(live.ready).toBe(true); // drawn on arrival, nothing to wait for
+    live.dispose();
+  });
+
+  it("never draws the player before their map is drawn", async () => {
+    const local = inPlaceBuilder(fakeWorld());
+    const queue: { job: ChunkJob; resolve: (r: ChunkResult) => void }[] = [];
+    const builder: ChunkBuilder = { build: (job) => new Promise((resolve) => queue.push({ job, resolve })), dispose() {} };
+    const live = createLiveWorld(fakeWorld(), { builder });
+    live.push(walk()[0]!, 0);
+    live.update(0, camera, new THREE.Vector3(), false);
+    const player = () => live.root.children.find((o) => (o as THREE.Mesh).isMesh && o.renderOrder !== 1000 && o.visible && o.name !== "hybrid");
+    expect(player()).toBeUndefined();
+    for (const q of queue.splice(0)) q.resolve(local.build(q.job) as ChunkResult);
+    await Promise.resolve();
+    await Promise.resolve();
+    live.update(0, camera, new THREE.Vector3(), false);
+    expect(player()).toBeDefined();
+    live.dispose();
+  });
+});
+
 describe("ghosts", () => {
   const camera = new THREE.PerspectiveCamera();
   camera.position.set(0, 20, 20);

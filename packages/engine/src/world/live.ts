@@ -64,6 +64,8 @@ const MARGIN_BLOCKS = 3;
 const KEEP_HOPS = 2;
 /** Far chunks wait until the player is this many steps inside the current map. */
 const BUILD_CLEARANCE = 4;
+/** Doors this many steps from the player have the map behind them built ahead. */
+const DOOR_STEPS = 12;
 /** Built chunks kept, unrendered, after they leave the loaded set. */
 const SPARE_CHUNKS = 10;
 /** Seconds the camera takes to swing into a battle and back out. */
@@ -314,6 +316,34 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     if (builds.length > 16) builds.shift();
   };
 
+  /**
+   * Maps behind the doors near the player, built ahead and kept spare, so going through one
+   * finds its map already built and compiled: the game's fade-in then shows a finished room,
+   * never the people in it on black.
+   */
+  const doorTried = new Set<MapId>();
+  let doorsFor: MapId | null = null;
+  const nextDoor = (): Chunk | undefined => {
+    const here = current === null ? undefined : chunks.get(current);
+    const p = latest?.player;
+    if (!here || !p) return undefined;
+    if (doorsFor !== here.map.id) {
+      doorsFor = here.map.id;
+      doorTried.clear();
+    }
+    const near = here.map.warps
+      .map((w) => ({ to: w.to === "last" ? (here.map.id >= FIRST_INDOOR_MAP ? outside : undefined) : w.to, d: Math.abs(w.x - p.x) + Math.abs(w.y - p.y) }))
+      .filter((w): w is { to: MapId; d: number } => w.to !== undefined && w.d <= DOOR_STEPS)
+      .sort((a, b) => a.d - b.d);
+    for (const { to } of near) {
+      if (doorTried.has(to) || chunks.has(to) || spare.has(to)) continue;
+      const map = world.maps[to];
+      doorTried.add(to);
+      if (map) return { map, bx: 0, by: 0, hops: KEEP_HOPS + 1, group: null, offset: { x: 0, z: 0 } };
+    }
+    return undefined;
+  };
+
   // Actors, interpolated one emulator frame behind the newest state.
   const sprites = createSpriteSet();
   const player = sprites.actor();
@@ -465,7 +495,10 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       if (!building) {
         const pending = [...chunks.values()].filter((c) => !c.group && (c.hops <= 1 || inside));
         pending.sort((a, b) => a.hops - b.hops);
-        if (pending[0]) build(pending[0]);
+        // Doors come before maps two connections out: going through one is the likelier next step.
+        const door = pending[0] && pending[0].hops <= 1 ? undefined : nextDoor();
+        if (door) build(door);
+        else if (pending[0]) build(pending[0]);
       }
 
       if (latest && here && prev && last) {
@@ -532,7 +565,9 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
           };
         } else view = null;
       }
-      const away = staged && s > 0.5;
+      // People only stand on a drawn map: never the player and NPCs on an empty, black view.
+      const unbuilt = !!here && !isShown(here);
+      const away = (staged && s > 0.5) || unbuilt;
       playerSprite.visible = !away;
       for (const sprite of npcSprites.values()) if (away) sprite.mesh.visible = false;
       ghosts.group.visible = !away;
