@@ -547,8 +547,8 @@ doesn't: it's the same until the sun steps, the shadow frustum moves or the scen
 static casters are now drawn into a cached depth map only then, and each frame its depths are
 written into the live map by one full-screen triangle and the moving casters (sprites, marked
 `markMovingShadow`) drawn on top. The frustum is re-centred on the player only after they move 6
-units. A first version copied the depth texture instead; it broke iPhone's WebGPU, so it draws
-now (Nick, 2026-10-09: there's no reason not to cache, so make it work there). Alternative: re-render everything every frame (as before, `?shadowcache=0`), or temporal
+units. The first versions copied the depth texture and made the maps 32-bit float depth; that
+blanked the world on iPhone's WebGPU, so it now draws the depths into three.js's own depth format (Nick, 2026-10-09: there's no reason not to cache, so make it work there). Alternative: re-render everything every frame (as before, `?shadowcache=0`), or temporal
 reuse of screen-space passes, which needs motion vectors and risks ghosting.
 
 ## D36. Whole messages from the script, as a trial setting
