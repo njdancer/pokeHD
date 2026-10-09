@@ -1,0 +1,44 @@
+/* The Pokédex over the game (Pokedex.tsx). */
+.pokedex { position: fixed; inset: 0; z-index: 20; overflow: hidden; }
+.pokedex-shade {
+  position: absolute; inset: 0; background: #1a120c33;
+  -webkit-backdrop-filter: blur(6px) saturate(.9); backdrop-filter: blur(6px) saturate(.9);
+}
+
+/* The 3D handheld: its canvas, and the page laid over its screen by a projective transform. */
+.pokedex-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.pokedex-device .pokedex-shade { opacity: 0; }
+.pokedex-screen {
+  position: absolute; left: 0; top: 0; transform-origin: 0 0; visibility: hidden;
+  container-type: size; border-radius: 1.2% / 1.2%; overflow: hidden;
+}
+
+/* The pixel handheld: whole-number scale, crisp. */
+.pokedex-pixel { display: grid; place-items: center; }
+.pokedex-pixel .pokedex-shade { transition: opacity .3s; }
+.pokedex-pixel-device { position: relative; transition: transform .42s cubic-bezier(.2, .9, .3, 1.15); transform: perspective(1200px); }
+.pokedex-pixel-device > canvas, .pokedex-pixel-cover > canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.pokedex-pixel-screen { position: absolute; container-type: size; overflow: hidden; }
+.pokedex-pixel-cover { position: absolute; inset: 0; transform-origin: 0 50%; transition: transform .4s cubic-bezier(.5, 0, .3, 1); transform: perspective(1400px); }
+.pokedex-pixel.rising .pokedex-pixel-device { animation: dex-rise .42s cubic-bezier(.2, .9, .3, 1.1) both; }
+.pokedex-pixel.rising .pokedex-shade { opacity: 0; animation: dex-fade .3s .1s both; }
+.pokedex-pixel.opening .pokedex-pixel-cover, .pokedex-pixel.open .pokedex-pixel-cover { transform: perspective(1400px) rotateY(-178deg); }
+.pokedex-pixel.open .pokedex-pixel-cover { visibility: hidden; }
+.pokedex-pixel.closing .pokedex-pixel-device { transform: perspective(1200px) translateY(110vh) rotateX(-30deg); transition-delay: .2s; }
+.pokedex-pixel.closing .pokedex-shade { opacity: 0; transition-delay: .25s; }
+@keyframes dex-rise { from { transform: perspective(1200px) translateY(110vh) rotateX(-35deg) rotateZ(8deg); } }
+@keyframes dex-fade { to { opacity: 1; } }
+
+/* Storybook: a panel the size of a page, rising in. */
+.pokedex-storybook { display: grid; place-items: center; }
+.pokedex-panel {
+  position: relative; width: min(94vw, 78vh, 620px); height: min(92vh, 940px); container-type: size;
+  animation: dex-panel .32s cubic-bezier(.2, .9, .3, 1.2) both;
+}
+.pokedex-storybook .pokedex-shade { animation: dex-fade-in .25s both; }
+.pokedex-storybook.closing .pokedex-panel { animation: dex-panel-out .26s ease-in both; }
+.pokedex-storybook.closing .pokedex-shade { animation: dex-fade-out .26s both; }
+@keyframes dex-panel { from { transform: translateY(30vh) scale(.9); opacity: 0; } }
+@keyframes dex-panel-out { to { transform: translateY(30vh) scale(.9); opacity: 0; } }
+@keyframes dex-fade-in { from { opacity: 0; } }
+@keyframes dex-fade-out { to { opacity: 0; } }

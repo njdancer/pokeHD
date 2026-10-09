@@ -1,0 +1,186 @@
+@import "@fontsource/nunito/latin-800.css";
+
+/* The Pokédex's pages (DexBook.tsx). The host is a size container; everything is sized from it
+   (--u is one unit: about a 24th of the screen's width). */
+.dex {
+  --u: min(4.2cqw, 3.4cqh, 18px);
+  --ink: #183a33; --soft: #183a3399; --paper: #e3f4e6; --card: #ffffffb0; --line: #18513f33;
+  --accent: #e0442f; --pick: #1c7a5e;
+  position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden;
+  color: var(--ink); font: 800 var(--u) / 1.25 Nunito, ui-rounded, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+}
+.dex button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.dex button:disabled { cursor: default; }
+.dex h2, .dex h3, .dex p, .dex ul, .dex blockquote, .dex dl, .dex dd { margin: 0; padding: 0; }
+.dex ul { list-style: none; }
+
+.dex-head { display: flex; align-items: center; gap: calc(var(--u) * .5); padding: calc(var(--u) * .6) calc(var(--u) * .7) calc(var(--u) * .4); }
+.dex-title { font-size: 1.15em; letter-spacing: .02em; }
+.dex-back, .dex-close {
+  width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); border-radius: 50% !important;
+  display: grid; place-items: center; background: var(--card) !important; flex: none;
+}
+.dex-tabs { display: flex; gap: calc(var(--u) * .3); margin-left: auto; }
+.dex-tab {
+  display: flex; flex-direction: column; align-items: center; line-height: 1.05;
+  padding: calc(var(--u) * .35) calc(var(--u) * .6) !important; border-radius: calc(var(--u) * .8) !important;
+  font-size: .82em !important;
+}
+.dex-tab small { font-size: .78em; opacity: .7; }
+.dex-tab[aria-selected="true"] { background: var(--pick) !important; color: #fff !important; }
+
+.dex-body { flex: 1; min-height: 0; overflow: auto; padding: calc(var(--u) * .3) calc(var(--u) * .7) calc(var(--u) * .9); scrollbar-width: none; }
+.dex-body::-webkit-scrollbar { display: none; }
+
+/* Pokémon */
+.dex-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: calc(var(--u) * .45); }
+.dex-grid.mini { grid-template-columns: repeat(5, 1fr); }
+.dex-cell {
+  position: relative; aspect-ratio: 1; border-radius: calc(var(--u) * .7) !important; background: var(--card) !important;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden;
+}
+.dex-cell.unseen { background: #ffffff40 !important; }
+.dex-cell .dex-no { position: absolute; top: calc(var(--u) * .2); left: calc(var(--u) * .35); font-size: .62em; opacity: .55; }
+.dex-cell .dex-name { position: absolute; bottom: calc(var(--u) * .15); font-size: .5em; opacity: .75; white-space: nowrap; }
+.dex-cell.unseen .dex-no { position: static; font-size: .8em; opacity: .35; }
+.dex-cell.seen .dex-pic { filter: grayscale(1) brightness(.6) contrast(1.2); opacity: .55; }
+.dex-caught {
+  position: absolute; top: calc(var(--u) * .25); right: calc(var(--u) * .25); width: calc(var(--u) * .7); aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 18%, #222 19% 28%, transparent 29%), linear-gradient(#e5432f 0 44%, #222 44% 56%, #fff 56%);
+}
+.dex-pic { image-rendering: pixelated; width: 72%; aspect-ratio: 1; object-fit: contain; }
+.dex-pic.unknown { display: grid; place-items: center; font-size: 1.6em; opacity: .25; }
+.dex-pic.l { width: 100%; }
+
+.dex-mon-top { display: flex; gap: calc(var(--u) * .8); align-items: center; }
+.dex-stage {
+  flex: none; width: 42%; aspect-ratio: 1; border-radius: calc(var(--u) * 1); display: grid; place-items: center;
+  background: radial-gradient(ellipse 60% 18% at 50% 86%, #0000002a, transparent 70%), linear-gradient(#ffffffd0, #ffffff60);
+}
+.dex-stage .dex-pic.l { width: 86%; }
+.dex-mon-id { display: flex; flex-direction: column; gap: calc(var(--u) * .25); min-width: 0; }
+.dex-mon-id h2 { font-size: 1.45em; line-height: 1.05; }
+.dex-mon-id .dex-no, .dex-cat { color: var(--soft); font-size: .8em; }
+.dex-types { display: flex; gap: calc(var(--u) * .3); flex-wrap: wrap; }
+.dex-type { font-size: .66em; padding: .15em .7em; border-radius: 1em; color: #fff; background: #8a8a78; letter-spacing: .04em; }
+.t-grass { background: #4fa04a; } .t-poison { background: #8e4ea6; } .t-fire { background: #e46a2e; }
+.t-water { background: #3d84d6; } .t-electric { background: #d9a91a; } .t-psychic { background: #e0567e; }
+.t-ice { background: #5bb8c4; } .t-dragon { background: #5a4fc4; } .t-bug { background: #8ca424; }
+.t-flying { background: #7f8ee0; } .t-ground { background: #b8904a; } .t-rock { background: #a08a3a; }
+.t-ghost { background: #5f5296; } .t-fighting { background: #b8402e; }
+.dex-hw { display: grid; grid-template-columns: auto 1fr; gap: 0 calc(var(--u) * .5); font-size: .85em; }
+.dex-hw dt { color: var(--soft); }
+.dex-words { margin-top: calc(var(--u) * .7) !important; padding: calc(var(--u) * .6) calc(var(--u) * .8) !important; background: var(--card); border-radius: calc(var(--u) * .8); font-size: .92em; line-height: 1.35; }
+.dex-stats { margin-top: calc(var(--u) * .7); display: grid; gap: calc(var(--u) * .25); font-size: .72em; }
+.dex-stat { display: grid; grid-template-columns: 5.5em 2em 1fr; align-items: center; gap: calc(var(--u) * .4); }
+.dex-stat span { color: var(--soft); }
+.dex-stat b { text-align: right; }
+.dex-stat i { height: .55em; border-radius: 1em; background: linear-gradient(90deg, var(--pick), #4cc59a); }
+.dex-homes { margin-top: calc(var(--u) * .7); }
+.dex-homes h3, .dex-place h3 { font-size: .75em; color: var(--soft); margin: calc(var(--u) * .5) 0 calc(var(--u) * .3); }
+.dex-homes ul { display: flex; flex-wrap: wrap; gap: calc(var(--u) * .3); }
+.dex-homes li { font-size: .75em; padding: .2em .7em; border-radius: 1em; background: var(--card); opacity: .65; }
+.dex-homes li.been { opacity: 1; box-shadow: inset 0 0 0 2px var(--pick); }
+.dex-step { display: flex; justify-content: space-between; margin-top: calc(var(--u) * .7); }
+.dex-step button { width: calc(var(--u) * 2.4); height: calc(var(--u) * 2.4); border-radius: 50% !important; background: var(--card) !important; }
+.dex-step button:disabled { opacity: .3; }
+
+/* People */
+.dex-people { display: grid; gap: calc(var(--u) * .45); }
+.dex-person { display: flex; align-items: center; gap: calc(var(--u) * .7); width: 100%; text-align: left; padding: calc(var(--u) * .45) !important; border-radius: calc(var(--u) * .8) !important; background: var(--card) !important; }
+.dex-face { flex: none; width: calc(var(--u) * 3.2); aspect-ratio: 1; image-rendering: pixelated; object-fit: contain; border-radius: calc(var(--u) * .6); background: #ffffff90; }
+.dex-person-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.dex-person-text small { color: var(--soft); font-size: .72em; }
+.dex-person-text q { font-size: .7em; color: var(--soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dex-badge { font-size: .62em; padding: .2em .6em; border-radius: 1em; background: var(--pick); color: #fff; flex: none; }
+.dex-who { display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * .4); text-align: center; }
+.dex-who .dex-stage { width: 46%; }
+.dex-who .dex-face { width: 80%; background: none; }
+.dex-who .dex-words { text-align: left; align-self: stretch; }
+.dex-note { color: var(--soft); font-size: .8em; }
+
+/* Places */
+.dex-map { position: relative; border-radius: calc(var(--u) * .7); overflow: hidden; box-shadow: 0 0 0 2px var(--line); }
+.dex-map img { display: block; width: 100%; image-rendering: pixelated; }
+.dex-pin {
+  position: absolute; width: calc(var(--u) * 1.1) !important; aspect-ratio: 1; translate: -50% -50%; border-radius: 50% !important;
+  background: radial-gradient(circle, #fff 0 20%, #222 21% 30%, transparent 31%), linear-gradient(#e5432f 0 44%, #222 44% 56%, #fff 56%) !important;
+  box-shadow: 0 1px 3px #0006;
+}
+.dex-pin.here { animation: dex-bob 1.2s ease-in-out infinite; }
+@keyframes dex-bob { 50% { translate: -50% -80%; } }
+.dex-place-list { display: grid; grid-template-columns: 1fr 1fr; gap: calc(var(--u) * .35); margin-top: calc(var(--u) * .6); }
+.dex-place-list button { width: 100%; text-align: left; padding: calc(var(--u) * .35) calc(var(--u) * .55) !important; border-radius: calc(var(--u) * .6) !important; background: var(--card) !important; font-size: .8em !important; display: flex; flex-direction: column; }
+.dex-place-list small { font-size: .78em; color: var(--soft); }
+.dex-place h2 { font-size: 1.3em; }
+.dex-faces { display: flex; flex-wrap: wrap; gap: calc(var(--u) * .4); }
+.dex-empty { color: var(--soft); font-size: .8em; padding: calc(var(--u) * .5) 0; }
+
+/* HD: the 3D device's screen, a soft backlit LCD. */
+.dex-hd { background: radial-gradient(120% 80% at 30% 0%, #f2fbf2, transparent 60%), linear-gradient(#d9f0dd, #c3e4cb); }
+
+/* Storybook (D31): warm paper with a gold edge, and Poké Balls in the corners. */
+.dex-storybook {
+  --ink: #3e2a1c; --soft: #3e2a1c99; --card: #fffaf0; --line: #d6a86666; --pick: #e0702a;
+  inset: calc(var(--u) * .4); border-radius: calc(var(--u) * 1.4);
+  background: linear-gradient(#fffaf0, #f7ead0);
+  box-shadow: 0 0 0 calc(var(--u) * .22) #d6a866, 0 calc(var(--u) * .5) calc(var(--u) * 2) #4a2a0a59, inset 0 0 0 calc(var(--u) * .2) #fff8;
+  overflow: visible;
+}
+.dex-storybook .dex-cell, .dex-storybook .dex-person, .dex-storybook .dex-words, .dex-storybook .dex-place-list button { box-shadow: 0 1px 0 #d6a86688, inset 0 0 0 1px #e8cfa0; }
+.dex-storybook .dex-stage { background: radial-gradient(ellipse 60% 18% at 50% 86%, #4a2a0a30, transparent 70%), linear-gradient(#fff, #f3e2bf); }
+.dex-storybook .dex-stat i { background: linear-gradient(90deg, #e0702a, #f2b46a); }
+.dex-ball {
+  position: absolute; z-index: 1; width: calc(var(--u) * 1.3); aspect-ratio: 1; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, #fff 0 17%, #3e2a1c 18% 28%, transparent 29%), linear-gradient(#e5432f 0 43%, #3e2a1c 43% 57%, #fffaf0 57%);
+  box-shadow: 0 0 0 calc(var(--u) * .12) #3e2a1c, 0 2px 4px #0005;
+}
+.dex-ball.tl { left: calc(var(--u) * -.45); top: calc(var(--u) * -.45); }
+.dex-ball.tr { right: calc(var(--u) * -.45); top: calc(var(--u) * -.45); }
+.dex-ball.bl { left: calc(var(--u) * -.45); bottom: calc(var(--u) * -.45); }
+.dex-ball.br { right: calc(var(--u) * -.45); bottom: calc(var(--u) * -.45); }
+
+/* Pixel: the game's own letters and pictures at a whole-number scale (--px), on the Pokédex's
+   pale screen. No rounding, no soft shadows. */
+.dex-pixel {
+  --px: var(--dex-px, 2); --u: calc(var(--px) * 8px);
+  --ink: #181010; --soft: #181010; --card: transparent; --line: #181010; --pick: #181010;
+  background: #f8f8f0; font-size: var(--u); line-height: 1;
+}
+.dex-pixel .px-text { display: inline-flex; }
+.dex-pixel .px-text img { height: calc(8px * var(--px)); image-rendering: pixelated; }
+.dex-pixel .dex-tab[aria-selected="true"] .px-text img, .dex-pixel .dex-badge .px-text img { filter: invert(1); }
+.dex-pixel * { border-radius: 0 !important; box-shadow: none !important; }
+.dex-pixel .dex-cell, .dex-pixel .dex-person, .dex-pixel .dex-words, .dex-pixel .dex-place-list button, .dex-pixel .dex-back, .dex-pixel .dex-close, .dex-pixel .dex-step button {
+  outline: var(--px) solid var(--ink); outline-offset: calc(var(--px) * -1); background: #f8f8f0 !important;
+}
+.dex-pixel .dex-tab small, .dex-pixel .dex-cell .dex-name { display: none; }
+.dex-pixel .dex-cell .dex-no { opacity: 1; font-size: inherit; }
+.dex-pixel .dex-cell.seen .dex-pic { filter: brightness(0); opacity: 1; }
+.dex-pixel .dex-pic { width: auto; height: auto; zoom: var(--px); }
+.dex-pixel .dex-cell .dex-pic { zoom: round(down, calc(var(--px) / 2), 1); }
+.dex-pixel .dex-stage { background: none; outline: var(--px) solid var(--ink); }
+.dex-pixel .dex-type, .dex-pixel .dex-homes li { background: none; padding: 0; opacity: 1; box-shadow: none; }
+.dex-pixel .dex-words { display: flex; flex-direction: column; gap: calc(var(--px) * 4px); }
+.dex-pixel .dex-face { zoom: var(--px); width: auto; height: auto; background: none; }
+.dex-pixel .dex-person .dex-face { zoom: calc(var(--px) * .75); }
+.dex-pixel .dex-pin { zoom: 1; }
+.dex-pixel .dex-map { outline: var(--px) solid var(--ink); }
+.dex-pixel .dex-head { padding: calc(var(--u) * .5) calc(var(--u) * .5) calc(var(--u) * .25); gap: 0; }
+.dex-pixel .dex-title, .dex-pixel .dex-close { display: none; }
+.dex-pixel .dex-tabs { margin: 0; gap: 0; }
+.dex-pixel .dex-tab { padding: calc(var(--px) * 2px) calc(var(--px) * 4px) !important; }
+.dex-pixel .dex-back { width: auto; height: auto; outline: 0; margin-right: calc(var(--u) * .5); }
+.dex-pixel .dex-body { padding: 0 calc(var(--u) * .5) calc(var(--u) * .5); }
+.dex-pixel .dex-words { padding: calc(var(--px) * 3px) calc(var(--px) * 3px) !important; }
+.dex-pixel .dex-mon-top { align-items: flex-start; }
+.dex-pixel .dex-stage { width: auto; aspect-ratio: auto; }
+.dex-pixel .dex-mon-id { gap: calc(var(--px) * 3px); }
+.dex-pixel .dex-cat { display: none; }
+.dex-pixel .dex-grid { grid-template-columns: repeat(5, 1fr); gap: calc(var(--px) * 3px); }
+.dex-pixel .dex-cell { aspect-ratio: 1; }
+.dex-pixel .dex-cell .dex-no { font-size: inherit; }
+.dex-pixel .dex-cell .dex-no .px-text img { height: calc(8px * var(--px) * .5); }
+.dex-pixel .dex-pic.unknown { font-size: var(--u); opacity: 1; }
+.dex-pixel .dex-place-list { grid-template-columns: 1fr; }
