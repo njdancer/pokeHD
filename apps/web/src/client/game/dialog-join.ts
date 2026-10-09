@@ -8,6 +8,12 @@ import type { ScreenText } from "@pokehd/emu";
 /** The most lines the HD message box shows at once. */
 export const MAX_DIALOG_LINES = 4;
 
+/**
+ * What the game does after the ▼, when known: scroll one line up, clear for a new page, or end the
+ * text. Unknown (undefined) assumes a new page, so the box never overflows.
+ */
+export type NextPage = "scroll" | "page" | "end";
+
 /** Ends a sentence: . ! ? and the game's … (closing quotes and brackets may follow). */
 const SENTENCE_END = /[.!?…]["')\]]*$/;
 
@@ -19,9 +25,10 @@ export class DialogJoiner {
 
   /**
    * Call with each frame's text (only while the HD text shows it). Returns the lines to show in
-   * the message box (null: the game's own two) and whether to press A now.
+   * the message box (null: the game's own two) and whether to press A now. `next` says what
+   * follows this ▼, when the caller knows.
    */
-  frame(text: ScreenText): { lines: string[] | null; press: boolean } {
+  frame(text: ScreenText, next?: NextPage): { lines: string[] | null; press: boolean } {
     const dialog = text.dialog;
     if (!dialog || text.menus.some((m) => m.active)) {
       this.reset();
@@ -43,7 +50,8 @@ export class DialogJoiner {
     this.#phase = "idle";
     const lines = this.#join(page);
     const last = lines.at(-1) ?? "";
-    if (!SENTENCE_END.test(last.trim()) && lines.length + 2 <= MAX_DIALOG_LINES) {
+    const adds = next === "scroll" ? 1 : 2;
+    if (next !== "end" && !SENTENCE_END.test(last.trim()) && lines.length + adds <= MAX_DIALOG_LINES) {
       this.#read = lines;
       this.#phase = "pressed";
       return { lines, press: true };

@@ -1,0 +1,46 @@
+.dd {
+  --paper: #fffaf0; --edge: #d6a866; --ink: #3e2a1c; --muted: #7a6656; --accent: #e0702a; --join: #f2b46a55;
+  min-height: 100vh; box-sizing: border-box; padding: 16px; max-width: 980px; margin: 0 auto;
+  background: #f4ead8; color: var(--ink); font: 15px/1.45 Nunito, ui-rounded, system-ui, sans-serif;
+}
+.dd h1 { margin: 0 0 8px; font-size: 24px; }
+.dd-intro, .dd-rule { max-width: 70ch; }
+.dd-rule { padding: 10px 12px; border-left: 4px solid var(--accent); background: var(--paper); border-radius: 6px; }
+.dd-joined-key, .dd-joined { background: var(--join); border-radius: 4px; }
+.dd-joined-key { padding: 0 4px; }
+.dd-stats { border-collapse: collapse; margin: 12px 0; font-variant-numeric: tabular-nums; background: var(--paper); border-radius: 8px; overflow: hidden; }
+.dd-stats :is(th, td) { padding: 6px 10px; text-align: right; border-bottom: 1px solid #0001; }
+.dd-stats th:first-child { text-align: left; }
+.dd-stats thead th { font-size: 12px; color: var(--muted); font-weight: 700; }
+.dd-stats .dd-on { background: var(--join); }
+.dd-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; position: sticky; top: 0; z-index: 1; padding: 8px 0; background: #f4ead8; }
+.dd-controls [role="group"] { display: flex; border: 2px solid var(--edge); border-radius: 999px; overflow: hidden; }
+.dd-controls button, .dd-more { font: inherit; font-weight: 800; color: var(--ink); background: var(--paper); border: 0; padding: 6px 14px; }
+.dd-controls button.on { background: var(--accent); color: #fff; }
+.dd-controls :is(select, input) { font: inherit; padding: 6px 10px; border: 2px solid var(--edge); border-radius: 8px; background: var(--paper); color: var(--ink); min-width: 0; }
+.dd-controls input { flex: 1 1 160px; }
+.dd-count, .dd-status { color: var(--muted); }
+.dd-card { background: var(--paper); border: 2px solid var(--edge); border-radius: 12px; padding: 10px 12px; margin: 0 0 12px; }
+.dd-card header { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-bottom: 8px; }
+.dd-card header a { color: var(--muted); font-size: 13px; }
+.dd-card header span { color: var(--muted); font-size: 13px; margin-left: auto; }
+.dd-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.dd-col h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.dd-gb {
+  position: relative; margin: 0 0 6px; padding: 4px 22px 4px 8px; background: #fff; border: 2px solid #333; border-radius: 3px;
+  font: 13px/1.5 ui-monospace, Menlo, monospace; white-space: pre; overflow: hidden;
+}
+.dd-arrow { position: absolute; right: 6px; bottom: 4px; }
+.dd-hd { margin: 0 0 8px; }
+.dd-hd-box { padding: 8px 12px; background: linear-gradient(#fffaf0, #f2e0bc); border: 3px solid var(--edge); border-radius: 10px; font-weight: 800; font-size: 16px; line-height: 1.5; white-space: pre-wrap; }
+.dd-hd-box > div { padding: 0 4px; margin: 0 -4px; }
+.dd-reason { font-size: 12px; color: var(--muted); margin: 2px 4px 0; }
+.dd-reason.dd-full { color: #b5541b; font-weight: 700; }
+.dd-bad .dd-hd-box { border-color: #d33; }
+.dd-bad .dd-reason { color: #d33; font-weight: 800; }
+.dd mark { background: #c9d6ff; color: inherit; border-radius: 4px; padding: 0 3px; font-weight: 700; }
+.dd-more { display: block; margin: 16px auto; border: 2px solid var(--edge); border-radius: 999px; }
+@media (max-width: 560px) {
+  .dd-cols { grid-template-columns: minmax(0, 1fr); }
+  .dd-gb { font-size: 12px; }
+}
