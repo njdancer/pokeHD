@@ -28,7 +28,7 @@ import {
 } from "@pokehd/emu";
 import { createEngine, type Engine } from "@pokehd/engine";
 import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
-import { decodeText, encodeName, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
+import { decodeText, encodeName, messageBoxes, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
 import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../input/index.ts";
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { cloudBackup } from "../saves/cloud-save.ts";
@@ -60,7 +60,7 @@ import { BattleTracker, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
 import { TextOverlay, type TextActions } from "./TextOverlay.tsx";
-import { hdTextFits, introTextFits, loadHdTextOn, saveHdTextOn, textKey } from "./hd-text.ts";
+import { hdTextFits, introTextFits, loadHdTextOn, loadWholeMessages, saveHdTextOn, saveWholeMessages, textKey } from "./hd-text.ts";
 import { NamePrompt } from "./NamePrompt.tsx";
 import { StartScreen } from "./StartScreen.tsx";
 import { IntroStage } from "./IntroStage.tsx";
@@ -225,6 +225,12 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [hdText, setHdText] = useState<ScreenText | null>(null);
   /** The message box's lines when more than the game's two are read at once (DialogJoiner). */
   const [dialogLines, setDialogLines] = useState<string[] | null>(null);
+  /** Whole messages from the script (ScriptText), in place of the game's pages. Opt-in. */
+  const [wholeOn, setWholeOn] = useState(loadWholeMessages);
+  const wholeRef = useRef(wholeOn);
+  const scriptRef = useRef<ScriptView | null>(null);
+  /** The message box is hidden: the player has read the message and the game is finishing it. */
+  const [hideDialog, setHideDialog] = useState(false);
   const look = useMemo(() => uiLook(), []);
   /** The signed-in player (their name is the one Oak checks, and kept the same as theirs). */
   const [account, setAccount] = useState<Account | null>(null);
@@ -413,6 +419,16 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         },
         onEraseAnswered: () => setErasing(null),
         ...(custom ? { onNameAsk: (ask: NameAsk) => setNameAsk(ask) } : {}),
+        onScriptMessage: ({ id, message }) => {
+          const boxes = messageBoxes(message);
+          scriptRef.current = { id, boxes, index: 0, closed: false, ended: false, unfit: 0, lines: new Set(message.pages.flatMap((p) => p.lines.map((l) => l.trim())).filter(Boolean)) };
+          // All of it fits in one box: the game can print the rest while the player reads.
+          if (boxes.length <= 1) host?.readOnMessage(id);
+        },
+        onScriptEnd: (id) => {
+          if (scriptRef.current?.id === id) scriptRef.current.ended = true;
+        },
+        onScriptPress: () => readOnScript(),
         onFrame: ({ pixels, watched, count }) => {
           image.data.set(new Uint8Array(pixels));
           if (++emuFrames === 1) setStartup((s) => ({ ...s, emu: true }));
@@ -470,15 +486,19 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             introCanvas.current.getContext("2d")!.putImageData(introImage, 0, 0);
           }
           const fits = hdTextOnRef.current && (intro ? introTextFits(text) : hdTextFits(text, state.mode, inWorld));
-          // Whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
-          if (!fits) joiner.reset();
-          const joined = fits ? joiner.frame(text) : { lines: null, press: false };
+          // Whole messages from the script: the page shows the message the game is printing.
+          const script = scriptView(scriptRef, text, fits, (id) => host?.releaseMessage(id));
+          // Otherwise whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
+          if (!fits || script) joiner.reset();
+          const joined = script ? { lines: script.lines, press: false } : fits ? joiner.frame(text) : { lines: null, press: false };
           if (joined.press) host?.tap(Button.A);
-          const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}` : "";
+          const hidden = !!script?.hidden;
+          const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}#${hidden}` : "";
           if (key !== shownText) {
             shownText = key;
             setHdText(fits ? text : null);
             setDialogLines(joined.lines);
+            setHideDialog(hidden);
           }
           const scene = sceneRef.current;
           const onboard = start !== null;
@@ -520,6 +540,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       battles = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...TEXT_WATCHES, ...BATTLE_WATCHES }, (w) => watching.watch(w));
       host.setButtons(joypad.mask);
       hostRef.current = host;
+      host.setScriptText(wholeRef.current && hdTextOnRef.current);
       const started = await host.started;
       if (disposed) return;
       // The journal belongs to the trainer in the game: open it as soon as there is one.
@@ -800,11 +821,28 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     hostRef.current?.setAutosave(on);
   };
 
+  /** Reads on in a whole message from the script: its next box, or done with it. */
+  function readOnScript(): boolean {
+    const script = scriptRef.current;
+    const host = hostRef.current;
+    if (!script || script.closed || script.ended || !host) return false;
+    if (script.index < script.boxes.length - 1) {
+      if (++script.index === script.boxes.length - 1) host.readOnMessage(script.id);
+    } else {
+      script.closed = true;
+      host.closeMessage(script.id);
+    }
+    return true;
+  }
+
   /** The TextOverlay's buttons: a tapped choice, or a button pressed the game's own way. */
   const textActions = useMemo<TextActions>(
     () => ({
       select: (item) => hostRef.current?.select(item, true),
-      press: (button) => hostRef.current?.tap(PRESS[button]),
+      press: (button) => {
+        if ((button === "A" || button === "B") && readOnScript()) return;
+        hostRef.current?.tap(PRESS[button]);
+      },
     }),
     [],
   );
@@ -845,6 +883,14 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     hdTextOnRef.current = on;
     saveHdTextOn(on);
     setHdTextOn(on);
+    hostRef.current?.setScriptText(on && wholeRef.current);
+  };
+
+  const toggleWhole = (on: boolean) => {
+    wholeRef.current = on;
+    saveWholeMessages(on);
+    setWholeOn(on);
+    hostRef.current?.setScriptText(on && hdTextOnRef.current);
   };
 
   const s = stats?.state;
@@ -860,7 +906,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         data-layout={noHd ? "full" : layout}
       />
       {onboarding?.phase === "intro" && !noHd && <IntroStage ref={introCanvas} />}
-      {hdText && !noHd && hdTextOn && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} actions={textActions} look={look} />}
+      {hdText && !noHd && hdTextOn && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} hideDialog={hideDialog} actions={textActions} look={look} />}
       {/* Everything that isn't the game sits behind one button (the menu), in the HD panels' look. */}
       {ready && <button
         type="button"
@@ -905,6 +951,12 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             <label>
               <input type="checkbox" checked={hdTextOn} onChange={(e) => toggleHdText(e.target.checked)} />
               {" "}HD words and menus
+            </label>
+          </div>
+          <div className="row">
+            <label>
+              <input type="checkbox" checked={wholeOn} disabled={!hdTextOn} onChange={(e) => toggleWhole(e.target.checked)} />
+              {" "}Whole messages at once (trial)
             </label>
           </div>
           <div className="row">
@@ -1013,4 +1065,57 @@ function RoomBadge({ status, friends }: { status: RoomStatus; friends: number })
     closed: "Offline",
   };
   return <span className="room-badge" data-status={status}>{text[status]}</span>;
+}
+
+/** A whole message from the script, as the page shows it (ScriptText in @pokehd/emu). */
+interface ScriptView {
+  id: number;
+  boxes: string[][];
+  /** The box showing. */
+  index: number;
+  /** The player has read it: the game is finishing it. */
+  closed: boolean;
+  /** The game is done with it (a menu took over, the box closed, or another message began). */
+  ended: boolean;
+  /** Frames the HD text couldn't show it. */
+  unfit: number;
+  /** Every line of the message, to tell its pages on screen from anything else. */
+  lines: Set<string>;
+}
+
+/** Frames the HD text may not fit before a message goes back to the game's own text. */
+const SCRIPT_UNFIT_FRAMES = 10;
+
+/**
+ * This frame's message box from a whole message: the box the player is on (`lines`), or hidden
+ * while the game finishes a message already read. Null when no message applies, so the game's
+ * own pages show (read through by the DialogJoiner).
+ */
+function scriptView(
+  ref: { current: ScriptView | null },
+  text: ScreenText,
+  fits: boolean,
+  release: (id: number) => void,
+): { lines: string[] | null; hidden: boolean } | null {
+  const script = ref.current;
+  if (!script) return null;
+  const dialog = text.dialog;
+  // The message box shows this message's pages (or nothing yet).
+  const ours = !dialog || dialog.lines.every((l) => !l.trim() || script.lines.has(l.trim()));
+  if (script.ended && (!dialog || !ours)) {
+    ref.current = null;
+    return null;
+  }
+  if (!fits) {
+    // The HD text can't show it here (a screen it doesn't draw): the game's own text takes over.
+    if (!script.closed && !script.ended && ++script.unfit > SCRIPT_UNFIT_FRAMES) {
+      release(script.id);
+      ref.current = null;
+    }
+    return null;
+  }
+  script.unfit = 0;
+  if (!ours) return null;
+  if (script.closed) return { lines: null, hidden: true };
+  return { lines: script.boxes[script.index] ?? null, hidden: false };
 }

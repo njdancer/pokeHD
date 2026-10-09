@@ -10,6 +10,7 @@
 // answer hands the game's own screen back to the player.
 import { SYMBOLS } from "@pokehd/rom";
 import { Button, type GameBoy } from "./core.ts";
+import { ScriptText, type ScriptMessage } from "./script-text.ts";
 
 /** Whose name is asked for: from the intro's NEW NAME list, or the naming screen itself. */
 export interface NameAsk {
@@ -23,6 +24,11 @@ export interface NameAsk {
 export interface ControlsOptions {
   /** The page answers name questions (see `answerName`); off, the game's own screens show. */
   names?: { ask(ask: NameAsk): void; done(): void };
+  /**
+   * Whole messages from the script (ScriptText): the page shows each message, and the player's A
+   * and B go to the page (`press`) while it does.
+   */
+  script?: { message(message: ScriptMessage): void; end(id: number): void; press(): void };
   /** Where the buttons go (the erase guard, or the Game Boy). */
   setButtons(mask: number): void;
 }
@@ -53,6 +59,8 @@ export class Controls {
   #name: Uint8Array | null = null;
   /** Pressing A on NEW NAME, or START on the naming screen, until the game moves on. */
   #pressing = 0;
+
+  #script: ScriptText | null = null;
 
   constructor(gb: GameBoy, options: ControlsOptions) {
     this.#gb = gb;
@@ -104,11 +112,14 @@ export class Controls {
 
   /** True while the game is waiting on the page (a name) or the page is pressing buttons. */
   get busy(): boolean {
-    return this.#asking !== null || this.#name !== null || this.#pressing !== 0 || this.#steps.length > 0 || this.#select !== null;
+    return this.#asking !== null || this.#name !== null || this.#pressing !== 0 || this.#steps.length > 0 || this.#select !== null || !!this.#script?.active;
   }
 
   /** The player's own buttons (keyboard, gamepad, touch pad). Held back while the page drives. */
   setButtons(mask: number): void {
+    // A message on the page: A or B reads on there.
+    const pressed = mask & ~this.#player;
+    if (this.#script?.holding && pressed & (Button.A | Button.B)) this.#options.script?.press();
     this.#player = mask;
     this.#apply();
   }
@@ -144,8 +155,33 @@ export class Controls {
     if (ask.from === "intro") this.#pressing = Button.A;
   }
 
+  /** Turns whole messages from the script (`ControlsOptions.script`) on or off. */
+  setScriptText(rom: Uint8Array | null): void {
+    this.#script?.dispose();
+    this.#script = null;
+    const script = this.#options.script;
+    if (rom && script) this.#script = new ScriptText(this.#gb, { rom, onMessage: script.message, onEnd: script.end, tap: (mask) => this.tap(mask) });
+    this.#apply();
+  }
+
+  /** The page shows the message's last box (ScriptText.readOn). */
+  readOn(id: number): void {
+    this.#script?.readOn(id);
+  }
+
+  /** The page can't show the message (ScriptText.release). */
+  releaseMessage(id: number): void {
+    this.#script?.release(id);
+  }
+
+  /** The player has read the message (ScriptText.close). */
+  closeMessage(id: number): void {
+    this.#script?.close(id);
+  }
+
   /** Call once per emulated frame, before it runs. */
   frame(): void {
+    this.#script?.frame();
     if (this.#steps.length === 0 && this.#select) this.#planSelect();
     const step = this.#steps[0];
     if (step && --step.frames <= 0) this.#steps.shift();
@@ -153,6 +189,7 @@ export class Controls {
   }
 
   dispose(): void {
+    this.#script?.dispose();
     for (const remove of this.#removeHooks) remove();
   }
 
@@ -182,7 +219,7 @@ export class Controls {
     let mask = this.#player;
     if (press !== undefined) mask = press;
     else if (this.#pressing) mask = this.#tapping(this.#pressing);
-    else if (this.#asking || this.#name || this.#steps.length || this.#select) mask = 0;
+    else if (this.#asking || this.#name || this.#steps.length || this.#select || this.#script?.holding) mask = 0;
     if (mask === this.#sent) return;
     this.#sent = mask;
     this.#options.setButtons(mask);

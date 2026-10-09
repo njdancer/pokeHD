@@ -37,6 +37,8 @@ let autosave: AutoSave | undefined;
 let guard: EraseGuard | undefined;
 let controls: Controls | undefined;
 let dex: DexGuard | undefined;
+let rom: Uint8Array | undefined;
+let scriptText = false;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
 
@@ -144,7 +146,14 @@ async function handle(data: ToWorker) {
         controls = new Controls(gb, {
           setButtons: (mask) => (next ? next.setButtons(mask) : toGame(mask)),
           ...(data.askNames ? { names: { ask: (ask) => post({ type: "name-ask", ask }), done: () => post({ type: "name-done" }) } } : {}),
+          script: {
+            message: (message) => post({ type: "script-message", message }),
+            end: (id) => post({ type: "script-end", id }),
+            press: () => post({ type: "script-press" }),
+          },
         });
+        rom = data.rom;
+        if (scriptText) controls.setScriptText(rom);
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();
         // Before the first frame, so the page knows how the game started before it sees one.
@@ -176,6 +185,19 @@ async function handle(data: ToWorker) {
         break;
       case "select":
         controls?.select(data.item, data.press);
+        break;
+      case "script-text":
+        scriptText = data.enabled;
+        controls?.setScriptText(scriptText ? (rom ?? null) : null);
+        break;
+      case "script-read-on":
+        controls?.readOn(data.id);
+        break;
+      case "script-close":
+        controls?.closeMessage(data.id);
+        break;
+      case "script-release":
+        controls?.releaseMessage(data.id);
         break;
       case "name-answer":
         controls?.answerName(data.name);

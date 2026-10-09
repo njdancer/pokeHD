@@ -184,6 +184,12 @@ export const ALLOWLIST: readonly string[] = [
   "ChoosePlayerName",
   "IntroducePlayerText",
   "PrintText",
+  // Whole messages from the script (tap-first UI): where messages start, wait and end
+  "CloseTextDisplay",
+  "EnemyText",
+  "HandleMenuInput",
+  "PrintText_NoCreatingTextBox",
+  "WaitForTextScrollButtonPress",
   "hLoadedROMBank",
   "ChooseRivalName",
   "DefaultNamesPlayerList",
