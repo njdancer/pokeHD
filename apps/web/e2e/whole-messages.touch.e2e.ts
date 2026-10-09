@@ -1,11 +1,10 @@
-// Whole messages from the script (opt-in): Oak's speech shows a message at a time in the HD box,
+// Whole messages from the script: Oak's speech shows a message at a time in the HD box,
 // read on by tapping it, and the game keeps up until Oak checks the name. Saves screenshots in
 // test-results/.
 import { expect, test } from "@playwright/test";
 
 test("Oak's speech, a whole message at a time", async ({ page }) => {
   test.setTimeout(240_000);
-  await page.addInitScript(() => localStorage.setItem("pokehd.text.whole.v1", "on"));
   await page.route("**/api/me", (route) =>
     route.fulfill({ json: { player: { id: "p1", name: "Nick" }, email: "nick@example.com", admin: false, romAccess: true } }),
   );

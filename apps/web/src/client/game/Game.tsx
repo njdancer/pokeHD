@@ -60,7 +60,7 @@ import { BattleTracker, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
 import { TextOverlay, type TextActions } from "./TextOverlay.tsx";
-import { hdTextFits, introTextFits, loadHdTextOn, loadWholeMessages, saveHdTextOn, saveWholeMessages, textKey } from "./hd-text.ts";
+import { hdTextFits, introTextFits, textKey } from "./hd-text.ts";
 import { NamePrompt } from "./NamePrompt.tsx";
 import { StartScreen } from "./StartScreen.tsx";
 import { IntroStage } from "./IntroStage.tsx";
@@ -219,16 +219,11 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [savedAt, setSavedAt] = useState(0);
   const touch = useTouchDevice();
   const glyphs = useMemo(() => readGlyphs(rom), [rom]);
-  /** Words and menus drawn in HD (Storybook, D31), or on the Game Boy screen. */
-  const [hdTextOn, setHdTextOn] = useState(loadHdTextOn);
-  const hdTextOnRef = useRef(hdTextOn);
   /** The text on screen, while the HD text layer can show it. */
   const [hdText, setHdText] = useState<ScreenText | null>(null);
   /** The message box's lines when more than the game's two are read at once (DialogJoiner). */
   const [dialogLines, setDialogLines] = useState<string[] | null>(null);
-  /** Whole messages from the script (ScriptText), in place of the game's pages. Opt-in. */
-  const [wholeOn, setWholeOn] = useState(loadWholeMessages);
-  const wholeRef = useRef(wholeOn);
+  /** Whole messages from the script (ScriptText), in place of the game's pages. */
   const scriptRef = useRef<ScriptView | null>(null);
   /** The message box is hidden: the player has read the message and the game is finishing it. */
   const [hideDialog, setHideDialog] = useState(false);
@@ -373,8 +368,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       const recorded = fixture ? await fetch(`/__dev/fixture/${fixture}.state`).then((r) => (r.ok ? r.arrayBuffer() : null)) : null;
       const resume = recorded ? new Uint8Array(recorded) : (resumePoint?.state ?? null);
       if (disposed) return;
-      // The page's own start screen, unless the game's own screens are wanted (HD words off).
-      const custom = hdTextOnRef.current && !recorded && !classic;
+      // The page's own start screen, unless the game's own screens are wanted.
+      const custom = !recorded && !classic;
       if (custom && !resume) setOnboarding({ phase: "choose" });
       setStartSave(slot.sram ? saveSummary(slot.sram) : null);
       if (!restored) void cloudBackup(romKey).status().then((s) => !disposed && setCloudNewer(s.kind === "newer"), () => {});
@@ -486,7 +481,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             liftPictures(new Uint8ClampedArray(pixels), introImage);
             introCanvas.current.getContext("2d")!.putImageData(introImage, 0, 0);
           }
-          const fits = hdTextOnRef.current && (intro ? introTextFits(text) : hdTextFits(text, state.mode, inWorld));
+          const fits = intro ? introTextFits(text) : hdTextFits(text, state.mode, inWorld);
           // Whole messages from the script: the page shows the message the game is printing.
           const script = scriptView(scriptRef, text, fits, (id) => host?.releaseMessage(id));
           // Otherwise whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
@@ -541,7 +536,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       battles = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...TEXT_WATCHES, ...BATTLE_WATCHES }, (w) => watching.watch(w));
       host.setButtons(joypad.mask);
       hostRef.current = host;
-      host.setScriptText(wholeRef.current && hdTextOnRef.current);
+      host.setScriptText(true);
       const started = await host.started;
       if (disposed) return;
       // The journal belongs to the trainer in the game: open it as soon as there is one.
@@ -881,20 +876,6 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     setDexLook(look);
   };
 
-  const toggleHdText = (on: boolean) => {
-    hdTextOnRef.current = on;
-    saveHdTextOn(on);
-    setHdTextOn(on);
-    hostRef.current?.setScriptText(on && wholeRef.current);
-  };
-
-  const toggleWhole = (on: boolean) => {
-    wholeRef.current = on;
-    saveWholeMessages(on);
-    setWholeOn(on);
-    hostRef.current?.setScriptText(on && hdTextOnRef.current);
-  };
-
   const s = stats?.state;
   return (
     <div className={touch ? "game with-touch-pad" : "game"} ref={holder}>
@@ -908,7 +889,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         data-layout={noHd ? "full" : layout}
       />
       {onboarding?.phase === "intro" && !noHd && <IntroStage ref={introCanvas} />}
-      {hdText && !noHd && hdTextOn && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} hideDialog={hideDialog} actions={textActions} look={look} />}
+      {hdText && !noHd && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} hideDialog={hideDialog} actions={textActions} look={look} />}
       {/* Everything that isn't the game sits behind one button (the menu), in the HD panels' look. */}
       {ready && <button
         type="button"
@@ -948,18 +929,6 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             {gifts && room?.status === "open" && (
               <button type="button" onClick={() => { setGiftOpen((v) => !v); setSettings(false); }} aria-expanded={giftOpen}>Gift</button>
             )}
-          </div>
-          <div className="row">
-            <label>
-              <input type="checkbox" checked={hdTextOn} onChange={(e) => toggleHdText(e.target.checked)} />
-              {" "}HD words and menus
-            </label>
-          </div>
-          <div className="row">
-            <label>
-              <input type="checkbox" checked={wholeOn} disabled={!hdTextOn} onChange={(e) => toggleWhole(e.target.checked)} />
-              {" "}Whole messages at once (trial)
-            </label>
           </div>
           <div className="row">
             <label>
@@ -1023,7 +992,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       {battleHud && !noHd && layout === "battle" && <BattleHud state={battleHud.state} huds={battleHud.huds} />}
       {/* The pad hides while Settings is open so it can't cover the panel's forms (and unmounting releases any held button). */}
       {/* The pad is for the world: anything with buttons of its own (HD menus, messages, the start and names) hides it. */}
-      {input && touch && !settings && !(hdText && hdTextOn && !noHd) && !nameAsk && !onboarding && !dex && <TouchPad onChange={onTouch} />}
+      {input && touch && !settings && !(hdText && !noHd) && !nameAsk && !onboarding && !dex && <TouchPad onChange={onTouch} />}
       {ready && (onboarding?.phase === "choose" || onboarding?.phase === "starting") && (
         <StartScreen
           save={startSave}
