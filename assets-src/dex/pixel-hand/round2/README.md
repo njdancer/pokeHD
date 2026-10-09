@@ -18,3 +18,15 @@ Picks, with `front.png` (thumb) and `back.png` layers:
 1. fpx_s04_71
 2. fpx_s04_72
 3. fpx_s05_72
+
+## Layer split (fix for "the hand clips through the dex edge")
+
+The first split cut at the row where the hand widened, which put the device edge across the
+palm and drew knuckles in front of the dex. `tools/split.py` now:
+- puts the device's bottom edge on top of the knuckles, so the dex rests on the curled
+  fingers;
+- makes the front layer the thumb alone, traced down from its tip.
+
+The contact sheets now show the dex in red above its edge band, on a grey backdrop, so the
+hand no longer looks as if it's drawn on the device. `contact_picks.png` shows the three picks.
+`edge_row_manual` in a `meta.json` overrides the trace (set for fpx_s04_72).

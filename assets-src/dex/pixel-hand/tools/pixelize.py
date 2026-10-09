@@ -2,7 +2,7 @@
 
 usage: pixelize.py raw.png outdir [--colors N] [--pixel P]
 Writes outdir/sprite.png (true pixel grid, small palette, transparent bg),
-outdir/front.png + back.png (thumb in front of the device edge / the rest)
+outdir/front.png + back.png (the thumb, drawn in front of the device / the rest, via split.py)
 and outdir/meta.json (pixel size, grid, edge row).
 """
 import json
@@ -111,13 +111,11 @@ def main():
     top = int(np.argmax(widths > 0))
     thumb_w = np.median(widths[top: top + max(3, len(widths) // 6)])
     edge = top + int(np.argmax(widths[top:] > thumb_w * 1.8))
-    front, back = rgba.copy(), rgba.copy()
-    front[edge:, :, 3] = 0
-    back[:edge, :, 3] = 0
-    Image.fromarray(front).save(outdir / "front.png")
-    Image.fromarray(back).save(outdir / "back.png")
     meta = dict(source=src.name, model_pixel=round(p, 2), grid=[int(cells.shape[1]), int(cells.shape[0])], edge_row=edge, colors=colors)
     (outdir / "meta.json").write_text(json.dumps(meta, indent=1))
+    from split import split  # front = the thumb only, so no knuckle sits in front of the dex
+
+    split(outdir)
     print(json.dumps(meta))
 
 
