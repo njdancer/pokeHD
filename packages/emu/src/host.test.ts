@@ -50,4 +50,21 @@ describe("EmulatorHost.enableAudio", () => {
     expect(posted.filter((m) => m.type === "audio").length).toBe(1);
     expect(host.audioEnabled).toBe(true);
   });
+
+  it("swaps in one fresh context and worklet after coming back from the background", async () => {
+    const host = new EmulatorHost({ rom: new Uint8Array(0) });
+    const first = context;
+    const closed = vi.spyOn(first, "close");
+    first.release();
+    await host.enableAudio();
+    host.restartAudio();
+    expect(closed).toHaveBeenCalled();
+    expect(context).not.toBe(first);
+    expect(host.audioEnabled).toBe(false);
+    const calls = [host.enableAudio(), host.enableAudio()];
+    context.release();
+    await Promise.all(calls);
+    expect(posted.filter((m) => m.type === "audio").length).toBe(2);
+    expect(host.audioEnabled).toBe(true);
+  });
 });

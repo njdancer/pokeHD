@@ -257,10 +257,22 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     const onGesture = () => {
       if (hostRef.current && !hostRef.current.audioEnabled) void enableSound();
     };
+    // Back from the background: a fresh audio output, started by the next tap (see restartAudio).
+    let hidden = false;
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") hidden = true;
+      else if (hidden) {
+        hidden = false;
+        hostRef.current?.restartAudio();
+        setSound(false);
+      }
+    };
     const types = ["pointerup", "touchend", "click", "keydown"] as const;
     for (const type of types) window.addEventListener(type, onGesture, { capture: true, passive: true });
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       for (const type of types) window.removeEventListener(type, onGesture, { capture: true });
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, []);
 

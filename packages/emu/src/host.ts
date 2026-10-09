@@ -85,7 +85,7 @@ export class EmulatorHost {
   readonly #worker: Worker;
   /** Resolves once the emulator is running. */
   readonly started: Promise<Started>;
-  readonly #audio: AudioContext;
+  #audio: AudioContext;
   #audioNode: AudioWorkletNode | undefined;
   #audioSetup: Promise<void> | undefined;
   #nextId = 1;
@@ -230,6 +230,23 @@ export class EmulatorHost {
       if (this.#audioSetup === setup) this.#audioSetup = undefined; // the next gesture tries again
       throw err;
     }
+  }
+
+  /**
+   * Swaps the audio output for a fresh one, started again by the next `enableAudio()`. For after
+   * the page comes back from the background: iOS can leave a context it interrupted playing
+   * fast and garbled, as if there were two. The new context keeps the old one's sample rate, so
+   * the emulator's samples still fit; the worker drops the old worklet's port when the new one
+   * arrives, so there is still only ever one.
+   */
+  restartAudio(): void {
+    if (!this.#audioSetup) return;
+    const old = this.#audio;
+    this.#audioNode?.disconnect();
+    this.#audioNode = undefined;
+    this.#audioSetup = undefined;
+    this.#audio = new AudioContext({ latencyHint: "interactive", sampleRate: old.sampleRate });
+    void old.close();
   }
 
   get audioEnabled(): boolean {
