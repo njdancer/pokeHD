@@ -85,6 +85,8 @@ export interface EngineStats {
   height: number;
   /** 3D frames drawn in the last second. Frames that would look the same as the last are skipped. */
   drawn: number;
+  /** Whether the town's shadows come from the cache (D35); false when they're drawn every frame. */
+  shadowsCached: boolean;
 }
 
 export interface BenchResult {
@@ -181,8 +183,8 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
   /**
    * The town's shadows drawn only when they change (D35); `?shadowcache=0` draws them every frame.
-   * WebGL2 only for now (`?shadowcache=1` forces it): on iPhone's WebGPU it left only the sprites
-   * drawn, on black, so it waits until it's been checked there.
+   * Off on WebGPU until it's been checked in Safari (`?shadowcache=1` turns it on there): the
+   * first version blanked the world on iPhone, and Chromium's WebGPU didn't show it.
    */
   const cacheShadows = query.get("shadowcache") === "1" || (query.get("shadowcache") !== "0" && !isWebGPU);
   const shadowCache = cacheShadows ? installCachedShadow(rig.sun) : null;
@@ -198,7 +200,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const fogColor = uniform(rig.fogColor);
 
   let fixedSize: { width: number; height: number } | null = null;
-  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, scale: 1, dof: true, width: 0, height: 0, drawn: 0 };
+  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, scale: 1, dof: true, width: 0, height: 0, drawn: 0, shadowsCached: false };
   /** Something outside the scene graph changed (size, look, content): draw the next frame. */
   let dirty = true;
   const governor = (options.dynamicResolution ?? query.get("dynres") !== "0") ? createGovernor() : null;
@@ -368,6 +370,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     post.render();
     stats.renderMs = performance.now() - tRender;
     stats.cpuMs = performance.now() - t0;
+    stats.shadowsCached = shadowCache !== null && !shadowCache.failed;
     drawnThisSecond++;
     return true;
 
