@@ -24,7 +24,7 @@ export class DialogJoiner {
   frame(text: ScreenText): { lines: string[] | null; press: boolean } {
     const dialog = text.dialog;
     if (!dialog || text.menus.some((m) => m.active)) {
-      this.#reset();
+      this.reset();
       return { lines: null, press: false };
     }
     const page = dialog.lines.filter(Boolean);
@@ -37,7 +37,9 @@ export class DialogJoiner {
       if (this.#phase === "idle") this.#read = [];
       return { lines: this.#read.length ? this.#join(page) : null, press: false };
     }
-    // Stopped at a ▼.
+    // Stopped at a ▼. Lines kept from before belong to this message only if it carries on from
+    // them (a page A was pressed for, or the same page again); anything else is a new message.
+    if (this.#phase !== "continuing" && !this.#carriesOn(page)) this.#read = [];
     this.#phase = "idle";
     const lines = this.#join(page);
     const last = lines.at(-1) ?? "";
@@ -46,7 +48,20 @@ export class DialogJoiner {
       this.#phase = "pressed";
       return { lines, press: true };
     }
-    return { lines: this.#read.length ? lines : null, press: false };
+    if (this.#read.length === 0) return { lines: null, press: false };
+    this.#read = lines;
+    return { lines, press: false };
+  }
+
+  /** Forget the lines read: the message box closed, or the HD text isn't showing it. */
+  reset(): void {
+    this.#read = [];
+    this.#phase = "idle";
+  }
+
+  /** This page starts with the last lines read (it is the page they came from, or follows it). */
+  #carriesOn(page: string[]): boolean {
+    return this.#read.length > 0 && page.length > 0 && this.#join(page).length < this.#read.length + page.length;
   }
 
   /** The lines read so far and this page's, without the lines already among them. */
@@ -60,8 +75,4 @@ export class DialogJoiner {
     return [...read, ...page.slice(overlap)];
   }
 
-  #reset(): void {
-    this.#read = [];
-    this.#phase = "idle";
-  }
 }

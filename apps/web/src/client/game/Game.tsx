@@ -471,6 +471,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           }
           const fits = hdTextOnRef.current && (intro ? introTextFits(text) : hdTextFits(text, state.mode, inWorld));
           // Whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
+          if (!fits) joiner.reset();
           const joined = fits ? joiner.frame(text) : { lines: null, press: false };
           if (joined.press) host?.tap(Button.A);
           const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}` : "";
