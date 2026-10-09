@@ -8,3 +8,4 @@ export * from "./text/charmap.ts";
 export * from "./text/font.ts";
 export * from "./text/names.ts";
 export * from "./colour/sgb.ts";
+export * from "./dex/dex.ts";

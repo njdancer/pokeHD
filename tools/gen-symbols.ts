@@ -180,6 +180,26 @@ export const ALLOWLIST: readonly string[] = [
   "wObtainedBadges",
   "wPlayTimeHours",
   "wPlayTimeMinutes",
+  // The HD Pokédex (p2-dex): where the game opens and leaves its own, and the data it shows
+  "BaseStats",
+  "CompressedMap",
+  "ExternalMapEntries",
+  "InternalMapEntries",
+  "MewBaseStats",
+  "MewPicFront",
+  "PokedexEntryPointers",
+  "RhydonPicFront",
+  "ShowPokedexDataInternal",
+  "ShowPokedexDataInternal.waitForButtonPress",
+  "ShowPokedexMenu",
+  "ShowPokedexMenu.exitPokedex",
+  "TrainerNames",
+  "TrainerPicAndMoneyPointers",
+  "TypeNames",
+  "WildDataPointers",
+  "WorldMapTileGraphics",
+  "YoungsterPic",
+  "wTownVisitedFlag",
 ];
 
 export interface ParsedSymbol {
