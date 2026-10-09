@@ -75,6 +75,15 @@ describe("save history", () => {
     expect((await listHistory("k", offline)).map((e) => e.reason)).toEqual(["replaced"]);
   });
 
+  it("keeps every copy when two are kept at once", async () => {
+    await Promise.all([
+      keepSave("k", gameSave(1, 1), "save", offline),
+      keepSave("k", gameSave(2, 1), "replaced", offline),
+      keepSave("k", gameSave(3, 1), "before-import", offline),
+    ]);
+    expect((await listHistory("k", offline)).map((e) => e.reason).sort()).toEqual(["before-import", "replaced", "save"]);
+  });
+
   it("keeps the old trainer's save when a new game saves over it", async () => {
     const keep = vi.fn((sram: Uint8Array, reason: string) => keepSave("k", sram, reason as "save", offline));
     const slot = await openSaveSlot("k", null, keep);
