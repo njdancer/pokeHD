@@ -27,3 +27,6 @@ shots/
 apps/web/e2e/baselines/
 test-results/
 playwright-report/
+
+# Blender save backups
+*.blend1
