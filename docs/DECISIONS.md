@@ -544,8 +544,9 @@ player walks. `?ambient=N` overrides the rate. See docs/PERF.md, "Drawing only f
 Nick asked (2026-10-09) whether render passes can run on their own schedules. The screen-space
 passes (AO, bloom, depth of field) change whenever the camera does, but the sun's shadow map
 doesn't: it's the same until the sun steps, the shadow frustum moves or the scene changes. Its
-static casters are now drawn into a cached depth map only then, and each frame that's copied in
-and the moving casters (sprites, marked `markMovingShadow`) drawn on top. The frustum is
-re-centred on the player only after they move 6 units. Depth is 32-bit float so WebGPU can copy
-it. Alternative: re-render everything every frame (as before, `?shadowcache=0`), or temporal
+static casters are now drawn into a cached depth map only then, and each frame its depths are
+written into the live map by one full-screen triangle and the moving casters (sprites, marked
+`markMovingShadow`) drawn on top. The frustum is re-centred on the player only after they move 6
+units. A first version copied the depth texture instead; it broke iPhone's WebGPU, so it draws
+now (Nick, 2026-10-09: there's no reason not to cache, so make it work there). Alternative: re-render everything every frame (as before, `?shadowcache=0`), or temporal
 reuse of screen-space passes, which needs motion vectors and risks ghosting.

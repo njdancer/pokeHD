@@ -113,10 +113,18 @@ The sun's shadow pass draws every shadow caster again (about 520k triangles) and
 frame's draw calls, but the town's shadows only change when the sun steps (3 times a second),
 the shadow frustum moves, or the scene changes. So the shadow map comes in two layers (D35,
 `packages/engine/src/look/cached-shadow.ts`): the town's casters are drawn into a cached depth
-map only then, and each frame that map is copied into the live one and just the sprites (marked
-with `markMovingShadow`) are drawn on top. The frustum follows the player in jumps of a quarter
-of its half-width (6 units) instead of every frame. While walking that's about 4 town redraws a
-second instead of 60, plus one 16 MB depth copy a frame.
+map only then, and each frame one full-screen triangle writes that map's depths into the live
+one and just the sprites (marked with `markMovingShadow`) are drawn on top. The frustum follows
+the player in jumps of a quarter of its half-width (6 units) instead of every frame. While
+walking that's about 4 town redraws a second instead of 60, plus one depth-writing triangle a
+frame.
+
+The first version copied the depth texture (`copyTextureToTexture`). On Nick's iPhone
+(WebGPU) that left only the sprites drawn, on black, and the cache was turned off on WebGPU
+(PR #78). Writing the depths with a draw uses only what every frame already uses, and it runs
+on WebGPU again; it matches drawing every shadow every frame pixel for pixel on both backends.
+If the cache ever throws, it falls back to three.js's own every-frame shadows, and the game's
+HUD says "uncached shadows".
 
 Measured in `/dev/live` on the cloud sandbox (software WebGL, evening, two friends' sprites):
 engine CPU 4.6 → 3.0 ms a frame, and the same picture. `?shadowcache=0` turns it off.

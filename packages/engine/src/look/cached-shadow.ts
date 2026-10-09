@@ -1,9 +1,12 @@
 import * as THREE from "three/webgpu";
+import { screenUV, texture } from "three/tsl";
 
 // The sun's shadow map in two layers (D35). The town's own shadows (buildings, trees, terrain:
 // hundreds of thousands of triangles and half the frame's draw calls) only change when the sun
 // steps, the shadow frustum moves or the scene changes, so they're drawn into a cached depth
-// map then and copied into the live map every frame. Only the casters that move every frame
+// map then and redrawn into the live map every frame by one full-screen triangle that writes the
+// cached depths (a draw, not a texture copy: iPhone's WebGPU lost the whole world when the
+// first version copied depth textures). Only the casters that move every frame
 // (sprites: the player, NPCs, friends, battle pictures, marked with `markMovingShadow`) are
 // drawn on top each frame. A caster that moves but isn't marked keeps a stale shadow until the
 // next refresh, at most a third of a second away.
@@ -30,24 +33,30 @@ type RenderObject = Parameters<THREE.WebGPURenderer["setRenderObjectFunction"]>[
 export interface CachedShadow {
   /** Redraws the cached static shadows on the next frame. */
   invalidate(): void;
+  /** True once the cache gave up and shadows are drawn every frame instead. */
+  readonly failed: boolean;
   dispose(): void;
 }
 
 /** Installs the two-layer shadow map on `light`. */
 export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow {
   let stale = true;
-  /** WebGL can only copy into a depth texture it has already rendered to. */
-  let primed = false;
   /** Set if the cache ever throws; every shadow is then drawn every frame, as three.js does. */
   let failed = false;
   const cache = new THREE.RenderTarget(1, 1);
   cache.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType);
+  // Writes the cached depths into whatever target is bound, ignoring what's there.
+  const restore = new THREE.NodeMaterial();
+  restore.depthNode = texture(cache.depthTexture, screenUV).r;
+  restore.depthFunc = THREE.AlwaysDepth;
+  restore.colorWrite = false;
+  const quad = new THREE.QuadMesh(restore);
 
   const Base = THREE.ShadowNode as unknown as new (light: THREE.Light, shadow: THREE.LightShadow) => ShadowNodeInternals;
   class CachedShadowNode extends Base {
     override setupRenderTarget(shadow: THREE.LightShadow, builder: unknown) {
       const out = super.setupRenderTarget(shadow, builder);
-      // depth32float: WebGPU can't copy depth24plus, the default.
+      // depth32float, like the cache, so the cached depths come back exactly.
       out.depthTexture.type = THREE.FloatType;
       return out;
     }
@@ -69,26 +78,20 @@ export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow
           if (castsMovingShadow(object) === moving) (shadowObjects as (...a: unknown[]) => void)(object, ...rest);
         }) as RenderObject);
       try {
-        if (!primed) {
-          renderer.setRenderTarget(shadowMap);
-          renderer.clear();
-          primed = true;
-        }
         if (stale) {
           only(false);
           renderer.setRenderTarget(cache);
           renderer.render(scene, shadow.camera);
           stale = false;
         }
-        renderer.copyTextureToTexture(cache.depthTexture!, shadowMap.depthTexture!);
-        only(true);
+        renderer.setRenderObjectFunction(null);
         renderer.setRenderTarget(shadowMap);
-        renderer.autoClear = false; // keep the copied static shadows (three restores this after)
+        quad.render(renderer);
+        only(true);
+        renderer.autoClear = false; // keep the restored static shadows (three restores this after)
         renderer.render(scene, shadow.camera);
       } catch (e) {
-        // Draw every shadow every frame from now on, rather than lose the frame.
-        console.warn("[pokeHD] cached shadows failed; drawing them every frame", e);
-        failed = true;
+        fail(e);
       } finally {
         // Never leave the filter on: the main pass would draw only some objects.
         renderer.setRenderObjectFunction(shadowObjects);
@@ -97,14 +100,25 @@ export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow
     }
   }
 
+  function fail(why: unknown) {
+    if (failed) return;
+    // Draw every shadow every frame from now on, rather than lose the frame.
+    console.warn("[pokeHD] cached shadows failed; drawing them every frame", why);
+    failed = true;
+  }
+
   const node = new CachedShadowNode(light, light.shadow);
   (light.shadow as unknown as { shadowNode: unknown }).shadowNode = node;
   return {
     invalidate() {
       stale = true;
     },
+    get failed() {
+      return failed;
+    },
     dispose() {
       cache.dispose();
+      restore.dispose();
     },
   };
 }
