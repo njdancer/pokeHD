@@ -480,4 +480,4 @@ if (location.hash.startsWith("#b")) {
   if (i >= 0) goBeat(i);
 } else showLevels();
 window.__inspect = inspect;
-window.__tour = { cellPos, slabs, flyers, scene, camera, renderer, goBeat, seek, BEATS, finishBeat, BOARD, SPECIAL, ZONES, PANELS, fitBox, boxOfKeys, get TAU() { return TAU; }, get PLAY() { return PLAY; }, cam, LEVELS };
+window.__tour = { cellPos, slabs, flyers, scene, camera, renderer, goBeat, seek, BEATS, finishBeat, BOARD, SPECIAL, ZONES, PANELS, fitBox, boxOfKeys, get TAU() { return TAU; }, get PLAY() { return PLAY; }, cam, LEVELS, hold(v) { scrubbing = v; } };

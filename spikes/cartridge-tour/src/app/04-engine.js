@@ -654,8 +654,8 @@ function computeShots() {
 const _cam = new THREE.PerspectiveCamera();
 function fitBox(b) {
   // a tiny focus (one or two bytes) still gets enough board around it to read
-  const MINW = 34;
-  const MIND = 22;
+  const MINW = camera.aspect > 1 ? 60 : 34;
+  const MIND = camera.aspect > 1 ? 34 : 22;
   if (b.x1 - b.x0 < MINW) {
     const c = (b.x0 + b.x1) / 2;
     b = { ...b, x0: c - MINW / 2, x1: c + MINW / 2 };
