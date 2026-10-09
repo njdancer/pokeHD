@@ -1,6 +1,7 @@
 .dd {
   --paper: #fffaf0; --edge: #d6a866; --ink: #3e2a1c; --muted: #7a6656; --accent: #e0702a; --join: #f2b46a55;
-  min-height: 100vh; box-sizing: border-box; padding: 16px; max-width: 980px; margin: 0 auto;
+  height: 100%; overflow: auto; -webkit-overflow-scrolling: touch; box-sizing: border-box;
+  padding: 16px max(16px, calc((100% - 980px) / 2));
   background: #f4ead8; color: var(--ink); font: 15px/1.45 Nunito, ui-rounded, system-ui, sans-serif;
 }
 .dd h1 { margin: 0 0 8px; font-size: 24px; }
