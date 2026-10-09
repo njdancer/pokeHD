@@ -84,11 +84,12 @@ function dexWords(rom: Uint8Array, at: number): string[][] {
     const code = rom[i]!;
     if (code === DEX_END || code === TERMINATOR) break;
     const page = pages.at(-1)!;
+    const add = (s: string) => (page[page.length - 1] += s);
     if (code === NEXT) page.push("");
     else if (code === PAGE) pages.push([""]);
-    else if (code >= 0x80) page[page.length - 1] += FONT_CHARS[code - 0x80];
-    else if (code === 0x7f) page[page.length - 1] += " ";
-    else if (code === 0x54) page[page.length - 1] += "POKé";
+    else if (code >= 0x80) add(FONT_CHARS[code - 0x80] ?? "?");
+    else if (code === 0x7f) add(" ");
+    else if (code === 0x54) add("POKé");
     // $00 (`text`) starts the words; anything else is a control code with nothing to show.
   }
   return pages;
