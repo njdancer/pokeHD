@@ -180,6 +180,18 @@ export const ALLOWLIST: readonly string[] = [
   "wObtainedBadges",
   "wPlayTimeHours",
   "wPlayTimeMinutes",
+  // Tap-first UI: the intro's name questions and the naming screen, answered from the page
+  "ChoosePlayerName",
+  "ChooseRivalName",
+  "DefaultNamesPlayerList",
+  "DefaultNamesRivalList",
+  "DisplayNamingScreen",
+  "DisplayNamingScreen.inputLoop",
+  "DisplayNamingScreen.submitNickname",
+  "wCurPartySpecies",
+  "wNamingScreenType",
+  "wRivalName",
+  "wStringBuffer",
 ];
 
 export interface ParsedSymbol {

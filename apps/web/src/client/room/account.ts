@@ -96,3 +96,11 @@ export async function removeFriend(id: string): Promise<boolean> {
   const res = await fetch(`/api/admin/players/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => null);
   return !!res?.ok;
 }
+
+export type RenameError = "bad-name" | "name-taken" | "signed-out" | "network";
+
+/** Renames the signed-in player (the name Oak asks in the game; the two stay the same). */
+export async function setMyName(name: string): Promise<Account | { error: RenameError }> {
+  const result = await post<Account>("/api/me", { name }, "PATCH");
+  return result.ok ? result.body : { error: result.error as RenameError };
+}

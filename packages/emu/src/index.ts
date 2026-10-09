@@ -1,4 +1,5 @@
 export * from "./core.ts";
+export * from "./controls.ts";
 export * from "./debugger.ts";
 export * from "./host.ts";
 export * from "./autosave.ts";

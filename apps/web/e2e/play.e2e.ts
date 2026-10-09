@@ -24,7 +24,7 @@ test("a new game from Red's room to Viridian City", async ({ page }) => {
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
   // A fresh browser profile: no save, so Continue isn't offered and the intro starts a new game.
-  await page.goto("/?stats");
+  await page.goto("/?stats&classic");
   const p = new Player(page, world);
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   await expect(page.getByTestId("gb-screen")).toHaveAttribute("data-layout", "full");

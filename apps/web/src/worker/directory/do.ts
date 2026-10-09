@@ -44,6 +44,9 @@ export class Directory extends DurableObject<Env> {
   listPlayers() {
     return this.#store.listPlayers();
   }
+  setName(playerId: string, name: string) {
+    return this.#store.setName(playerId, name);
+  }
   setRomAccess(playerId: string, allowed: boolean) {
     return this.#store.setRomAccess(playerId, allowed);
   }

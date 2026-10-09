@@ -65,7 +65,7 @@ test("a save made on one device continues on another", async ({ browser, baseURL
   const friend = await addFriend(deviceA.request, `e2e${Date.now() % 100000}`);
   await signInWith(deviceA.request, friend.link);
   const pageA = await deviceA.newPage();
-  await pageA.goto("/?stats");
+  await pageA.goto("/?stats&classic");
   await expect(pageA.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   const a = new Player(pageA, world);
   await a.playIntro();
@@ -79,7 +79,7 @@ test("a save made on one device continues on another", async ({ browser, baseURL
   const deviceB = await browser.newContext({ ...PLAY_USE, baseURL });
   await signInWith(deviceB.request, await friendLink(deviceB.request, friend.player.id));
   const pageB = await deviceB.newPage();
-  await pageB.goto("/?stats");
+  await pageB.goto("/?stats&classic");
   await expect(pageB.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
 
   // With no save of its own, the device restores the cloud's before the game starts (D25), so

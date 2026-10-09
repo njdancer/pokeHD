@@ -7,6 +7,7 @@ const EmuDebug = lazy(() => import("./dev/emu/EmuDebug.tsx").then((m) => ({ defa
 const LivePlayback = lazy(() => import("./dev/LivePlayback.tsx").then((m) => ({ default: m.LivePlayback })));
 const TextDebug = lazy(() => import("./dev/TextDebug.tsx").then((m) => ({ default: m.TextDebug })));
 const BattleDev = lazy(() => import("./dev/BattleDev.tsx").then((m) => ({ default: m.BattleDev })));
+const UiLooks = lazy(() => import("./dev/UiLooks.tsx").then((m) => ({ default: m.UiLooks })));
 const Bench = lazy(() => import("./dev/Bench.tsx").then((m) => ({ default: m.Bench })));
 // The ROM explorer (/explore), with its ~850 KB label table, only loads when opened.
 const Explorer = lazy(() => import("./explore/Explorer.tsx").then((m) => ({ default: m.Explorer })));
@@ -32,6 +33,7 @@ export function Root() {
   if (path === "/dev/live") return <Suspense><LivePlayback /></Suspense>;
   if (path === "/dev/text") return <Suspense><TextDebug /></Suspense>;
   if (path === "/dev/battle") return <Suspense><BattleDev /></Suspense>;
+  if (path === "/dev/ui") return <Suspense><UiLooks /></Suspense>;
   if (path === "/dev/bench") return <Suspense><Bench /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;
   if (Shots && path === "/dev/shots") return <Suspense><Shots /></Suspense>;

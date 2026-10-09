@@ -139,6 +139,18 @@ describe("DirectoryStore", () => {
     expect(store.addPlayer("alex@example.com", "")).toEqual({ ok: false, error: "bad-name" });
   });
 
+  it("lets a player rename themselves, keeping names unique", async () => {
+    const { store } = makeStore();
+    added(store, "alex@example.com", "Alex");
+    const sam = await signedIn(store, "sam@example.com", "Sam");
+    expect(store.setName(sam.player.id, "Alex")).toEqual({ ok: false, error: "name-taken" });
+    expect(store.setName(sam.player.id, "  ")).toEqual({ ok: false, error: "bad-name" });
+    expect(store.setName(sam.player.id, "SAM")).toMatchObject({ ok: true, player: { name: "SAM" } });
+    expect(store.setName(sam.player.id, "Sammy")).toMatchObject({ ok: true });
+    expect(await store.authenticate(sam.sessionToken)).toMatchObject({ name: "Sammy" });
+    expect(store.setName("nobody", "Kim")).toEqual({ ok: false, error: "not-found" });
+  });
+
   it("makes the admin's player on first use, adopting their old invite-code player", () => {
     const { store, db } = makeStore();
     db.prepare("INSERT INTO players (id, name, created_at) VALUES ('old', 'Nick', 1)").run();

@@ -90,7 +90,7 @@ async function player(browser: Browser, name: string, sram: Uint8Array): Promise
     { key: POKEBLUE_SHA1, bytes: [...sram] },
   );
   log(name, "save stored");
-  await page.goto("/?stats");
+  await page.goto("/?stats&classic");
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   // Title, CONTINUE, the save's summary: A until the overworld loop runs.
   for (let tick = 0; tick < 600; tick++) {

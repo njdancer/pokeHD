@@ -5,6 +5,7 @@
 // never starves and video follows at the core's own ~59.73 Hz. Without audio (no user gesture
 // yet, or muted), a wall-clock timer runs frames at FRAME_RATE instead.
 import { AutoSave, loadResumePoint } from "./autosave.ts";
+import { Controls } from "./controls.ts";
 import { FRAME_RATE, GameBoy } from "./core.ts";
 import { EraseGuard } from "./erase-guard.ts";
 import { GiftDesk } from "./gifts/desk.ts";
@@ -33,11 +34,13 @@ let link: LinkPort | undefined;
 let desk: GiftDesk | undefined;
 let autosave: AutoSave | undefined;
 let guard: EraseGuard | undefined;
+let controls: Controls | undefined;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
 
 function runOneFrame() {
   if (!gb) return;
+  controls?.frame();
   guard?.frame();
   gb.runFrame();
   frames++;
@@ -123,6 +126,11 @@ async function handle(data: ToWorker) {
           onPrompt: () => post({ type: "erase-prompt" }),
           onAnswered: (erase) => post({ type: "erase-answered", erase }),
         }) : undefined;
+        const g = gb;
+        controls = new Controls(gb, {
+          setButtons: (mask) => (guard ? guard.setButtons(mask) : g.setButtons(mask)),
+          ...(data.askNames ? { names: { ask: (ask) => post({ type: "name-ask", ask }), done: () => post({ type: "name-done" }) } } : {}),
+        });
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();
         // Before the first frame, so the page knows how the game started before it sees one.
@@ -147,8 +155,16 @@ async function handle(data: ToWorker) {
         break;
       }
       case "buttons":
-        if (guard) guard.setButtons(data.mask);
-        else gb?.setButtons(data.mask);
+        controls?.setButtons(data.mask);
+        break;
+      case "tap":
+        controls?.tap(data.mask);
+        break;
+      case "select":
+        controls?.select(data.item, data.press);
+        break;
+      case "name-answer":
+        controls?.answerName(data.name);
         break;
       case "erase-answer":
         guard?.answer(data.erase);
@@ -170,7 +186,7 @@ async function handle(data: ToWorker) {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.
         // Signed-in players always have a port open (RoomLink keeps one ready), so it's the
         // session that counts, not the port.
-        const g = gb && !link?.inSession && !guard?.asking && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
         // Hand over any newer save first, so the stored save matches the one in the state.
         if (g?.sramDirty) flushSram();
         post({ type: "resume-point", id: data.id, state: g ? g.saveState() : null });
