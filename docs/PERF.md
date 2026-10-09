@@ -122,7 +122,9 @@ frame.
 The first version copied the depth texture (`copyTextureToTexture`). On Nick's iPhone
 (WebGPU) that left only the sprites drawn, on black, and the cache was turned off on WebGPU
 (PR #78). Writing the depths with a draw uses only what every frame already uses, and it runs
-on WebGPU again; it matches drawing every shadow every frame pixel for pixel on both backends.
+on WebGPU in Chromium; it matches drawing every shadow every frame pixel for pixel on both
+backends. It stays off on WebGPU by default (`?shadowcache=1` turns it on) until it's been
+checked in Safari, since Chromium's WebGPU didn't show the first break.
 If the cache ever throws, it falls back to three.js's own every-frame shadows, and the game's
 HUD says "uncached shadows".
 

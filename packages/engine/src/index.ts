@@ -181,8 +181,13 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const sky = createSky(scene);
   const rig = createRig(scene, sky);
   const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
-  /** The town's shadows drawn only when they change (D35); `?shadowcache=0` draws them every frame. */
-  const shadowCache = query.get("shadowcache") === "0" ? null : installCachedShadow(rig.sun);
+  /**
+   * The town's shadows drawn only when they change (D35); `?shadowcache=0` draws them every frame.
+   * Off on WebGPU until it's been checked in Safari (`?shadowcache=1` turns it on there): the
+   * first version blanked the world on iPhone, and Chromium's WebGPU didn't show it.
+   */
+  const cacheShadows = query.get("shadowcache") === "1" || (query.get("shadowcache") !== "0" && !isWebGPU);
+  const shadowCache = cacheShadows ? installCachedShadow(rig.sun) : null;
   const staticShadows = createChangeWatch();
   let world: WorldContent = options.world ?? createPlaceholder();
   scene.add(world.root);
