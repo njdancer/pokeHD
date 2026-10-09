@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { checkRom, type RomHeader } from "@pokehd/rom";
 import { Cartridge } from "./Cartridge.tsx";
+import { LoadingScreen } from "./LoadingScreen.tsx";
 import { fetchDevRom } from "./dev-rom.ts";
 import { forgetRom, loadStoredRom, storedRomIsShared, storeRom } from "./rom-store.ts";
 import { me, type Account } from "./room/account.ts";
@@ -69,12 +70,13 @@ export function App() {
 
   if (state.kind === "ready") {
     return (
-      <Suspense>
+      <Suspense fallback={<LoadingScreen />}>
         <Game rom={state.rom} romKey={state.romKey} header={state.header} onForget={forget} />
       </Suspense>
     );
   }
-  if (state.kind === "loading") return null;
+  // The game keeps the loading screen up until its world has drawn.
+  if (state.kind === "loading") return <LoadingScreen />;
   // The look-dev scene stands behind the ROM loader until there's a game to play.
   return (
     <>

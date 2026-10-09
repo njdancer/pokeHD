@@ -68,6 +68,10 @@ const BUILD_CLEARANCE = 4;
 const SPARE_CHUNKS = 10;
 /** Seconds the camera takes to swing into a battle and back out. */
 const BATTLE_SWING = 1.1;
+/** Neighbouring maps nearer the player than this (steps) must be drawn before the view shows. */
+const HOLD_STEPS = 20;
+/** Seconds the view takes to come up from black once everything it needs is drawn. */
+const REVEAL_SECONDS = 0.3;
 /** The look's camera when there's no look to read it from. */
 const DEFAULT_VIEW: CameraView = { pitch: 38, yaw: 0, distance: 30, fov: 24 };
 
@@ -121,6 +125,12 @@ export interface LiveWorld extends WorldContent {
   setArenaStyle(style: ArenaStyle): void;
   /** The battle camera while one is on screen (or swinging back). */
   readonly view: CameraView | null;
+  /**
+   * True once the player's map, and any neighbour near enough to be seen, is built, compiled and
+   * in the scene. Until then the view is held black (and, after, fades up), so the world never
+   * shows half-built: no sprites over an empty map after a warp.
+   */
+  readonly ready: boolean;
   dispose(): void;
 }
 
@@ -268,7 +278,10 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       (e: unknown) => {
         building = null;
         console.warn(`[pokeHD] couldn't build map ${c.map.id}`, e);
-        c.group = new THREE.Group(); // don't try again
+        // Don't try again, and don't hold the view black waiting for it.
+        c.group = new THREE.Group();
+        compiled.add(c.group);
+        show(c);
       },
     );
   };
@@ -318,6 +331,30 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   let last: Sample | null = null;
   let latest: LiveState | null = null;
   let wrapped = false;
+  /**
+   * Held black after a warp (and at the start) until the new map is drawn. Walking across a
+   * connection never holds: the map ahead was built while walking up to it, and if it wasn't,
+   * a gap at the edge beats the screen going black mid-walk.
+   */
+  let holding = true;
+  /** How much of the view is covered: 1 while holding, then easing to 0. */
+  let cover = 1;
+  let coveredAt = clock();
+  /** Whether everything the view needs is drawn (see `ready`). */
+  const loaded = (): boolean => {
+    const here = current === null ? undefined : chunks.get(current);
+    if (!here || !last || !isShown(here)) return false;
+    for (const c of chunks.values()) {
+      if (c.hops !== 1 || isShown(c)) continue;
+      // Only neighbours near enough to be on screen hold the view.
+      const x0 = c.bx * 2, z0 = c.by * 2, x1 = x0 + c.map.widthBlocks * 2, z1 = z0 + c.map.heightBlocks * 2;
+      const dx = Math.max(x0 - last.x, 0, last.x - x1);
+      const dz = Math.max(z0 - last.z, 0, last.z - z1);
+      if (Math.hypot(dx, dz) < HOLD_STEPS) return false;
+    }
+    return true;
+  };
+  const isShown = (c: Chunk) => c.group !== null && c.group.parent === root;
 
   const fadeMaterial = new THREE.MeshBasicNodeMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false, fog: false });
   const fadeQuad = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), fadeMaterial);
@@ -372,6 +409,9 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     get view() {
       return view;
     },
+    get ready() {
+      return !holding;
+    },
     setBattle(next) {
       if (next && !inBattle) startBattle();
       inBattle = next !== null && battle !== null;
@@ -416,6 +456,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       // A warp jumps; don't slide across it.
       const jumped = before !== current && !(before !== null && chunks.has(before));
       prev = jumped || !last ? { at, ...p } : last;
+      if (jumped) holding = true;
       last = { at, ...p };
       latest = state;
     },
@@ -462,10 +503,18 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         for (const [slot, s] of npcSprites) if (!seen.has(slot)) s.mesh.visible = false;
 
         // Fades: the game's own fade drawn over the HD view; the day wraps inside a black one.
+        // A map still loading holds the view black, whatever the game's fade says.
+        const at = clock();
+        if (holding && loaded()) holding = false;
+        if (holding) cover = 1;
+        else cover = Math.max(cover - Math.min(Math.max(at - coveredAt, 0), 0.1) / REVEAL_SECONDS, 0);
+        coveredAt = at;
         const fade = latest.fade;
-        fadeQuad.visible = fade !== 0;
-        fadeMaterial.color.set(fade > 0 ? 0x000000 : 0xffffff);
-        fadeMaterial.opacity = Math.min(Math.abs(fade), 1);
+        const black = cover >= Math.abs(fade) || fade > 0;
+        const amount = Math.min(Math.max(Math.abs(fade), cover), 1);
+        fadeQuad.visible = amount > 0;
+        fadeMaterial.color.set(black ? 0x000000 : 0xffffff);
+        fadeMaterial.opacity = amount;
         if (fade >= 1 && !wrapped && look && look.params.time.phase >= 1) {
           look.wrapToMorning(true);
           wrapped = true;
