@@ -9,14 +9,14 @@ import { DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 import { createPlaceholder } from "./look/placeholder.ts";
 import { NEUTRAL_TINT, normTint } from "./look/grade.ts";
 import { createPost } from "./look/post.ts";
-import { defaultQuality, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
+import { alignedPixelRatio, defaultQuality, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
 import { createGovernor, RUNGS } from "./look/governor.ts";
 import { createRig } from "./look/rig.ts";
 import { webgpuViewsWork } from "./webgpu-probe.ts";
 
 export type { DayCycle } from "./look/cycle.ts";
 export type { LookParams } from "./look/params.ts";
-export { QUALITY_PATCHES, type Quality } from "./look/quality.ts";
+export { alignedPixelRatio, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
 export { BUILT_IN_PRESETS, DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 
 export interface LookController {
@@ -181,8 +181,16 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       renderer.setPixelRatio(1);
       renderer.setSize(fixedSize.width, fixedSize.height, false);
     } else {
-      renderer.setPixelRatio(Math.min(devicePixelRatio, params.render.maxPixelRatio) * rung.scale);
+      const { ratio, step } = alignedPixelRatio(devicePixelRatio, params.render.maxPixelRatio);
+      renderer.setPixelRatio(ratio * rung.scale);
       renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+      // A whole number of screen pixels per rendered pixel: scale up without blurring. Dynamic
+      // resolution's lower rungs aren't whole numbers, so they keep the browser's smooth scaling.
+      const buffer = renderer.getDrawingBufferSize(new THREE.Vector2());
+      const whole = step > 1 && rung.scale === 1 &&
+        Math.abs(buffer.x * step - canvas.clientWidth * devicePixelRatio) < 0.5 &&
+        Math.abs(buffer.y * step - canvas.clientHeight * devicePixelRatio) < 0.5;
+      canvas.style.imageRendering = whole ? "pixelated" : "";
     }
     const size = renderer.getDrawingBufferSize(new THREE.Vector2());
     stats.width = size.x;

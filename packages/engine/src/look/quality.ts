@@ -19,3 +19,13 @@ export function defaultQuality(): Quality {
   if (asked === "full" || asked === "mobile") return asked;
   return matchMedia("(pointer: coarse) and (hover: none)").matches ? "mobile" : "full";
 }
+
+/**
+ * The render pixel ratio for a screen: the largest whole fraction of the device's ratio (3, 1.5,
+ * 1, ...) within `max`, so each rendered pixel covers a whole number of screen pixels (2×2 on a
+ * 3× iPhone, rather than 1.5×1.5 at a plain 2× cap). `step` is that whole number.
+ */
+export function alignedPixelRatio(deviceRatio: number, max: number): { ratio: number; step: number } {
+  const step = Math.max(1, Math.ceil(deviceRatio / max - 1e-6));
+  return { ratio: deviceRatio / step, step };
+}

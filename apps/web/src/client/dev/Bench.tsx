@@ -3,18 +3,18 @@
 // stage switched off at a time. A stage's cost is the shipped frame time minus the frame time
 // without it. Frames are rendered back to back and timed until the GPU has finished them, so
 // vsync doesn't hide anything.
-// URL options: ?size=phone pins the drawing buffer to an iPhone's (780×1688, portrait at the
-// 2× pixel-ratio cap) and ?size=WxH to any size; by default it's this screen's. ?map=VIRIDIAN_CITY
+// URL options: ?size=phone pins the drawing buffer to an iPhone's (585×1266, portrait at 1.5×,
+// half its 3× screen) and ?size=WxH to any size; by default it's this screen's. ?map=VIRIDIAN_CITY
 // stands elsewhere. ?only=shipped,no-ao runs just those rows. Results land in window.__bench.
 import { useEffect, useRef, useState } from "react";
-import { BUILT_IN_PRESETS, createEngine, type BenchResult, type Engine } from "@pokehd/engine";
+import { alignedPixelRatio, BUILT_IN_PRESETS, createEngine, type BenchResult, type Engine } from "@pokehd/engine";
 import { createLiveWorld, standingState, type LiveWorld } from "@pokehd/engine/world";
 import { MAP_NAMES, parseWorld } from "@pokehd/rom";
 import { fetchDevRom } from "../dev-rom.ts";
 import { loadStoredRom } from "../rom-store.ts";
 
 const query = new URLSearchParams(location.search);
-const PHONE = { width: 780, height: 1688 };
+const PHONE = { width: 585, height: 1266 };
 
 /** One row: a patch over the shipped look, and an optional render-size scale. */
 interface Variant {
@@ -108,11 +108,12 @@ export function Bench() {
       live.setLook(engine.look);
 
       const size = query.get("size");
+      const screenRatio = alignedPixelRatio(devicePixelRatio, 2).ratio;
       const base = size === "phone"
         ? PHONE
         : size?.includes("x")
           ? { width: Number(size.split("x")[0]), height: Number(size.split("x")[1]) }
-          : { width: Math.round(canvas.clientWidth * Math.min(devicePixelRatio, 2)), height: Math.round(canvas.clientHeight * Math.min(devicePixelRatio, 2)) };
+          : { width: Math.floor(canvas.clientWidth * screenRatio), height: Math.floor(canvas.clientHeight * screenRatio) };
 
       // Stand still and let every nearby map build.
       const state = standingState(world, map);
