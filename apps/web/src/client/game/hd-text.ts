@@ -22,6 +22,25 @@ export function saveHdTextOn(on: boolean): void {
   }
 }
 
+const WHOLE_KEY = "pokehd.text.whole.v1";
+
+/** Whether the player wants whole messages from the script (off unless turned on in Settings). */
+export function loadWholeMessages(): boolean {
+  try {
+    return localStorage.getItem(WHOLE_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+export function saveWholeMessages(on: boolean): void {
+  try {
+    localStorage.setItem(WHOLE_KEY, on ? "on" : "off");
+  } catch {
+    // Storage blocked: the choice lasts until reload.
+  }
+}
+
 /**
  * True when everything the game shows over the world is in boxes of text the HD layer can
  * draw: in the world, outside battle, with no pictures in the boxes and no text outside them

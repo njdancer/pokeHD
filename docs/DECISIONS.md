@@ -550,3 +550,22 @@ written into the live map by one full-screen triangle and the moving casters (sp
 units. A first version copied the depth texture instead; it broke iPhone's WebGPU, so it draws
 now (Nick, 2026-10-09: there's no reason not to cache, so make it work there). Alternative: re-render everything every frame (as before, `?shadowcache=0`), or temporal
 reuse of screen-space passes, which needs motion vectors and risks ghosting.
+
+## D36. Whole messages from the script, as a trial setting
+
+**Status:** trial, off by default (Settings, "Whole messages at once"). Nick asked for it 2026-10-09.
+
+Joining the game's pages from the screen (D32) can't tell what follows a ▼, so it stops early or
+presses past the end of a message (see /dev/dialog). Instead, when the game starts printing a
+message (`PrintText_NoCreatingTextBox`), we read the whole message from the ROM's text script, with
+the names and numbers it is about to fill in from RAM, and show it in the HD box in sentence-sized
+boxes. The game prints its first page and waits as usual while the player's A and B go to the page.
+When the player reaches the last box, the game runs through the waits inside the message; when
+they tap past it, it runs through the last one. It does this with its own "no text delay" flag set
+and A pressed at each `WaitForTextScrollButtonPress`, so every step (and any code) runs the game's
+own way. A menu taking input, the box closing or the next message ends it. If the HD text can't
+show a message, it goes back to the game untouched.
+
+**Why not static analysis of the scripts:** the branches depend on live state (flags, the bag,
+answers) and their effects must happen the game's way, so the game has to decide anyway. The
+moment it calls PrintText it has decided, and that is when we read the message.

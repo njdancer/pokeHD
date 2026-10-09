@@ -2,6 +2,7 @@
 import { createAudioOutput } from "./audio.ts";
 import type { Gift, LinkMessage } from "@pokehd/protocol";
 import type { NameAsk } from "./controls.ts";
+import type { ScriptMessage } from "./script-text.ts";
 import type { GiftEvent } from "./gifts/desk.ts";
 import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { DexOpened } from "./dex-guard.ts";
@@ -45,6 +46,15 @@ export interface EmulatorHostOptions {
   onNameAsk?: (ask: NameAsk) => void;
   /** The answered name is in the game. */
   onNameDone?: () => void;
+  /**
+   * With `setScriptText(true)`: a message starts and the page shows the whole of it. Call
+   * `readOnMessage()` once its last part shows and `closeMessage()` when the player is done.
+   */
+  onScriptMessage?: (message: ScriptMessage) => void;
+  /** The message is over for the game (a menu takes input, the box closed, the next message). */
+  onScriptEnd?: (id: number) => void;
+  /** The player pressed A or B while a message shows: read on. */
+  onScriptPress?: () => void;
   /**
    * The game opened its Pokédex (p2-dex). Passing this turns the guard on: the player's buttons
    * are held back until `closeDex()` is called, and the game then leaves its own.
@@ -128,6 +138,15 @@ export class EmulatorHost {
           break;
         case "name-done":
           options.onNameDone?.();
+          break;
+        case "script-message":
+          options.onScriptMessage?.(data.message);
+          break;
+        case "script-end":
+          options.onScriptEnd?.(data.id);
+          break;
+        case "script-press":
+          options.onScriptPress?.();
           break;
         case "frame":
           options.onFrame?.(data);
@@ -287,6 +306,26 @@ export class EmulatorHost {
   /** Moves the open menu's cursor to `item` (its wCurrentMenuItem), then presses A if `press`. */
   select(item: number, press = true): void {
     this.#post({ type: "select", item, press });
+  }
+
+  /** Whole messages from the script on or off (see `onScriptMessage`). */
+  setScriptText(enabled: boolean): void {
+    this.#post({ type: "script-text", enabled });
+  }
+
+  /** The page shows the message's last part: the game runs through the waits inside it. */
+  readOnMessage(id: number): void {
+    this.#post({ type: "script-read-on", id });
+  }
+
+  /** The player has read the message: the game runs through the rest of it. */
+  closeMessage(id: number): void {
+    this.#post({ type: "script-close", id });
+  }
+
+  /** The page can't show the message after all: the game's own text takes over. */
+  releaseMessage(id: number): void {
+    this.#post({ type: "script-release", id });
   }
 
   /** Answers `onNameAsk` with a name (see `encodeName`), or null to use the game's own screen. */

@@ -2,6 +2,7 @@
 import type { Gift, LinkMessage } from "@pokehd/protocol";
 import type { GiftEvent } from "./gifts/desk.ts";
 import type { NameAsk } from "./controls.ts";
+import type { ScriptMessage } from "./script-text.ts";
 import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { DexOpened } from "./dex-guard.ts";
 import type { LinkRole } from "./link.ts";
@@ -24,6 +25,14 @@ export type ToWorker =
   | { type: "select"; item: number; press: boolean }
   /** The page's answer to a name question, encoded for the game; null for the game's own screen. */
   | { type: "name-answer"; name: Uint8Array | null }
+  /** Whole messages from the script (ScriptText) on or off. */
+  | { type: "script-text"; enabled: boolean }
+  /** The page shows the message's last box. */
+  | { type: "script-read-on"; id: number }
+  /** The player has read the message. */
+  | { type: "script-close"; id: number }
+  /** The page can't show the message: the game's own text takes over. */
+  | { type: "script-release"; id: number }
   | { type: "watch"; watches: Record<string, Watch> }
   | { type: "pause"; paused: boolean }
   | { type: "save-state"; id: number }
@@ -76,6 +85,12 @@ export type FromWorker =
   | { type: "erase-answered"; erase: boolean }
   /** The game asks for a name (Controls): the page answers with "name-answer". */
   | { type: "name-ask"; ask: NameAsk }
+  /** A message starts (ScriptText): the page shows the whole of it. */
+  | { type: "script-message"; message: ScriptMessage }
+  /** The message is over for the game. */
+  | { type: "script-end"; id: number }
+  /** The player pressed A or B while the page shows a message. */
+  | { type: "script-press" }
   /** The page's name is in: the naming screen has submitted it. */
   | { type: "name-done" }
   /** The game opened its Pokédex (DexGuard). */
