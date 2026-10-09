@@ -1,4 +1,5 @@
-// The HD Pokédex as a device the player holds up to the screen (p2-dex): a red handheld modelled
+// The HD Pokédex as a device the player holds up to the screen (p2-dex): the modelled one (model.ts)
+// when it loads, else a red handheld modelled
 // here from simple shapes (no outside models), after the anime's: a big blue lens and three
 // little lights on a top band, a cover with a stepped edge that swings open like a book, a screen,
 // a d-pad and buttons. It rises from the bottom of the screen, tips upright and opens; once open
@@ -10,15 +11,21 @@
 import * as THREE from "three/webgpu";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { loadDexModel, type DexModel } from "./model.ts";
 
 /** Screen corners in CSS pixels: top-left, top-right, bottom-right, bottom-left. */
 export type ScreenQuad = [x: number, y: number][];
 
 export interface DexDeviceOptions {
   /** Called each frame the device moves, with where its screen is on the page. */
-  onScreen(quad: ScreenQuad, open: number): void;
+  onScreen(quad: ScreenQuad, open: number, settled: boolean): void;
   /** The body colour (the anime's red). */
   colour?: number;
+  /**
+   * The modelled device (a GLB from assets-src/dex). Once it's open the camera pushes in until
+   * its screen nearly fills the view. Without one, or if it won't load, the simple built one.
+   */
+  model?: string;
 }
 
 export interface DexDevice {
@@ -49,6 +56,7 @@ const STEP = { low: 3.55, high: 4.55, from: -1.1, to: 0.0 };
 
 const RAISE_S = 0.5;
 const OPEN_S = 0.42;
+const PUSH_S = 0.5;
 
 function roundedRect(x: number, y: number, w: number, h: number, r: number): THREE.Shape {
   const s = new THREE.Shape();
@@ -243,6 +251,26 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
   hingeBar.position.set(-W / 2 - 0.05, 0, 0.1);
   base.add(hingeBar);
 
+  // The modelled device in place of the built one, centred as it is open.
+  const model: DexModel | null = options.model
+    ? await loadDexModel(options.model).catch((e: unknown) => {
+        console.warn("[pokeHD] Pokédex model failed; using the simple one", e);
+        return null;
+      })
+    : null;
+  const shutCentre = new THREE.Vector3();
+  if (model) {
+    base.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.geometry.dispose();
+    });
+    base.clear();
+    base.add(model.root);
+    model.root.position.copy(model.opened.getCenter(new THREE.Vector3())).negate();
+    model.shut.getCenter(shutCentre).add(model.root.position);
+  }
+  const frameW = model ? model.opened.max.x - model.opened.min.x : W;
+  const frameH = model ? model.opened.max.y - model.opened.min.y : H;
+
   // Framing: the open device's body fills the view's height (or width, on a narrow screen).
   let width = 1;
   let height = 1;
@@ -252,49 +280,77 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    const fitH = (H * 1.06) / (2 * tan);
+    const fitH = (frameH * 1.06) / (2 * tan);
     // On a narrow (phone) screen the screen itself fills the width and the body's sides go past
-    // the edges, so the page is as big as it can be.
-    const fitW = (Math.min(W * 1.08, SCREEN.w * 1.04 + (camera.aspect - 0.45) * 8) / (2 * tan * camera.aspect));
-    camera.position.set(0, 0, Math.max(fitH, fitW) + 1);
-    camera.lookAt(0, 0, 0);
+    // the edges, so the page is as big as it can be. The model's camera pushes in to its screen
+    // anyway, so it starts with the whole device in view.
+    const fitW = model ? (frameW * 1.08) / (2 * tan * camera.aspect) : Math.min(W * 1.08, SCREEN.w * 1.04 + (camera.aspect - 0.45) * 8) / (2 * tan * camera.aspect);
+    far = Math.max(fitH, fitW) + 1;
     camera.updateProjectionMatrix();
   };
+  let far = 0;
   frame();
   const resize = new ResizeObserver(frame);
   resize.observe(canvas);
 
-  // 0–1 raises it, 1–2 opens the cover.
+  // 0–1 raises it, 1–2 opens the cover, 2–3 pushes in to the model's screen.
+  const end = model ? 3 : 2;
   let phase = 0;
   let target = 0;
   let last = performance.now();
   let raf = 0;
   let settle: (() => void) | null = null;
-  const corners = [
+  const corners = model ? model.screenCorners : [
     new THREE.Vector3(SCREEN.x - SCREEN.w / 2, SCREEN.y + SCREEN.h / 2, SCREEN_Z),
     new THREE.Vector3(SCREEN.x + SCREEN.w / 2, SCREEN.y + SCREEN.h / 2, SCREEN_Z),
     new THREE.Vector3(SCREEN.x + SCREEN.w / 2, SCREEN.y - SCREEN.h / 2, SCREEN_Z),
     new THREE.Vector3(SCREEN.x - SCREEN.w / 2, SCREEN.y - SCREEN.h / 2, SCREEN_Z),
   ];
   const v = new THREE.Vector3();
+  const look = new THREE.Vector3();
+  const screenAt = new THREE.Vector3();
+  const tan = () => Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
 
   const pose = (now: number) => {
     const raise = easeOut(clamp01(phase));
     const open = easeInOut(clamp01(phase - 1));
-    device.position.y = (1 - raise) * -H * 1.25;
+    device.position.y = (1 - raise) * -frameH * 1.25;
     device.rotation.x = (1 - raise) * -0.75;
     device.rotation.z = (1 - raise) * 0.18;
     // While opening, the device turns a little to show the cover swinging, then squares up.
     device.rotation.y = Math.sin(open * Math.PI) * 0.12;
     // Not quite flat: it falls back a little, so it reads as a cover rather than a second screen.
     hinge.rotation.y = -open * Math.PI * 0.84;
+    if (model) {
+      model.setOpen(open);
+      // Shut, the device is just its body: keep that centred until it opens.
+      device.position.x = -shutCentre.x * (1 - open);
+    }
     lights.forEach((m, i) => (m.emissiveIntensity = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(now / 260 - i * 1.2)) * open));
     device.updateMatrixWorld(true);
+    const space = model ? model.screenSpace : base;
+    // The camera: back far enough for the whole device, then (the model) in to its screen until
+    // it nearly fills the view: by height on a wide window, by width on a phone.
+    const push = model ? easeInOut(clamp01(phase - 2)) : 0;
+    camera.position.set(0, 0, far);
+    look.set(0, 0, 0);
+    if (push > 0) {
+      screenAt.set(0, 0, 0);
+      for (const c of corners) screenAt.add(v.copy(c).applyMatrix4(space.matrixWorld));
+      screenAt.multiplyScalar(1 / corners.length);
+      const sw = v.copy(corners[1]!).applyMatrix4(space.matrixWorld).distanceTo(look.copy(corners[0]!).applyMatrix4(space.matrixWorld));
+      const sh = v.copy(corners[3]!).applyMatrix4(space.matrixWorld).distanceTo(look.copy(corners[0]!).applyMatrix4(space.matrixWorld));
+      const near = Math.max((sh * 1.05) / (2 * tan()), (sw * 1.03) / (2 * tan() * camera.aspect));
+      look.set(0, 0, 0).lerp(screenAt, push);
+      camera.position.set(look.x, look.y, THREE.MathUtils.lerp(far, screenAt.z + near, push));
+    }
+    camera.lookAt(look);
+    camera.updateMatrixWorld();
     const quad: ScreenQuad = corners.map((c) => {
-      v.copy(c).applyMatrix4(base.matrixWorld).project(camera);
+      v.copy(c).applyMatrix4(space.matrixWorld).project(camera);
       return [((v.x + 1) / 2) * width, ((1 - v.y) / 2) * height];
     });
-    options.onScreen(quad, clamp01(phase - 1));
+    options.onScreen(quad, clamp01(phase - 1), phase === end);
   };
 
   const tick = () => {
@@ -302,7 +358,7 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     if (phase !== target) {
-      const rate = phase < 1 || (target < 1 && phase <= 1) ? 1 / RAISE_S : 1 / OPEN_S;
+      const rate = phase < 1 || (target < 1 && phase <= 1) ? 1 / RAISE_S : phase > 2 || (target > 2 && phase >= 2) ? 1 / PUSH_S : 1 / OPEN_S;
       phase = target > phase ? Math.min(target, phase + dt * rate) : Math.max(target, phase - dt * rate);
       if (phase === target) settle?.();
     }
@@ -329,8 +385,8 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
 
   return {
     open(instantly = false) {
-      if (instantly) phase = 2;
-      return go(2);
+      if (instantly) phase = end;
+      return go(end);
     },
     async close() {
       await go(0);
@@ -339,9 +395,9 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
       void renderer.render(new THREE.Scene(), camera);
     },
     get progress() {
-      return phase / 2;
+      return phase / end;
     },
-    screenAspect: SCREEN.w / SCREEN.h,
+    screenAspect: model ? model.screenCorners[0]!.distanceTo(model.screenCorners[1]!) / model.screenCorners[0]!.distanceTo(model.screenCorners[3]!) : SCREEN.w / SCREEN.h,
     async render() {
       pose(performance.now());
       await renderer.renderAsync(scene, camera);
@@ -352,6 +408,7 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
       scene.traverse((o) => {
         if (o instanceof THREE.Mesh) o.geometry.dispose();
       });
+      model?.dispose();
       pmrem.dispose();
       renderer.dispose();
     },
