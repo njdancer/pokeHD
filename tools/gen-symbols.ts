@@ -1,5 +1,5 @@
 // Generates packages/rom/src/generated/symbols.ts from the pret disassembly's pokeblue.sym, and
-// generated/names.ts (map and tileset constant names) from its constants/*.asm.
+// generated/names.ts (map, tileset and sprite constant names) from its constants/*.asm.
 // Only allowlisted symbols are emitted, so the generated file stays small and reviewable.
 // Usage: pnpm rom:symbols (builds the disassembly first), or `node tools/gen-symbols.ts --check`
 // to verify the committed file is current without writing it.
@@ -192,6 +192,26 @@ export const ALLOWLIST: readonly string[] = [
   "wNamingScreenType",
   "wRivalName",
   "wStringBuffer",
+  // The HD Pokédex (p2-dex): where the game opens and leaves its own, and the data it shows
+  "BaseStats",
+  "CompressedMap",
+  "ExternalMapEntries",
+  "InternalMapEntries",
+  "MewBaseStats",
+  "MewPicFront",
+  "PokedexEntryPointers",
+  "RhydonPicFront",
+  "ShowPokedexDataInternal",
+  "ShowPokedexDataInternal.waitForButtonPress",
+  "ShowPokedexMenu",
+  "ShowPokedexMenu.exitPokedex",
+  "TrainerNames",
+  "TrainerPicAndMoneyPointers",
+  "TypeNames",
+  "WildDataPointers",
+  "WorldMapTileGraphics",
+  "YoungsterPic",
+  "wTownVisitedFlag",
 ];
 
 export interface ParsedSymbol {
@@ -252,7 +272,7 @@ function constNames(text: string, macro: "const" | "map_const"): string[] {
 }
 
 /** Renders map and tileset names, indexed by ID. Unused map slots become `null`. */
-export function renderNames(mapConstants: string, tilesetConstants: string): string {
+export function renderNames(mapConstants: string, tilesetConstants: string, spriteConstants = ""): string {
   const maps = constNames(mapConstants, "map_const");
   const tilesets = constNames(tilesetConstants, "const");
   if (maps.length === 0 || tilesets.length === 0) throw new Error("No map or tileset constants found");
@@ -270,6 +290,11 @@ export function renderNames(mapConstants: string, tilesetConstants: string): str
     ...tilesets.map((n, i) => `  ${JSON.stringify(n)}, // ${i}`),
     "];",
     "",
+    "/** Overworld sprite constant names without SPRITE_ (\"OAK\"), indexed by sprite ID. */",
+    "export const SPRITE_NAMES: readonly string[] = [",
+    ...constNames(spriteConstants, "const").map((n, i) => `  ${JSON.stringify(n.replace(/^SPRITE_/, ""))}, // ${hex(i, 2)}`),
+    "];",
+    "",
   ].join("\n");
 }
 
@@ -279,7 +304,7 @@ const readVendor = (path: string) => readFileSync(new URL(`../vendor/pokered/${p
 export function renderAll(): Map<URL, string> {
   return new Map([
     [OUT_PATH, renderSymbols(readFileSync(SYM_PATH, "utf8"))],
-    [NAMES_PATH, renderNames(readVendor("constants/map_constants.asm"), readVendor("constants/tileset_constants.asm"))],
+    [NAMES_PATH, renderNames(readVendor("constants/map_constants.asm"), readVendor("constants/tileset_constants.asm"), readVendor("constants/sprite_constants.asm"))],
   ]);
 }
 

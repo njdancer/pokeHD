@@ -11,6 +11,8 @@ const UiLooks = lazy(() => import("./dev/UiLooks.tsx").then((m) => ({ default: m
 const Bench = lazy(() => import("./dev/Bench.tsx").then((m) => ({ default: m.Bench })));
 // The ROM explorer (/explore), with its ~850 KB label table, only loads when opened.
 const Explorer = lazy(() => import("./explore/Explorer.tsx").then((m) => ({ default: m.Explorer })));
+// The Pokédex's looks, side by side while Nick picks (p2-dex).
+const DexDev = lazy(() => import("./dev/DexDev.tsx").then((m) => ({ default: m.DexDev })));
 const StyleCompare = lazy(() => import("./dev/StyleCompare.tsx").then((m) => ({ default: m.StyleCompare })));
 // Dev-only tools, left out of production builds.
 const MapViewer = import.meta.env.DEV
@@ -35,6 +37,7 @@ export function Root() {
   if (path === "/dev/battle") return <Suspense><BattleDev /></Suspense>;
   if (path === "/dev/ui") return <Suspense><UiLooks /></Suspense>;
   if (path === "/dev/bench") return <Suspense><Bench /></Suspense>;
+  if (path === "/dev/dex") return <Suspense><DexDev /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;
   if (Shots && path === "/dev/shots") return <Suspense><Shots /></Suspense>;
   if (MapViewer && location.hash === "#maps") return <Suspense><MapViewer /></Suspense>;
