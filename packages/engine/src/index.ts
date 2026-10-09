@@ -178,14 +178,19 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const camera = new THREE.PerspectiveCamera(params.camera.fov, 1, 0.5, 1200);
   const sky = createSky(scene);
   const rig = createRig(scene, sky);
-  /** The town's shadows drawn only when they change (D35); `?shadowcache=0` draws them every frame. */
-  const shadowCache = query.get("shadowcache") === "0" ? null : installCachedShadow(rig.sun);
+  const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
+  /**
+   * The town's shadows drawn only when they change (D35); `?shadowcache=0` draws them every frame.
+   * WebGL2 only for now (`?shadowcache=1` forces it): on iPhone's WebGPU it left only the sprites
+   * drawn, on black, so it waits until it's been checked there.
+   */
+  const cacheShadows = query.get("shadowcache") === "1" || (query.get("shadowcache") !== "0" && !isWebGPU);
+  const shadowCache = cacheShadows ? installCachedShadow(rig.sun) : null;
   const staticShadows = createChangeWatch();
   let world: WorldContent = options.world ?? createPlaceholder();
   scene.add(world.root);
   const post = createPost(renderer, scene, camera);
   const compile = (object: THREE.Object3D) => post.compile(object);
-  const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
   const warmup = nonBlockingShaders(renderer, scene, canvas, !isWebGPU);
 
   const fogNear = uniform(30);

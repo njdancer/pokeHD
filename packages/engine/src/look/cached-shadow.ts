@@ -38,6 +38,8 @@ export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow
   let stale = true;
   /** WebGL can only copy into a depth texture it has already rendered to. */
   let primed = false;
+  /** Set if the cache ever throws; every shadow is then drawn every frame, as three.js does. */
+  let failed = false;
   const cache = new THREE.RenderTarget(1, 1);
   cache.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType);
 
@@ -60,28 +62,38 @@ export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow
         cache.setSize(width, height);
         stale = true;
       }
+      if (failed) return super.renderShadow(frame);
       const shadowObjects = renderer.getRenderObjectFunction() as RenderObject;
       const only = (moving: boolean) =>
         renderer.setRenderObjectFunction(((object: THREE.Object3D, ...rest: unknown[]) => {
           if (castsMovingShadow(object) === moving) (shadowObjects as (...a: unknown[]) => void)(object, ...rest);
         }) as RenderObject);
-      if (!primed) {
+      try {
+        if (!primed) {
+          renderer.setRenderTarget(shadowMap);
+          renderer.clear();
+          primed = true;
+        }
+        if (stale) {
+          only(false);
+          renderer.setRenderTarget(cache);
+          renderer.render(scene, shadow.camera);
+          stale = false;
+        }
+        renderer.copyTextureToTexture(cache.depthTexture!, shadowMap.depthTexture!);
+        only(true);
         renderer.setRenderTarget(shadowMap);
-        renderer.clear();
-        primed = true;
-      }
-      if (stale) {
-        only(false);
-        renderer.setRenderTarget(cache);
+        renderer.autoClear = false; // keep the copied static shadows (three restores this after)
         renderer.render(scene, shadow.camera);
-        stale = false;
+      } catch (e) {
+        // Draw every shadow every frame from now on, rather than lose the frame.
+        console.warn("[pokeHD] cached shadows failed; drawing them every frame", e);
+        failed = true;
+      } finally {
+        // Never leave the filter on: the main pass would draw only some objects.
+        renderer.setRenderObjectFunction(shadowObjects);
       }
-      renderer.copyTextureToTexture(cache.depthTexture!, shadowMap.depthTexture!);
-      only(true);
-      renderer.setRenderTarget(shadowMap);
-      renderer.autoClear = false; // keep the copied static shadows (three restores this after)
-      renderer.render(scene, shadow.camera);
-      renderer.setRenderObjectFunction(shadowObjects);
+      if (failed) super.renderShadow(frame);
     }
   }
 
