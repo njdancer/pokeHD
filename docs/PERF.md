@@ -124,7 +124,10 @@ The first version copied the depth texture (`copyTextureToTexture`). On Nick's i
 (PR #78). Writing the depths with a draw uses only what every frame already uses, and it runs
 on WebGPU in Chromium; it matches drawing every shadow every frame pixel for pixel on both
 backends. It stays off on WebGPU by default (`?shadowcache=1` turns it on) until it's been
-checked in Safari, since Chromium's WebGPU didn't show the first break.
+checked in Safari, since Chromium's WebGPU didn't show the first break. That draw version still
+blanked the world on the iPhone, with no fallback (WebGPU reports errors as events, not
+throws). Both versions had made the shadow maps 32-bit float depth; they now keep three.js's
+own format, and any uncaught WebGPU error while the cache is on turns it off.
 If the cache ever throws, it falls back to three.js's own every-frame shadows, and the game's
 HUD says "uncached shadows".
 

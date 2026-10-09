@@ -26,7 +26,6 @@ interface ShadowNodeInternals {
   shadowMap: THREE.RenderTarget;
   light: THREE.Light;
   renderShadow(frame: { renderer: THREE.WebGPURenderer; scene: THREE.Scene }): void;
-  setupRenderTarget(shadow: THREE.LightShadow, builder: unknown): { shadowMap: THREE.RenderTarget; depthTexture: THREE.DepthTexture };
 }
 type RenderObject = Parameters<THREE.WebGPURenderer["setRenderObjectFunction"]>[0] & {};
 
@@ -44,7 +43,9 @@ export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow
   /** Set if the cache ever throws; every shadow is then drawn every frame, as three.js does. */
   let failed = false;
   const cache = new THREE.RenderTarget(1, 1);
-  cache.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType);
+  // The same depth format as three.js gives the live map (depth24plus on WebGPU). Both of the
+  // first two versions made the maps 32-bit float, and both blanked the world on iPhone.
+  cache.depthTexture = new THREE.DepthTexture(1, 1);
   // Writes the cached depths into whatever target is bound, ignoring what's there.
   const restore = new THREE.NodeMaterial();
   restore.depthNode = texture(cache.depthTexture, screenUV).r;
@@ -54,13 +55,6 @@ export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow
 
   const Base = THREE.ShadowNode as unknown as new (light: THREE.Light, shadow: THREE.LightShadow) => ShadowNodeInternals;
   class CachedShadowNode extends Base {
-    override setupRenderTarget(shadow: THREE.LightShadow, builder: unknown) {
-      const out = super.setupRenderTarget(shadow, builder);
-      // depth32float, like the cache, so the cached depths come back exactly.
-      out.depthTexture.type = THREE.FloatType;
-      return out;
-    }
-
     override renderShadow(frame: { renderer: THREE.WebGPURenderer; scene: THREE.Scene }) {
       const { shadow, shadowMap, light } = this;
       const { renderer, scene } = frame;
@@ -72,6 +66,7 @@ export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow
         stale = true;
       }
       if (failed) return super.renderShadow(frame);
+      watchGpuErrors(renderer);
       const shadowObjects = renderer.getRenderObjectFunction() as RenderObject;
       const only = (moving: boolean) =>
         renderer.setRenderObjectFunction(((object: THREE.Object3D, ...rest: unknown[]) => {
@@ -98,6 +93,19 @@ export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow
       }
       if (failed) super.renderShadow(frame);
     }
+  }
+
+  /**
+   * WebGPU reports most failures later, as events, rather than throwing, so a cache that draws
+   * nothing would never notice. Any uncaught GPU error while the cache is on turns it off: at
+   * worst that loses the speed-up, never the frame.
+   */
+  let watching = false;
+  function watchGpuErrors(renderer: THREE.WebGPURenderer) {
+    if (watching) return;
+    watching = true;
+    const device = (renderer.backend as { device?: EventTarget }).device;
+    device?.addEventListener("uncapturederror", (e) => fail((e as Event & { error?: { message?: string } }).error?.message));
   }
 
   function fail(why: unknown) {
