@@ -45,3 +45,10 @@
   box-shadow: inset 0 0 0 calc(var(--tile) * .1) var(--hd-edge), inset 0 0 0 calc(var(--tile) * .24) #fff, inset 0 0 0 calc(var(--tile) * .42) var(--hd-edge), 0 calc(var(--tile) * .4) calc(var(--tile) * 1.4) #10142a80;
 }
 .start-screen[data-look="candy"] .hd-corner { display: none; }
+
+/* Short screens (a phone on its side): smaller, and never past the bottom. */
+.start-screen { overflow: auto; }
+@media (max-height: 520px) {
+  .start-screen { align-items: center; padding-block: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-bottom)); }
+  .start-panel { --tile: clamp(13px, 3.8vh, 18px); }
+}

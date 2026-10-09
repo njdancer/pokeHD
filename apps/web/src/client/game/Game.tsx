@@ -811,26 +811,48 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         data-testid="gb-screen"
         data-layout={noHd ? "full" : layout}
       />
-      {onboarding?.phase === "intro" && !noHd && !nameAsk && <IntroStage ref={introCanvas} />}
-      {hdText && !noHd && hdTextOn && <TextOverlay text={hdText} actions={textActions} look={look} />}
-      <div className="game-hud">
-        <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
-        <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
-        <button type="button" onClick={() => setSettings((v) => !v)} aria-expanded={settings}>Settings</button>
-        {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
-        {cloudNewer && <button type="button" onClick={() => setSettings(true)}>Newer save in the cloud</button>}
-        {room && <RoomBadge status={room.status} friends={room.friends.length} />}
-        {gifts && room?.status === "open" && (
-          <button type="button" onClick={() => setGiftOpen((v) => !v)} aria-expanded={giftOpen}>Gift</button>
-        )}
-        {message && <span role="status">{message}</span>}
-      </div>
+      {onboarding?.phase === "intro" && !noHd && <IntroStage ref={introCanvas} />}
+      {hdText && !noHd && hdTextOn && !nameAsk && <TextOverlay text={hdText} actions={textActions} look={look} />}
+      {/* Everything that isn't the game sits behind one button (the menu), in the HD panels' look. */}
+      <button
+        type="button"
+        className="game-menu-button"
+        onClick={() => setSettings((v) => !v)}
+        aria-expanded={settings}
+        aria-label="Menu"
+        data-look={look}
+        data-alert={cloudNewer || resumed || undefined}
+      >
+        <i className="hd-ball" aria-hidden />
+      </button>
+      {message && <div className="game-toast" role="status">{message}</div>}
+      {settings && <div className="game-menu-scrim" onClick={() => setSettings(false)} />}
       {settings && (
-        <div className="game-settings">
+        <div className="game-menu" data-look={look} role="dialog" aria-label="Menu">
+          <i className="hd-corner tl" />
+          <i className="hd-corner tr" />
+          <i className="hd-corner bl" />
+          <i className="hd-corner br" />
+          <button type="button" className="game-menu-close" aria-label="Close" onClick={() => setSettings(false)}>×</button>
+          <div className="game-settings">
           <section>
             <h2>{header.title}</h2>
             {autosave ? <p>Saves itself every 5 minutes and after battles.</p> : <p>Autosave is off.</p>}
           </section>
+          {(resumed || cloudNewer) && (
+            <div className="game-menu-notes">
+              {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
+              {cloudNewer && <p>There's a newer save in the cloud. Grown-ups can load it below.</p>}
+            </div>
+          )}
+          <div className="game-menu-tiles">
+            <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Turn sound on"}</button>
+            <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Game Boy screen</button>
+            {room && <RoomBadge status={room.status} friends={room.friends.length} />}
+            {gifts && room?.status === "open" && (
+              <button type="button" onClick={() => { setGiftOpen((v) => !v); setSettings(false); }} aria-expanded={giftOpen}>Gift</button>
+            )}
+          </div>
           <div className="row">
             <label>
               <input type="checkbox" checked={hdTextOn} onChange={(e) => toggleHdText(e.target.checked)} />
@@ -867,6 +889,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             </div>
             {admin && <Friends />}
           </GrownUps>
+          </div>
         </div>
       )}
       {showStats && stats && (

@@ -182,6 +182,9 @@ export const ALLOWLIST: readonly string[] = [
   "wPlayTimeMinutes",
   // Tap-first UI: the intro's name questions and the naming screen, answered from the page
   "ChoosePlayerName",
+  "IntroducePlayerText",
+  "PrintText",
+  "hLoadedROMBank",
   "ChooseRivalName",
   "DefaultNamesPlayerList",
   "DefaultNamesRivalList",
