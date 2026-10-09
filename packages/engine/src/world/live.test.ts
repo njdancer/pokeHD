@@ -212,6 +212,29 @@ describe("createLiveWorld holding the view while it loads", () => {
     live.dispose();
   });
 
+  it("gives up holding after a few seconds if a map never arrives", async () => {
+    const { live, flush, tick } = setup();
+    live.push(walk()[0]!, 0);
+    tick(0);
+    await flush(); // map A; map B, next door, never arrives
+    tick(1);
+    expect(live.ready).toBe(false);
+    tick(2); // past the neighbours' wait: map A alone will do
+    expect(live.ready).toBe(true);
+    live.dispose();
+  });
+
+  it("shows the world anyway if even the player's map never arrives", () => {
+    const { live, tick } = setup();
+    live.push(walk()[0]!, 0);
+    tick(0);
+    tick(3);
+    expect(live.ready).toBe(false);
+    tick(4.1);
+    expect(live.ready).toBe(true);
+    live.dispose();
+  });
+
   it("never holds the view across a connection", async () => {
     const { live, flush, tick } = setup();
     const frames = walk();

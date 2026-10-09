@@ -128,7 +128,7 @@ type Onboarding = { phase: "choose" } | { phase: "starting"; choice: StartChoice
 /** How often a resume point is taken while playing (also whenever the page is hidden). */
 const RESUME_POINT_MS = 60_000;
 /** The loading screen gives up waiting for the HD world after this long, rather than stay up for good. */
-const LOADING_GIVE_UP_MS = 25_000;
+const LOADING_GIVE_UP_MS = 12_000;
 /** How long start-up waits for the cloud (a save for an empty device, a resume point). */
 const CLOUD_WAIT_MS = 4000;
 
