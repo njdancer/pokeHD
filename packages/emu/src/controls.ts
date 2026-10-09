@@ -160,7 +160,7 @@ export class Controls {
     this.#script?.dispose();
     this.#script = null;
     const script = this.#options.script;
-    if (rom && script) this.#script = new ScriptText(this.#gb, { rom, onMessage: script.message, onEnd: script.end, tap: (mask) => this.tap(mask) });
+    if (rom && script) this.#script = new ScriptText(this.#gb, { rom, onMessage: script.message, onEnd: script.end });
     this.#apply();
   }
 

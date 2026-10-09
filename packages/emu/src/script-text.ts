@@ -1,17 +1,20 @@
 // Whole messages from the script (tap-first UI). When the game starts printing a message, the
 // page is handed the whole of it, read from the ROM's text script with the names and numbers the
-// game is about to fill in, and shows it in its own box. The Game Boy prints the message's first
-// page and waits at its ▼ as usual; the player's buttons are held back meanwhile and reach the page
-// instead. Once the page has shown the last of it, the game runs through the rest at its own
-// "no text delay" speed, with A pressed for the player at each wait it was always going to stop
-// at, so every step of the message (and any code in it) still runs the game's own way.
+// game is about to fill in, and shows it in its own box. The game's own text engine still prints
+// every bit of the message, runs its sounds, boxes and code, at its own "no text delay" speed.
+// Only its waits for a button are ours: at each one (`ManualTextScroll`, the ▼ between pages, or
+// `WaitForTextScrollButtonPress` called directly, as after a message from a person) the CPU waits
+// a frame at a time (DelayFrame, returning to the wait) until the page has read that far, then
+// returns from the wait as if A had been pressed, without the press or its click. So the Game Boy
+// shows the message's first page while the page shows all of it, and music and sprites carry on.
+// The player's buttons are held back meanwhile and reach the page instead.
 //
-// - `readOn`: the page shows the message's last box. Press the waits inside the message.
-// - `close`: the player taps past it. Press the last wait too (its final ▼, or the "press a button"
-//   that closes a message box), and the message is over.
+// - `readOn`: the page shows the message's last box. Let the waits inside the message pass.
+// - `close`: the player taps past it. Let the last wait pass too (its final ▼, or the "press a
+//   button" that closes a message box), and the message is over.
 // A menu taking input, the message box closing or a new message also end it.
 import { decodeText, hasText, readMessage, romOffset, SYMBOLS, waitsOf, type Message, type MessageFill } from "@pokehd/rom";
-import { Button, type GameBoy } from "./core.ts";
+import type { GameBoy } from "./core.ts";
 
 export interface ScriptMessage {
   id: number;
@@ -24,12 +27,12 @@ export interface ScriptTextOptions {
   onMessage(message: ScriptMessage): void;
   /** The message is over for the game (a menu, the box closed, the next message). */
   onEnd(id: number): void;
-  /** Presses a button once for the player (Controls.tap). */
-  tap(mask: number): void;
 }
 
 /** wStatusFlags5 bit: the game's own switch for printing text without letter delays. */
 const NO_TEXT_DELAY = 1 << 6;
+/** wLinkState in a link battle: ManualTextScroll waits on a timer there, not on buttons. */
+const LINK_STATE_BATTLING = 4;
 /** Frames a closing message may take before it's given up on (a wait we didn't expect). */
 const CLOSE_TIMEOUT = 600;
 const NAME_LENGTH = 11;
@@ -47,11 +50,9 @@ export class ScriptText {
     phase: Phase;
     /** Waits inside the message (not its last). */
     inner: number;
-    /** All the waits to press once closing (the last one included). */
+    /** All the waits to let pass once closing (the last one included). */
     total: number;
-    pressed: number;
-    /** The game is at a wait we haven't pressed yet. */
-    waiting: boolean;
+    passed: number;
     closingFrames: number;
   } | null = null;
   /** wStatusFlags5's no-delay bit before we set it, if we did. */
@@ -64,7 +65,10 @@ export class ScriptText {
     this.#enemy = decodeText(options.rom.subarray(at, at + 16));
     this.#removeHooks = [
       gb.addHook("PrintText_NoCreatingTextBox", (g) => this.#start(g)),
-      gb.addHook("WaitForTextScrollButtonPress", () => this.#wait()),
+      gb.addHook("ManualTextScroll", (g) => {
+        if (g.read(SYMBOLS.wLinkState.address) !== LINK_STATE_BATTLING) this.#wait(g, SYMBOLS.ManualTextScroll.address);
+      }),
+      gb.addHook("WaitForTextScrollButtonPress", (g) => this.#wait(g, SYMBOLS.WaitForTextScrollButtonPress.address)),
       gb.addHook("HandleMenuInput", () => this.#end()),
       gb.addHook("CloseTextDisplay", () => this.#end()),
     ];
@@ -80,24 +84,21 @@ export class ScriptText {
     return this.#current !== null;
   }
 
-  /** The page shows the message's last box: run the game through the waits inside it. */
+  /** The page shows the message's last box: let the waits inside it pass. */
   readOn(id: number): void {
     const m = this.#current;
-    if (!m || m.id !== id || m.phase !== "held") return;
-    m.phase = "reading";
-    if (m.waiting) this.#wait(false);
+    if (m?.id === id && m.phase === "held") m.phase = "reading";
   }
 
-  /** The player has read the message: run the game through the rest of it. */
+  /** The player has read the message: let the rest of it pass. */
   close(id: number): void {
     const m = this.#current;
     if (!m || m.id !== id || m.phase === "closing") return;
     m.phase = "closing";
-    if (m.waiting) this.#wait(false);
-    if (m.pressed >= m.total) this.#end();
+    if (m.passed >= m.total) this.#end();
   }
 
-  /** The page can't show the message after all: the game's own text takes over, untouched. */
+  /** The page can't show the message after all: the game's own waits take over. */
   release(id: number): void {
     if (this.#current?.id === id) this.#end();
   }
@@ -114,7 +115,7 @@ export class ScriptText {
   }
 
   #start(g: GameBoy): void {
-    const hl = g.registers.hl;
+    const { hl } = g.registers;
     const bank = hl < 0x4000 ? 0 : g.read(SYMBOLS.hLoadedROMBank.address);
     const message = readMessage(this.#options.rom, bank, hl, this.#fill(g));
     if (!hasText(message)) return;
@@ -124,22 +125,31 @@ export class ScriptText {
     // A `done` message ends with no ▼ of its own; a message box from a person then waits for a
     // button before it closes. Code taking over decides for itself.
     const total = message.ending === "done" ? waits + 1 : waits;
-    this.#current = { id: ++this.#ids, phase: "held", inner, total, pressed: 0, waiting: false, closingFrames: 0 };
+    this.#current = { id: ++this.#ids, phase: "held", inner, total, passed: 0, closingFrames: 0 };
     this.#noDelay(true);
     this.#options.onMessage({ id: this.#ids, message });
   }
 
-  /** The game waits for A or B: press it when the page has read that far. */
-  #wait(entered = true): void {
+  /** The game waits for A or B (at `routine`'s start): ours while a message is on the page. */
+  #wait(g: GameBoy, routine: number): void {
     const m = this.#current;
     if (!m) return;
-    if (entered) m.waiting = true;
-    const press = m.phase === "closing" ? m.pressed < m.total : m.phase === "reading" && m.pressed < m.inner;
-    if (!press) return;
-    m.waiting = false;
-    m.pressed++;
-    this.#options.tap(Button.A);
-    if (m.phase === "closing" && m.pressed >= m.total) this.#end();
+    const pass = m.phase === "closing" ? m.passed < m.total : m.phase === "reading" && m.passed < m.inner;
+    if (pass) {
+      // Return from the wait, as if the button had been pressed.
+      m.passed++;
+      const sp = g.registers.sp;
+      g.setRegisters({ pc: g.read(sp) | (g.read(sp + 1) << 8), sp: (sp + 2) & 0xffff });
+      if (m.phase === "closing" && m.passed >= m.total) this.#end();
+      return;
+    }
+    // A wait past the ones we expected: the game's own, for the player's buttons.
+    if (m.phase === "closing") return;
+    // Not read that far yet: wait a frame, then come back to the wait (DelayFrame returns to it).
+    const sp = (g.registers.sp - 2) & 0xffff;
+    g.write(sp, routine & 0xff);
+    g.write(sp + 1, routine >> 8);
+    g.setRegisters({ sp, pc: SYMBOLS.DelayFrame.address });
   }
 
   #end(): void {

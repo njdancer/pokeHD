@@ -563,9 +563,19 @@ boxes. The game prints its first page and waits as usual while the player's A an
 When the player reaches the last box, the game runs through the waits inside the message; when
 they tap past it, it runs through the last one. It does this with its own "no text delay" flag set
 and A pressed at each `WaitForTextScrollButtonPress`, so every step (and any code) runs the game's
-own way. A menu taking input, the box closing or the next message ends it. If the HD text can't
+own way (but see below: no presses any more). A menu taking input, the box closing or the next message ends it. If the HD text can't
 show a message, it goes back to the game untouched.
 
 **Why not static analysis of the scripts:** the branches depend on live state (flags, the bag,
 answers) and their effects must happen the game's way, so the game has to decide anyway. The
 moment it calls PrintText it has decided, and that is when we read the message.
+
+**Our code takes the place of the button waits only (2026-10-09, Nick: "replace it like an FFI",
+"as thin a wrapper as possible, call back into the game's own code"):** the game's text engine
+prints every message itself, with its sounds, boxes and code. Only the waits for A or B
+(`ManualTextScroll`, and `WaitForTextScrollButtonPress` when called directly) are ours while a
+message is on the page. Until the page has read that far, the CPU waits a frame at a time in
+`DelayFrame`, which returns to the wait. After that, the wait returns at once, with no button
+press and no click. A first try that replaced the whole printing routine for plain messages
+worked, but it left out 46 messages (sounds inside the text) and duplicated the printer's job, so
+we didn't keep it.
