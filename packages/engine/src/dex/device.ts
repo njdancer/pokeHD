@@ -59,6 +59,8 @@ const STEP = { low: 3.55, high: 4.55, from: -1.1, to: 0.0 };
 const RAISE_S = 0.5;
 const OPEN_S = 0.42;
 const PUSH_S = 0.5;
+/** How far open (0–1 of its CoverOpen action) the model's cover is while it's raised. */
+const AJAR = 0.3;
 
 function roundedRect(x: number, y: number, w: number, h: number, r: number): THREE.Shape {
   const s = new THREE.Shape();
@@ -325,7 +327,8 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
     // Not quite flat: it falls back a little, so it reads as a cover rather than a second screen.
     hinge.rotation.y = -open * Math.PI * 0.84;
     if (model) {
-      model.setOpen(open);
+      // Never quite shut: it comes up with the cover already ajar, the thumb in the gap.
+      model.setOpen(AJAR + (1 - AJAR) * open);
       // Shut, the device is just its body: keep that centred until it opens.
       device.position.x = -shutCentre.x * (1 - open);
     }
