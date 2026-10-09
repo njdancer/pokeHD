@@ -148,19 +148,19 @@ def reset_pose(rig):
 
 THUMB1_STIFFNESS = 0.75
 THUMB_BONES = ("Thumb0", "Thumb1", "Thumb2", "Thumb3")
-TIP_Z = 0.045
+TIP_Z = 0.017
 # (frame, ("cover", (x, y)) in the cover's frame | ("world", (x, y, z)))
 THUMB_PATH = [
-    (1, ("cover", (0.088, 0.0215))),  # resting on the closed cover's face
-    (2, ("cover", (0.1000, 0.0185))),  # slides to the free edge
-    (3, ("cover", (0.1050, 0.0070))),  # round the edge
-    (4, ("cover", (0.1050, -0.0035))),  # catches the inner lip
-    (5, ("cover", (0.1040, -0.0060))),  # pushes it outward
-    (6, ("world", (-0.1140, -0.0300, TIP_Z))),  # flicks past the edge; the cover swings on
-    (8, ("world", (-0.1120, -0.0300, 0.044))),
-    (12, ("world", (-0.1000, -0.0220, 0.042))),
-    (16, ("world", (-0.0860, -0.0120, 0.042))),  # settles on the body below the screen
-    (24, ("world", (-0.0860, -0.0120, 0.042))),
+    (1, ("cover", (0.088, 0.0245))),  # resting on the closed cover's bottom-left corner
+    (2, ("cover", (0.1010, 0.0215))),  # slides to the free edge
+    (3, ("cover", (0.1075, 0.0085))),  # round the edge
+    (4, ("cover", (0.1075, -0.0040))),  # catches the inner lip
+    (5, ("cover", (0.1065, -0.0070))),  # pushes it outward
+    (6, ("world", (-0.1180, -0.0340, TIP_Z))),  # flicks past the edge; the cover swings on
+    (8, ("world", (-0.1160, -0.0330, 0.016))),
+    (12, ("world", (-0.1010, -0.0250, 0.015))),
+    (16, ("world", (-0.0850, -0.0145, 0.015))),  # settles below the round button
+    (24, ("world", (-0.0850, -0.0145, 0.015))),
 ]
 
 
