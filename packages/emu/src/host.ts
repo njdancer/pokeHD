@@ -3,6 +3,7 @@ import { createAudioOutput } from "./audio.ts";
 import type { Gift, LinkMessage } from "@pokehd/protocol";
 import type { GiftEvent } from "./gifts/desk.ts";
 import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
+import type { DexOpened } from "./dex-guard.ts";
 import type { LinkPortOptions } from "./link.ts";
 import type { FrameMessage, FromWorker, ToWorker, Watch } from "./protocol.ts";
 
@@ -35,6 +36,15 @@ export interface EmulatorHostOptions {
   onErasePrompt?: () => void;
   /** The erase question was answered (by `answerErase()`). */
   onEraseAnswered?: (erase: boolean) => void;
+  /**
+   * The game opened its Pokédex (p2-dex). Passing this turns the guard on: the player's buttons
+   * are held back until `closeDex()` is called, and the game then leaves its own.
+   */
+  onDexOpen?: (opened: DexOpened) => void;
+  /** The game has left its Pokédex. */
+  onDexClosed?: () => void;
+  /** Someone on the map is speaking (with `onDexOpen`): the map and their index in its objects. */
+  onTalk?: (map: number, npc: number) => void;
   /** Called for every emulated frame, in the order they were produced. */
   onFrame?: (frame: FrameMessage) => void;
   /** Called (at most about once a second) when the game has written its save. */
@@ -124,6 +134,15 @@ export class EmulatorHost {
           this.#takes.get(data.id)?.({ result: data.result, sram: data.sram });
           this.#takes.delete(data.id);
           break;
+        case "dex-open":
+          options.onDexOpen?.(data.opened);
+          break;
+        case "dex-closed":
+          options.onDexClosed?.();
+          break;
+        case "talk":
+          options.onTalk?.(data.map, data.npc);
+          break;
         case "error":
           options.onError?.(data.message);
           break;
@@ -132,7 +151,8 @@ export class EmulatorHost {
     const { rom, sram, resume } = options;
     // The page answers the erase question only if it's listening for it.
     const guardErase = !!options.onErasePrompt;
-    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase });
+    const guardDex = !!options.onDexOpen;
+    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase, guardDex });
     if (options.autosave === false) this.setAutosave(false);
   }
 
@@ -143,6 +163,16 @@ export class EmulatorHost {
   /** Answers the erase question (see `onErasePrompt`): true erases the old save, false keeps it. */
   answerErase(erase: boolean): void {
     this.#post({ type: "erase-answer", erase });
+  }
+
+  /** The page's Pokédex has closed (see `onDexOpen`): the game leaves its own. */
+  closeDex(): void {
+    this.#post({ type: "dex-close" });
+  }
+
+  /** Lets the game's own Pokédex run this time (see `onDexOpen`). */
+  passDex(): void {
+    this.#post({ type: "dex-pass" });
   }
 
   /**

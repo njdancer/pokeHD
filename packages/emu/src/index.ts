@@ -2,6 +2,7 @@ export * from "./core.ts";
 export * from "./debugger.ts";
 export * from "./host.ts";
 export * from "./autosave.ts";
+export * from "./dex-guard.ts";
 export * from "./erase-guard.ts";
 export * from "./link.ts";
 export type { FrameMessage, Watch } from "./protocol.ts";

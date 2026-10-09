@@ -6,6 +6,7 @@
 // yet, or muted), a wall-clock timer runs frames at FRAME_RATE instead.
 import { AutoSave, loadResumePoint } from "./autosave.ts";
 import { FRAME_RATE, GameBoy } from "./core.ts";
+import { DexGuard } from "./dex-guard.ts";
 import { EraseGuard } from "./erase-guard.ts";
 import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
@@ -33,12 +34,14 @@ let link: LinkPort | undefined;
 let desk: GiftDesk | undefined;
 let autosave: AutoSave | undefined;
 let guard: EraseGuard | undefined;
+let dex: DexGuard | undefined;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
 
 function runOneFrame() {
   if (!gb) return;
   guard?.frame();
+  dex?.frame();
   gb.runFrame();
   frames++;
   autosave?.frame();
@@ -123,6 +126,14 @@ async function handle(data: ToWorker) {
           onPrompt: () => post({ type: "erase-prompt" }),
           onAnswered: (erase) => post({ type: "erase-answered", erase }),
         }) : undefined;
+        const g = gb;
+        const erase = guard;
+        dex = data.guardDex ? new DexGuard(g, {
+          rom: data.rom,
+          onOpen: (opened) => post({ type: "dex-open", opened }),
+          onClosed: () => post({ type: "dex-closed" }),
+          onTalk: (map, npc) => post({ type: "talk", map, npc }),
+        }, (mask) => (erase ? erase.setButtons(mask) : g.setButtons(mask))) : undefined;
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();
         // Before the first frame, so the page knows how the game started before it sees one.
@@ -147,8 +158,15 @@ async function handle(data: ToWorker) {
         break;
       }
       case "buttons":
-        if (guard) guard.setButtons(data.mask);
+        if (dex) dex.setButtons(data.mask);
+        else if (guard) guard.setButtons(data.mask);
         else gb?.setButtons(data.mask);
+        break;
+      case "dex-close":
+        dex?.close();
+        break;
+      case "dex-pass":
+        dex?.pass();
         break;
       case "erase-answer":
         guard?.answer(data.erase);
@@ -170,7 +188,7 @@ async function handle(data: ToWorker) {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.
         // Signed-in players always have a port open (RoomLink keeps one ready), so it's the
         // session that counts, not the port.
-        const g = gb && !link?.inSession && !guard?.asking && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        const g = gb && !link?.inSession && !guard?.asking && !dex?.open && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
         // Hand over any newer save first, so the stored save matches the one in the state.
         if (g?.sramDirty) flushSram();
         post({ type: "resume-point", id: data.id, state: g ? g.saveState() : null });
