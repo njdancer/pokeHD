@@ -1,10 +1,11 @@
 // The modelled Pokédex (p2-dex): the device built in Blender after the anime's (assets-src/dex/
 // pokedex.blend, exported as a GLB). Its parts by name: "Cover" swings on the hinge (its
 // "CoverOpen" action runs shut to open), and "Screen" is the quad the page is laid over, its
-// UVs 0–1 with (0, 0) at the top left. With a hand (pokedex-hand.glb, from the same file), it's
-// held in the hand's "Grip" bone and the hand's "ThumbOpen" flicks the cover open in time.
+// UVs 0–1 with (0, 0) at the top left. It can be held in Ash's hand (hand.ts), a pixel-art sprite
+// whose thumb rests on the body's face and whose fingers curl under it.
 import * as THREE from "three/webgpu";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { drawDexHand } from "./hand.ts";
 
 export interface DexModel {
   /** The device (and the hand holding it), in centimetres. */
@@ -24,46 +25,12 @@ export interface DexModel {
   dispose(): void;
 }
 
-export async function loadDexModel(url: string, handUrl?: string): Promise<DexModel> {
-  const loader = new GLTFLoader();
-  const [gltf, hand] = await Promise.all([
-    loader.loadAsync(url),
-    handUrl
-      ? loader.loadAsync(handUrl).catch((e: unknown) => {
-          console.warn("[pokeHD] Pokédex hand failed; the device alone", e);
-          return null;
-        })
-      : null,
-  ]);
+export async function loadDexModel(url: string, options: { hand?: boolean } = {}): Promise<DexModel> {
+  const gltf = await new GLTFLoader().loadAsync(url);
   const root = new THREE.Group();
   // Blender's metres to the device's centimetres.
-  const metres = new THREE.Group();
-  metres.scale.setScalar(100);
-  root.add(metres);
-  // The device rides in the hand: its rest pose is where the hand's grip rests, and it moves as
-  // the grip does.
-  const holder = new THREE.Group();
-  holder.matrixAutoUpdate = false;
-  holder.add(gltf.scene);
-  metres.add(holder);
-  const noFollow = () => {};
-  let follow = noFollow;
-  let handOpen = (_open: number) => {};
-  const grip = hand?.scene.getObjectByName("Grip");
-  const thumb = hand && THREE.AnimationClip.findByName(hand.animations, "ThumbOpen");
-  if (hand && grip && thumb) {
-    metres.add(hand.scene);
-    // The grip in the hand's own space, which is the holder's parent space too.
-    const gripMatrix = (m: THREE.Matrix4) => {
-      hand.scene.updateMatrixWorld(true);
-      return m.copy(hand.scene.matrixWorld).invert().multiply(grip.matrixWorld);
-    };
-    const rest = gripMatrix(new THREE.Matrix4()).invert();
-    const handMixer = new THREE.AnimationMixer(hand.scene);
-    handMixer.clipAction(thumb).play();
-    handOpen = (open) => handMixer.setTime(Math.min(open, 0.9999) * thumb.duration);
-    follow = () => void gripMatrix(holder.matrix).multiply(rest);
-  } else if (hand) console.warn("[pokeHD] Pokédex hand has no Grip or ThumbOpen; the device alone");
+  gltf.scene.scale.setScalar(100);
+  root.add(gltf.scene);
   const cover = gltf.scene.getObjectByName("Cover");
   const screen = gltf.scene.getObjectByName("Screen");
   if (!cover || !(screen instanceof THREE.Mesh)) throw new Error("Pokédex model is missing its Cover or Screen");
@@ -74,8 +41,6 @@ export async function loadDexModel(url: string, handUrl?: string): Promise<DexMo
   const setOpen = (open: number) => {
     // Just short of the end, where a clip would wrap back to its start.
     mixer.setTime(Math.min(open, 0.9999) * clip.duration);
-    handOpen(open);
-    follow();
     root.updateMatrixWorld(true);
   };
 
@@ -105,10 +70,11 @@ export async function loadDexModel(url: string, handUrl?: string): Promise<DexMo
   const shut = box();
   setOpen(1);
   const opened = box();
+  if (options.hand) root.add(handSprite(shut, screen.localToWorld(screenCorners[0]!.clone()).applyMatrix4(new THREE.Matrix4().copy(root.matrixWorld).invert()).z));
 
   return {
     root,
-    held: follow !== noFollow,
+    held: !!options.hand,
     setOpen,
     screenCorners,
     screenSpace: screen,
@@ -125,4 +91,40 @@ export async function loadDexModel(url: string, handUrl?: string): Promise<DexMo
       });
     },
   };
+}
+
+/** The hand's width, in centimetres. */
+const HAND_W = 8.5;
+/** Where the thumb rests, across the body from its left. */
+const THUMB_AT = 0.3;
+
+/**
+ * The hand as two flat sprites: its fingers behind the body, its thumb on the face (`face` is
+ * the face's depth), under the cover while that's ajar.
+ */
+function handSprite(shut: THREE.Box3, face: number): THREE.Object3D {
+  const hand = drawDexHand();
+  const px = HAND_W / hand.width;
+  const group = new THREE.Group();
+  const layer = (data: Uint8ClampedArray, z: number) => {
+    const tex = new THREE.DataTexture(data, hand.width, hand.height, THREE.RGBAFormat);
+    // Rows run top down; textures bottom up.
+    tex.flipY = true;
+    tex.magFilter = tex.minFilter = THREE.NearestFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.needsUpdate = true;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(hand.width * px, hand.height * px),
+      new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5, toneMapped: false }),
+    );
+    mesh.position.set(
+      shut.min.x + THUMB_AT * (shut.max.x - shut.min.x) + (hand.width / 2 - hand.thumb) * px,
+      shut.min.y - (hand.height / 2 - hand.edge) * px,
+      z,
+    );
+    group.add(mesh);
+  };
+  layer(hand.back, shut.min.z - 0.4);
+  layer(hand.front, face + 0.25);
+  return group;
 }
