@@ -279,3 +279,80 @@ export const TILESET_NAMES: readonly string[] = [
   "FACILITY", // 22
   "PLATEAU", // 23
 ];
+
+/** Overworld sprite constant names without SPRITE_ ("OAK"), indexed by sprite ID. */
+export const SPRITE_NAMES: readonly string[] = [
+  "NONE", // 0x00
+  "RED", // 0x01
+  "BLUE", // 0x02
+  "OAK", // 0x03
+  "YOUNGSTER", // 0x04
+  "MONSTER", // 0x05
+  "COOLTRAINER_F", // 0x06
+  "COOLTRAINER_M", // 0x07
+  "LITTLE_GIRL", // 0x08
+  "BIRD", // 0x09
+  "MIDDLE_AGED_MAN", // 0x0a
+  "GAMBLER", // 0x0b
+  "SUPER_NERD", // 0x0c
+  "GIRL", // 0x0d
+  "HIKER", // 0x0e
+  "BEAUTY", // 0x0f
+  "GENTLEMAN", // 0x10
+  "DAISY", // 0x11
+  "BIKER", // 0x12
+  "SAILOR", // 0x13
+  "COOK", // 0x14
+  "BIKE_SHOP_CLERK", // 0x15
+  "MR_FUJI", // 0x16
+  "GIOVANNI", // 0x17
+  "ROCKET", // 0x18
+  "CHANNELER", // 0x19
+  "WAITER", // 0x1a
+  "SILPH_WORKER_F", // 0x1b
+  "MIDDLE_AGED_WOMAN", // 0x1c
+  "BRUNETTE_GIRL", // 0x1d
+  "LANCE", // 0x1e
+  "UNUSED_SCIENTIST", // 0x1f
+  "SCIENTIST", // 0x20
+  "ROCKER", // 0x21
+  "SWIMMER", // 0x22
+  "SAFARI_ZONE_WORKER", // 0x23
+  "GYM_GUIDE", // 0x24
+  "GRAMPS", // 0x25
+  "CLERK", // 0x26
+  "FISHING_GURU", // 0x27
+  "GRANNY", // 0x28
+  "NURSE", // 0x29
+  "LINK_RECEPTIONIST", // 0x2a
+  "SILPH_PRESIDENT", // 0x2b
+  "SILPH_WORKER_M", // 0x2c
+  "WARDEN", // 0x2d
+  "CAPTAIN", // 0x2e
+  "FISHER", // 0x2f
+  "KOGA", // 0x30
+  "GUARD", // 0x31
+  "UNUSED_GUARD", // 0x32
+  "MOM", // 0x33
+  "BALDING_GUY", // 0x34
+  "LITTLE_BOY", // 0x35
+  "UNUSED_GAMEBOY_KID", // 0x36
+  "GAMEBOY_KID", // 0x37
+  "FAIRY", // 0x38
+  "AGATHA", // 0x39
+  "BRUNO", // 0x3a
+  "LORELEI", // 0x3b
+  "SEEL", // 0x3c
+  "POKE_BALL", // 0x3d
+  "FOSSIL", // 0x3e
+  "BOULDER", // 0x3f
+  "PAPER", // 0x40
+  "POKEDEX", // 0x41
+  "CLIPBOARD", // 0x42
+  "SNORLAX", // 0x43
+  "UNUSED_OLD_AMBER", // 0x44
+  "OLD_AMBER", // 0x45
+  "UNUSED_GAMBLER_ASLEEP_1", // 0x46
+  "UNUSED_GAMBLER_ASLEEP_2", // 0x47
+  "GAMBLER_ASLEEP", // 0x48
+];
