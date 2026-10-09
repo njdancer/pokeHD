@@ -1,6 +1,6 @@
 """Turn a generated 'pixel art' image into a real sprite.
 
-usage: pixelize.py raw.png outdir [--colors N]
+usage: pixelize.py raw.png outdir [--colors N] [--pixel P]
 Writes outdir/sprite.png (true pixel grid, small palette, transparent bg),
 outdir/front.png + back.png (thumb in front of the device edge / the rest)
 and outdir/meta.json (pixel size, grid, edge row).
@@ -76,8 +76,12 @@ def main():
     colors = int(sys.argv[sys.argv.index("--colors") + 1]) if "--colors" in sys.argv else 12
     outdir.mkdir(parents=True, exist_ok=True)
     img = Image.open(src).convert("RGB")
-    p = period(img)
-    y0, x0 = phase(img, p)
+    if "--pixel" in sys.argv:  # model drew finer pixels than we want: force the grid
+        p = float(sys.argv[sys.argv.index("--pixel") + 1])
+        y0 = x0 = 0.0
+    else:
+        p = period(img)
+        y0, x0 = phase(img, p)
     a = np.asarray(img)
     H, W = a.shape[:2]
     ny, nx = int((H - y0) // p), int((W - x0) // p)

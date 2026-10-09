@@ -1,0 +1,10 @@
+{
+ "source": "lpx_s0.5_82_seed_82.png",
+ "model_pixel": 13.0,
+ "grid": [
+  57,
+  37
+ ],
+ "edge_row": 11,
+ "colors": 12
+}

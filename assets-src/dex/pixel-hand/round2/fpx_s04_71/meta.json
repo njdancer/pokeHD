@@ -1,0 +1,10 @@
+{
+ "source": "fpx_s0.4_71_seed_71.png",
+ "model_pixel": 13.0,
+ "grid": [
+  57,
+  50
+ ],
+ "edge_row": 19,
+ "colors": 12
+}
