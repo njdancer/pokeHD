@@ -7,6 +7,7 @@
 import { AutoSave, loadResumePoint } from "./autosave.ts";
 import { Controls } from "./controls.ts";
 import { FRAME_RATE, GameBoy } from "./core.ts";
+import { DexGuard } from "./dex-guard.ts";
 import { EraseGuard } from "./erase-guard.ts";
 import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
@@ -35,6 +36,7 @@ let desk: GiftDesk | undefined;
 let autosave: AutoSave | undefined;
 let guard: EraseGuard | undefined;
 let controls: Controls | undefined;
+let dex: DexGuard | undefined;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
 
@@ -42,6 +44,7 @@ function runOneFrame() {
   if (!gb) return;
   controls?.frame();
   guard?.frame();
+  dex?.frame();
   gb.runFrame();
   frames++;
   autosave?.frame();
@@ -127,8 +130,18 @@ async function handle(data: ToWorker) {
           onAnswered: (erase) => post({ type: "erase-answered", erase }),
         }) : undefined;
         const g = gb;
+        const erase = guard;
+        const toGame = (mask: number) => (erase ? erase.setButtons(mask) : g.setButtons(mask));
+        dex = data.guardDex ? new DexGuard(g, {
+          rom: data.rom,
+          onOpen: (opened) => post({ type: "dex-open", opened }),
+          onClosed: () => post({ type: "dex-closed" }),
+          onTalk: (map, npc) => post({ type: "talk", map, npc }),
+        }, toGame) : undefined;
+        // The page's taps and the player's buttons go through the Pokédex, then the erase guard.
+        const next = dex;
         controls = new Controls(gb, {
-          setButtons: (mask) => (guard ? guard.setButtons(mask) : g.setButtons(mask)),
+          setButtons: (mask) => (next ? next.setButtons(mask) : toGame(mask)),
           ...(data.askNames ? { names: { ask: (ask) => post({ type: "name-ask", ask }), done: () => post({ type: "name-done" }) } } : {}),
         });
         samplesPerFrame = data.sampleRate / FRAME_RATE;
@@ -166,6 +179,12 @@ async function handle(data: ToWorker) {
       case "name-answer":
         controls?.answerName(data.name);
         break;
+      case "dex-close":
+        dex?.close();
+        break;
+      case "dex-pass":
+        dex?.pass();
+        break;
       case "erase-answer":
         guard?.answer(data.erase);
         break;
@@ -186,7 +205,7 @@ async function handle(data: ToWorker) {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.
         // Signed-in players always have a port open (RoomLink keeps one ready), so it's the
         // session that counts, not the port.
-        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !dex?.open && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
         // Hand over any newer save first, so the stored save matches the one in the state.
         if (g?.sramDirty) flushSram();
         post({ type: "resume-point", id: data.id, state: g ? g.saveState() : null });

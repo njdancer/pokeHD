@@ -3,6 +3,7 @@ import type { Gift, LinkMessage } from "@pokehd/protocol";
 import type { GiftEvent } from "./gifts/desk.ts";
 import type { NameAsk } from "./controls.ts";
 import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
+import type { DexOpened } from "./dex-guard.ts";
 import type { LinkRole } from "./link.ts";
 
 /** A memory range read after every frame and sent with it: [address, length]. */
@@ -12,7 +13,8 @@ export type ToWorker =
   /** `resume` is a resume point to start from, used only if it holds exactly `sram` as its save. */
   /** `guardErase` turns on EraseGuard: the page answers the "older file will be erased" question. */
   /** `askNames` has the page answer name questions (Controls) instead of the game's own screens. */
-  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; askNames?: boolean }
+  /** `guardDex` turns on DexGuard: the page shows its own Pokédex over the game's. */
+  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean }
   /** Switches pacing to the audio clock; the port talks to the audio worklet. */
   | { type: "audio"; port: MessagePort }
   | { type: "buttons"; mask: number }
@@ -31,6 +33,10 @@ export type ToWorker =
   | { type: "autosave"; enabled: boolean }
   /** The page's answer to the "older file will be erased" question: true to erase. */
   | { type: "erase-answer"; erase: boolean }
+  /** The page's Pokédex has closed: leave the game's. */
+  | { type: "dex-close" }
+  /** The page isn't showing its Pokédex this time: the game's own runs. */
+  | { type: "dex-pass" }
   /** Attaches a LinkPort to the worker's GameBoy (replacing any previous one). */
   | { type: "link-open"; role: LinkRole; connectTimeoutFrames?: number }
   /** The friend's next link message. */
@@ -72,6 +78,12 @@ export type FromWorker =
   | { type: "name-ask"; ask: NameAsk }
   /** The page's name is in: the naming screen has submitted it. */
   | { type: "name-done" }
+  /** The game opened its Pokédex (DexGuard). */
+  | { type: "dex-open"; opened: DexOpened }
+  /** The game has left its Pokédex. */
+  | { type: "dex-closed" }
+  /** Someone on the map is speaking: the map and their index in its objects. */
+  | { type: "talk"; map: number; npc: number }
   /** An outbound link message for the friend. */
   | { type: "link-send"; message: LinkMessage }
   | { type: "read"; id: number; bytes: Uint8Array[] }

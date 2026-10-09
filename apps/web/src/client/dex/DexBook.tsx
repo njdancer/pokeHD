@@ -237,7 +237,7 @@ function PeopleList({ open }: { open(key: string): void }) {
           <button type="button" className="dex-person" onClick={() => open(who!.key)}>
             <PersonPic person={who!} />
             <span className="dex-person-text">
-              <b><T>{look === "pixel" ? who!.name.toUpperCase() : who!.name}</T></b>
+              <b><Name who={who!} /></b>
               <small><T>{place(cat.placeOf(met.map), look)}</T></small>
               {met.said && look !== "pixel" && <q>{met.said}</q>}
             </span>
@@ -249,6 +249,17 @@ function PeopleList({ open }: { open(key: string): void }) {
   );
 }
 
+/** A person's name for the look; the rival goes by the name the player gave them. */
+function useName(who: Person): string {
+  const { progress, look } = useContext(DexCtx);
+  const name = who.name === "Rival" && progress.rival ? progress.rival : who.name;
+  return look === "pixel" ? name.toUpperCase() : name;
+}
+
+function Name({ who }: { who: Person }) {
+  return <T>{useName(who)}</T>;
+}
+
 const place = (p: Place | undefined, look: DexLook) => (p ? (look === "pixel" ? p.name.toUpperCase() : p.name) : "?");
 
 function PersonPage({ k }: { k: string }) {
@@ -258,7 +269,7 @@ function PersonPage({ k }: { k: string }) {
   return (
     <article className="dex-who">
       <div className="dex-stage"><PersonPic person={who} /></div>
-      <h2><T>{look === "pixel" ? who.name.toUpperCase() : who.name}</T></h2>
+      <h2><Name who={who} /></h2>
       <p><T>{`${look === "pixel" ? "MET IN" : "Met in"} ${place(cat.placeOf(met.map), look)}`}</T></p>
       {met.said && (
         <blockquote className="dex-words">

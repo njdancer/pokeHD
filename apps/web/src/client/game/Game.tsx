@@ -28,7 +28,7 @@ import {
 } from "@pokehd/emu";
 import { createEngine, type Engine } from "@pokehd/engine";
 import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
-import { encodeName, parseWorld, readGlyphs, type RomHeader } from "@pokehd/rom";
+import { decodeText, encodeName, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
 import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../input/index.ts";
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { cloudBackup } from "../saves/cloud-save.ts";
@@ -67,6 +67,10 @@ import { IntroStage } from "./IntroStage.tsx";
 import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
 import { Starter, type StartChoice } from "./onboarding.ts";
 import { uiLook } from "./ui-look.ts";
+import { Pokedex } from "../dex/Pokedex.tsx";
+import { buildCatalogue, dexFlags, type DexProgress } from "../dex/catalogue.ts";
+import { DexJournal } from "../dex/journal.ts";
+import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
@@ -224,6 +228,18 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [boot, setBoot] = useState(0);
   // The latest mode and map flag, so the layout can be recomputed when the player toggles pip.
   const sceneRef = useRef<{ mode: OverworldState["mode"]; inWorld: boolean; hdText: boolean; battle?: BattleScene; onboarding?: boolean }>({ mode: "overworld", inWorld: false, hdText: false });
+  /** The HD Pokédex (p2-dex): its look, and while it's up what it shows. */
+  const [dexLook, setDexLook] = useState<DexSetting>(loadDexLook);
+  const dexLookRef = useRef(dexLook);
+  const [dex, setDex] = useState<{ progress: DexProgress; openOn?: number } | null>(null);
+  /** Bumped by the B button: asks the open Pokédex to close. */
+  const [dexB, setDexB] = useState(0);
+  const dexBRef = useRef(() => {});
+  useEffect(() => {
+    dexBRef.current = () => dex && setDexB((n) => n + 1);
+  });
+  const [world, setWorld] = useState<WorldData | null>(null);
+  const catalogue = useMemo(() => world && buildCatalogue(rom, world), [rom, world]);
   /** The battle's HD cards: the state they show and which the game draws now. */
   const [battleHud, setBattleHud] = useState<{ state: BattleState; huds: BattleScreen["huds"] } | null>(null);
 
@@ -275,10 +291,15 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     let courier: GiftCourier | null = null;
     let raf = 0;
     let stopResumePoints = () => {};
+    let stopJournal = () => {};
     /** Takes a resume point once a save has finished, so the newest point always holds it. */
     let pointAfterSave = () => {};
+    let lastMask = 0;
     const joypad = new JoypadInput({
       onChange: (mask, source) => {
+        // B closes the HD Pokédex (the game's is held while it's up).
+        if (mask & ~lastMask & Button.B) dexBRef.current();
+        lastMask = mask;
         hostRef.current?.setButtons(mask);
         // Keyboard and touch changes come from user gestures, which may start audio; gamepad polls don't.
         if (mask && source !== "gamepad") void enableSound();
@@ -292,6 +313,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
 
     (async () => {
       const world = parseWorld(rom);
+      setWorld(world);
       live = createLiveWorld(world);
       // Asks the browser not to clear the save under storage pressure (Safari's eviction).
       void navigator.storage?.persist?.().catch(() => false);
@@ -337,6 +359,12 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       let trackInWorld = inWorldTracker();
       let latest: OverworldState | null = null;
       let emuFrames = 0;
+      // The Pokédex's journal: places visited, people met and what they first said (p2-dex).
+      let journal: DexJournal | null = null;
+      let journalFor = -1;
+      let lastMap = -1;
+      /** Someone just spoke: their words are gathered from the text box until it closes. */
+      let talking: { map: number; npc: number; lines: string[]; frames: number } | null = null;
       host = new EmulatorHost({
         rom,
         sram: slot.sram,
@@ -368,6 +396,10 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           if (inWorld) live!.push(state, performance.now() / 1000);
           else if (onboardingRef.current) live!.push(TITLE_BACKDROP, performance.now() / 1000);
           latest = state;
+          if (inWorld && state.mapId !== lastMap && journal) {
+            lastMap = state.mapId;
+            journal.visit(state.mapId);
+          }
           // Battles: the scene in 3D, the screen masked down to its menus and text.
           const fight = battles?.frame(watched);
           const battle = hd && inWorld ? fight?.scene : undefined;
@@ -383,6 +415,16 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           roomClient?.sendPresence(toPresence(state, inWorld));
           // Text and menus: drawn by the HD text layer when it can show all of them.
           const text = textDecoder.decode(bytes as unknown as TextWatched);
+          if (talking) {
+            const d = text.dialog;
+            if (!d) {
+              if (talking.lines.length) journal?.said(talking.map, talking.npc, talking.lines);
+              // Before the box opens there's nothing yet; give up if it never does.
+              if (talking.lines.length || ++talking.frames > 300) talking = null;
+            } else if (d.state !== "printing") {
+              for (const line of d.lines) if (line && talking.lines.at(-1) !== line && !talking.lines.includes(line)) talking.lines.push(line);
+            }
+          }
           // The page's own start: press the game's buttons for the choice, then Oak in HD.
           let start = onboardingRef.current;
           const starter = starterRef.current;
@@ -414,6 +456,31 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         },
         onError: (text) => setMessage(`Emulator error: ${text}`),
         onGift: (event) => courier?.onGiftEvent(event),
+        onDexOpen: (opened) => {
+          const h = host;
+          if (!h || dexLookRef.current === "off") return h?.passDex();
+          void h
+            .read([
+              [SYMBOLS.wPokedexOwned.address, 19],
+              [SYMBOLS.wPokedexSeen.address, 19],
+              [SYMBOLS.wPlayerID.address, 2],
+              [SYMBOLS.wRivalName.address, 11],
+            ])
+            .then(async ([owned, seen, id, rival]) => {
+              const trainer = (id![0]! << 8) | id![1]!;
+              if (!journal || journalFor !== trainer) {
+                journal = await DexJournal.open(romKey, trainer);
+                journalFor = trainer;
+              }
+              if (disposed) return;
+              const dexNo = opened.kind === "data" ? pokedexNumber(rom, opened.species) : 0;
+              setDex({ progress: journal.progress(dexFlags(seen!), dexFlags(owned!), decodeText(rival!)), openOn: dexNo || undefined });
+            });
+        },
+        onTalk: (map, npc) => {
+          journal?.met(map, npc);
+          talking = { map, npc, lines: [], frames: 0 };
+        },
       });
       const watching = host;
       battles = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...TEXT_WATCHES, ...BATTLE_WATCHES }, (w) => watching.watch(w));
@@ -421,6 +488,21 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       hostRef.current = host;
       const started = await host.started;
       if (disposed) return;
+      // The journal belongs to the trainer in the game: open it as soon as there is one.
+      const h0 = host;
+      const openJournal = () =>
+        void h0.read([[SYMBOLS.wPlayerID.address, 2]]).then(async ([id]) => {
+          const trainer = (id![0]! << 8) | id![1]!;
+          if (journalFor === trainer || disposed) return;
+          journalFor = trainer;
+          journal = await DexJournal.open(romKey, trainer);
+          lastMap = -1;
+        });
+      const journalTimer = setInterval(() => sceneRef.current.inWorld && openJournal(), 5000);
+      stopJournal = () => {
+        clearInterval(journalTimer);
+        void journal?.flush();
+      };
       // A point the emulator turned down is stale (the save changed since) or damaged.
       if (resume && !started.resumed) void deleteResumePoint(romKey);
       if (custom && resume && !started.resumed) setOnboarding({ phase: "choose" });
@@ -581,6 +663,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     return () => {
       disposed = true;
       stopResumePoints();
+      stopJournal();
       cancelAnimationFrame(raf);
       joypad.dispose();
       unsubscribeRoom();
@@ -608,6 +691,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       setNameAsk(null);
       starterRef.current = null;
       setOnboarding(null);
+      setDex(null);
     };
   }, [rom, romKey, boot, glyphs]);
 
@@ -687,6 +771,12 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     }
   };
 
+  const chooseDexLook = (look: DexSetting) => {
+    dexLookRef.current = look;
+    saveDexLook(look);
+    setDexLook(look);
+  };
+
   const toggleHdText = (on: boolean) => {
     hdTextOnRef.current = on;
     saveHdTextOn(on);
@@ -729,6 +819,17 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             <label>
               <input type="checkbox" checked={hdTextOn} onChange={(e) => toggleHdText(e.target.checked)} />
               {" "}HD words and menus
+            </label>
+          </div>
+          <div className="row">
+            <label>
+              Pokédex{" "}
+              <select value={dexLook} onChange={(e) => chooseDexLook(e.target.value as DexSetting)}>
+                <option value="device">3D device</option>
+                <option value="pixel">Pixel device</option>
+                <option value="storybook">Storybook panel</option>
+                <option value="off">The game's own</option>
+              </select>
             </label>
           </div>
           {input && <KeyBindingsPanel input={input} />}
@@ -781,7 +882,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       {battleHud && !noHd && layout === "battle" && <BattleHud state={battleHud.state} huds={battleHud.huds} />}
       {/* The pad hides while Settings is open so it can't cover the panel's forms (and unmounting releases any held button). */}
       {/* The pad is for the world: anything with buttons of its own (HD menus, messages, the start and names) hides it. */}
-      {input && touch && !settings && !(hdText && hdTextOn && !noHd) && !nameAsk && !onboarding && <TouchPad onChange={onTouch} />}
+      {input && touch && !settings && !(hdText && hdTextOn && !noHd) && !nameAsk && !onboarding && !dex && <TouchPad onChange={onTouch} />}
       {(onboarding?.phase === "choose" || onboarding?.phase === "starting") && (
         <StartScreen
           save={startSave}
@@ -792,6 +893,21 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         />
       )}
       {nameAsk && <NamePrompt ask={nameAsk} rom={rom} accountName={account?.player.name ?? null} look={look} onAnswer={answerName} />}
+      {dex && world && catalogue && dexLook !== "off" && (
+        <Pokedex
+          rom={rom}
+          world={world}
+          catalogue={catalogue}
+          progress={dex.progress}
+          style={dexLook}
+          openOn={dex.openOn}
+          closeSignal={dexB}
+          onClosed={() => {
+            setDex(null);
+            hostRef.current?.closeDex();
+          }}
+        />
+      )}
       {savedAt > 0 && <SavedToast shownAt={savedAt} />}
       {erasing && <EraseConfirm old={erasing.old} onAnswer={answerErase} />}
     </div>

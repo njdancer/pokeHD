@@ -195,13 +195,14 @@ export const ALLOWLIST: readonly string[] = [
   // The HD Pokédex (p2-dex): where the game opens and leaves its own, and the data it shows
   "BaseStats",
   "CompressedMap",
+  "DisplayTextID",
   "ExternalMapEntries",
   "InternalMapEntries",
   "MewBaseStats",
   "MewPicFront",
   "PokedexEntryPointers",
   "RhydonPicFront",
-  "ShowPokedexDataInternal",
+  "ShowPokedexData",
   "ShowPokedexDataInternal.waitForButtonPress",
   "ShowPokedexMenu",
   "ShowPokedexMenu.exitPokedex",
@@ -211,6 +212,8 @@ export const ALLOWLIST: readonly string[] = [
   "WildDataPointers",
   "WorldMapTileGraphics",
   "YoungsterPic",
+  "hSpriteIndex",
+  "wRivalName",
   "wTownVisitedFlag",
 ];
 
