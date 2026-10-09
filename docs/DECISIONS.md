@@ -551,9 +551,12 @@ units. The first versions copied the depth texture and made the maps 32-bit floa
 blanked the world on iPhone's WebGPU, so it now draws the depths into three.js's own depth format (Nick, 2026-10-09: there's no reason not to cache, so make it work there). Alternative: re-render everything every frame (as before, `?shadowcache=0`), or temporal
 reuse of screen-space passes, which needs motion vectors and risks ghosting.
 
-## D36. Whole messages from the script, as a trial setting
+## D36. Whole messages from the script
 
-**Status:** trial, off by default (Settings, "Whole messages at once"). Nick asked for it 2026-10-09.
+**Status:** always on since 2026-10-09 15:00Z (Nick: "enable it permanently. Same with hd ui. Remove the
+checkboxes"). It began as an off-by-default trial setting. The "HD words and menus" setting is gone
+too: the HD text layer always shows when it fits, and `?classic` still gives the game's own title and
+naming screens.
 
 Joining the game's pages from the screen (D32) can't tell what follows a ▼, so it stops early or
 presses past the end of a message (see /dev/dialog). Instead, when the game starts printing a

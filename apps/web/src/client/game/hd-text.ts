@@ -1,45 +1,6 @@
-// Whether the HD text layer can stand in for the Game Boy screen (p2-text), and the player's
-// choice of how it looks. The game still draws every box and moves every cursor; this only
-// decides who shows it. The look is Storybook (D31).
+// Whether the HD text layer can stand in for the Game Boy screen (p2-text). The game still draws
+// every box and moves every cursor; this only decides who shows it. The look is Storybook (D31).
 import type { OverworldMode, ScreenText } from "@pokehd/emu";
-
-const HD_TEXT_KEY = "pokehd.text.look.v1";
-
-/** Whether the player wants the HD text layer (on unless turned off in Settings). */
-export function loadHdTextOn(): boolean {
-  try {
-    return localStorage.getItem(HD_TEXT_KEY) !== "off";
-  } catch {
-    return true;
-  }
-}
-
-export function saveHdTextOn(on: boolean): void {
-  try {
-    localStorage.setItem(HD_TEXT_KEY, on ? "storybook" : "off");
-  } catch {
-    // Storage blocked (some private windows): the choice lasts until reload.
-  }
-}
-
-const WHOLE_KEY = "pokehd.text.whole.v1";
-
-/** Whether the player wants whole messages from the script (off unless turned on in Settings). */
-export function loadWholeMessages(): boolean {
-  try {
-    return localStorage.getItem(WHOLE_KEY) === "on";
-  } catch {
-    return false;
-  }
-}
-
-export function saveWholeMessages(on: boolean): void {
-  try {
-    localStorage.setItem(WHOLE_KEY, on ? "on" : "off");
-  } catch {
-    // Storage blocked: the choice lasts until reload.
-  }
-}
 
 /**
  * True when everything the game shows over the world is in boxes of text the HD layer can

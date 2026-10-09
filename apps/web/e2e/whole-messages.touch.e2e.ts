@@ -1,11 +1,10 @@
-// Whole messages from the script (opt-in): Oak's speech shows a message at a time in the HD box,
+// Whole messages from the script: Oak's speech shows a message at a time in the HD box,
 // read on by tapping it, and the game keeps up until Oak checks the name. Saves screenshots in
 // test-results/.
 import { expect, test } from "@playwright/test";
 
 test("Oak's speech, a whole message at a time", async ({ page }) => {
   test.setTimeout(240_000);
-  await page.addInitScript(() => localStorage.setItem("pokehd.text.whole.v1", "on"));
   await page.route("**/api/me", (route) =>
     route.fulfill({ json: { player: { id: "p1", name: "Nick" }, email: "nick@example.com", admin: false, romAccess: true } }),
   );
@@ -19,10 +18,10 @@ test("Oak's speech, a whole message at a time", async ({ page }) => {
   const prompt = page.getByTestId("name-prompt");
   const seen: string[] = [];
   for (let i = 0; i < 200 && !(await prompt.isVisible()); i++) {
-    if (await box.count()) {
-      const lines = await box.locator(".hd-line").allInnerTexts();
-      const text = lines.join(" / ");
-      if (text && seen.at(-1) !== text) {
+    const text = (await box.count()) ? (await box.locator(".hd-line").allInnerTexts()).join(" / ") : "";
+    // A box whose lines haven't drawn yet isn't tapped: it would be read on unseen.
+    if (text) {
+      if (seen.at(-1) !== text) {
         seen.push(text);
         if (seen.length <= 3) await page.screenshot({ path: `test-results/whole-${seen.length}.png` });
       }
