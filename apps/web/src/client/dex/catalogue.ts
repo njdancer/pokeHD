@@ -21,6 +21,8 @@ export interface DexProgress {
   /** Maps visited, oldest first, with when (ms since 1970). */
   places: readonly { map: number; at: number }[];
   people: readonly PersonMet[];
+  /** The rival's name, as the player chose it. */
+  rival?: string;
 }
 
 /** Someone the player talked to or battled. */

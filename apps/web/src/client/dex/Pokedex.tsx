@@ -19,8 +19,27 @@ export interface PokedexProps {
   style: PokedexStyle;
   openOn?: number;
   tab?: "pokemon" | "people" | "places";
+  /** Changes (the B button) ask it to close. */
+  closeSignal?: number;
   /** Called once it has closed (after its closing animation). */
   onClosed(): void;
+}
+
+/** Calls `close` when `signal` changes, or on Escape. */
+function useCloseRequests(signal: number | undefined, close: () => void) {
+  const first = useRef(signal);
+  const latest = useRef(close);
+  useLayoutEffect(() => {
+    latest.current = close;
+  });
+  useEffect(() => {
+    if (signal !== first.current) latest.current();
+  }, [signal]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && latest.current();
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
 }
 
 export function Pokedex(props: PokedexProps) {
@@ -29,7 +48,7 @@ export function Pokedex(props: PokedexProps) {
   return <StorybookDex {...props} />;
 }
 
-function DeviceDex({ rom, world, catalogue, progress, openOn, tab, onClosed }: PokedexProps) {
+function DeviceDex({ rom, world, catalogue, progress, openOn, tab, closeSignal, onClosed }: PokedexProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
   const shadeRef = useRef<HTMLDivElement>(null);
@@ -82,10 +101,14 @@ function DeviceDex({ rom, world, catalogue, progress, openOn, tab, onClosed }: P
     };
   }, []);
 
+  const closing = useRef(false);
   const close = async () => {
+    if (closing.current) return;
+    closing.current = true;
     await deviceRef.current?.close();
     onClosed();
   };
+  useCloseRequests(closeSignal, () => void close());
 
   if (failed) return <StorybookDex rom={rom} world={world} catalogue={catalogue} progress={progress} style="storybook" openOn={openOn} tab={tab} onClosed={onClosed} />;
   return (
@@ -105,7 +128,7 @@ function pixelScale(): number {
   return Math.max(1, Math.floor(Math.min((innerHeight * 0.96) / height, (innerWidth * 0.98) / width)));
 }
 
-function PixelDex({ rom, world, catalogue, progress, openOn, tab, onClosed }: PokedexProps) {
+function PixelDex({ rom, world, catalogue, progress, openOn, tab, closeSignal, onClosed }: PokedexProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(pixelScale);
@@ -126,9 +149,11 @@ function PixelDex({ rom, world, catalogue, progress, openOn, tab, onClosed }: Po
   }, []);
 
   const close = () => {
+    if (stage === "closing") return;
     setStage("closing");
     setTimeout(onClosed, 600);
   };
+  useCloseRequests(closeSignal, close);
   const { width, height, screen } = PIXEL_DEVICE;
   // The page's own pixel size: the device's pixels are `scale` CSS pixels, the page's letters
   // a whole number of those.
@@ -149,12 +174,14 @@ function PixelDex({ rom, world, catalogue, progress, openOn, tab, onClosed }: Po
   );
 }
 
-function StorybookDex({ rom, world, catalogue, progress, openOn, tab, onClosed }: PokedexProps) {
+function StorybookDex({ rom, world, catalogue, progress, openOn, tab, closeSignal, onClosed }: PokedexProps) {
   const [closing, setClosing] = useState(false);
   const close = () => {
+    if (closing) return;
     setClosing(true);
     setTimeout(onClosed, 260);
   };
+  useCloseRequests(closeSignal, close);
   return (
     <div className={`pokedex pokedex-storybook ${closing ? "closing" : ""}`}>
       <div className="pokedex-shade" onClick={close} />
