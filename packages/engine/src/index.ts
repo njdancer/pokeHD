@@ -59,6 +59,8 @@ export interface WorldContent {
   setCompiler?(compile: ((object: THREE.Object3D) => Promise<void>) | null): void;
   /** A framing that overrides the look's camera while set (a battle). */
   readonly view?: CameraView | null;
+  /** False while the content is still loading what it needs to show; absent means always ready. */
+  readonly ready?: boolean;
 }
 
 /** Camera framing: degrees, world units. */
@@ -107,6 +109,12 @@ export interface Engine {
   setFixedSize(size: { width: number; height: number } | null): void;
   /** Swaps what's rendered. The caller owns (and disposes) the old content. */
   setWorld(world: WorldContent): void;
+  /**
+   * Resolves once a frame has been drawn with the content ready (`WorldContent.ready`) and every
+   * shader it needed compiled: from then on the canvas shows the finished scene. A page can keep
+   * a loading screen up until this.
+   */
+  readonly ready: Promise<void>;
   /** Renders one frame and returns it as a PNG. */
   capture(): Promise<Blob>;
   /**
@@ -360,6 +368,10 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
 
   };
 
+  let markReady = () => {};
+  const ready = new Promise<void>((resolve) => (markReady = resolve));
+  /** The content was ready, with nothing compiling, when the last drawn frame started. */
+  let readyFrame = false;
   let drawnThisSecond = 0;
   let secondStart = 0;
   let drewLast = false;
@@ -395,6 +407,9 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     const rendered = renderFrame(dt, ambientDt, false);
     drewLast = rendered;
     warmup.afterFrame(rendered);
+    // Ready on the frame after one drawn whole: by then that one has reached the screen.
+    if (readyFrame) markReady();
+    else if (rendered && world.ready !== false && !warmup.busy()) readyFrame = true;
     if (t - secondStart >= 1000) {
       stats.drawn = Math.round((drawnThisSecond * 1000) / (t - secondStart));
       drawnThisSecond = 0;
@@ -420,6 +435,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     backend: isWebGPU ? "WebGPU" : "WebGL2",
     look,
     stats,
+    ready,
     get quality() {
       return quality;
     },
