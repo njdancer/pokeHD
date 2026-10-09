@@ -37,10 +37,17 @@ test("a new game from the start screen to the bedroom, by taps alone", async ({ 
   await page.getByRole("button", { name: "OK" }).click();
   await readOn(() => page.evaluate(() => !!(window as { __pokehd?: { inWorld: boolean } }).__pokehd?.inWorld));
 
-  await page.keyboard.down("Enter");
-  await page.waitForTimeout(150);
-  await page.keyboard.up("Enter");
+  // START opens the menu once the room has faded in.
+  const choice = page.locator(".hd-choice", { hasText: "Nicky" });
+  for (let i = 0; i < 10 && !(await choice.isVisible()); i++) {
+    await page.waitForTimeout(1000);
+    await page.keyboard.down("Enter");
+    await page.waitForTimeout(150);
+    await page.keyboard.up("Enter");
+    await page.waitForTimeout(800);
+  }
   await page.locator(".hd-choice", { hasText: "Nicky" }).click();
-  // The trainer card is a full-screen picture: the Game Boy screen shows it.
-  await expect(page.getByTestId("gb-screen")).toHaveAttribute("data-layout", "full");
+  // The trainer card isn't text the HD layer draws: the Game Boy screen comes up for it.
+  await expect(page.getByTestId("hd-text")).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByTestId("gb-screen")).toHaveAttribute("data-layout", "dialog");
 });
