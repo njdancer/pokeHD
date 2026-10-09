@@ -70,8 +70,7 @@ const SPARE_CHUNKS = 10;
 const BATTLE_SWING = 1.1;
 /** Neighbouring maps nearer the player than this (steps) must be drawn before the view shows. */
 const HOLD_STEPS = 20;
-/** Seconds the view takes to come up from black once everything it needs is drawn. */
-const REVEAL_SECONDS = 0.3;
+
 /** The look's camera when there's no look to read it from. */
 const DEFAULT_VIEW: CameraView = { pitch: 38, yaw: 0, distance: 30, fov: 24 };
 
@@ -127,8 +126,7 @@ export interface LiveWorld extends WorldContent {
   readonly view: CameraView | null;
   /**
    * True once the player's map, and any neighbour near enough to be seen, is built, compiled and
-   * in the scene. Until then the view is held black (and, after, fades up), so the world never
-   * shows half-built: no sprites over an empty map after a warp.
+   * in the scene (the page's loading screen waits for it, through `Engine.ready`).
    */
   readonly ready: boolean;
   dispose(): void;
@@ -332,14 +330,10 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   let latest: LiveState | null = null;
   let wrapped = false;
   /**
-   * Held black after a warp (and at the start) until the new map is drawn. Walking across a
-   * connection never holds: the map ahead was built while walking up to it, and if it wasn't,
-   * a gap at the edge beats the screen going black mid-walk.
+   * Not ready at the start and after a warp, until the new map is drawn (`ready`). Walking across
+   * a connection never unreadies it.
    */
   let holding = true;
-  /** How much of the view is covered: 1 while holding, then easing to 0. */
-  let cover = 1;
-  let coveredAt = clock();
   /** Whether everything the view needs is drawn (see `ready`). */
   const loaded = (): boolean => {
     const here = current === null ? undefined : chunks.get(current);
@@ -503,18 +497,11 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         for (const [slot, s] of npcSprites) if (!seen.has(slot)) s.mesh.visible = false;
 
         // Fades: the game's own fade drawn over the HD view; the day wraps inside a black one.
-        // A map still loading holds the view black, whatever the game's fade says.
-        const at = clock();
         if (holding && loaded()) holding = false;
-        if (holding) cover = 1;
-        else cover = Math.max(cover - Math.min(Math.max(at - coveredAt, 0), 0.1) / REVEAL_SECONDS, 0);
-        coveredAt = at;
         const fade = latest.fade;
-        const black = cover >= Math.abs(fade) || fade > 0;
-        const amount = Math.min(Math.max(Math.abs(fade), cover), 1);
-        fadeQuad.visible = amount > 0;
-        fadeMaterial.color.set(black ? 0x000000 : 0xffffff);
-        fadeMaterial.opacity = amount;
+        fadeQuad.visible = fade !== 0;
+        fadeMaterial.color.set(fade > 0 ? 0x000000 : 0xffffff);
+        fadeMaterial.opacity = Math.min(Math.abs(fade), 1);
         if (fade >= 1 && !wrapped && look && look.params.time.phase >= 1) {
           look.wrapToMorning(true);
           wrapped = true;
