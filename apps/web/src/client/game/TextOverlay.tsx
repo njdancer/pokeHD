@@ -18,13 +18,27 @@ export interface TextActions {
   press(button: "A" | "B" | "Up" | "Down"): void;
 }
 
-export function TextOverlay({ text, actions, look = "ball" }: { text: ScreenText; actions?: TextActions; look?: UiLook }) {
+interface Props {
+  text: ScreenText;
+  /** More message lines than the game's two, read at once (DialogJoiner): the box grows up. */
+  dialogLines?: readonly string[] | null;
+  actions?: TextActions;
+  look?: UiLook;
+}
+
+export function TextOverlay({ text, dialogLines, actions, look = "ball" }: Props) {
   return (
     <div className="hd-text" data-testid="hd-text" data-look={look} aria-live="polite">
       <div className="hd-text-stage">
-        {text.boxes.filter((box, i) => !emptyUnder(box, text.boxes.slice(i + 1))).map((box) => (
-          <Box key={`${box.x},${box.y},${box.width},${box.height}`} box={box} text={text} actions={actions} />
-        ))}
+        {text.boxes.filter((box, i) => !emptyUnder(box, text.boxes.slice(i + 1))).map((box) => {
+          const dialog = text.dialog && same(text.dialog.box, box);
+          // The message box keeps one key as it grows, so it doesn't pop in again.
+          return dialog ? (
+            <Box key="dialog" box={grown(box, dialogLines)} text={text} actions={actions} dialogLines={dialogLines} />
+          ) : (
+            <Box key={`${box.x},${box.y},${box.width},${box.height}`} box={box} text={text} actions={actions} />
+          );
+        })}
       </div>
     </div>
   );
@@ -48,11 +62,18 @@ const place = (box: TextBox, x: number, y: number, width = 1, height = 1): CSSPr
 
 type Line = TextLine & { detail?: string; item?: number };
 
-function Box({ box, text, actions }: { box: TextBox; text: ScreenText; actions?: TextActions }) {
+/** The message box made tall enough for `lines` (two tiles a line), growing upwards. */
+function grown(box: TextBox, lines: readonly string[] | null | undefined): TextBox {
+  if (!lines || lines.length <= 2) return box;
+  const height = lines.length * 2 + 2;
+  return { ...box, y: box.y + box.height - height, height };
+}
+
+function Box({ box, text, actions, dialogLines: joined }: { box: TextBox; text: ScreenText; actions?: TextActions; dialogLines?: readonly string[] | null }) {
   const menu = text.menus.find((m) => same(m.box, box));
-  const dialog = text.dialog && same(text.dialog.box, box) ? text.dialog : null;
+  const dialog = text.dialog && (joined !== undefined || same(text.dialog.box, box)) ? text.dialog : null;
   const quantity = text.quantity && same(text.quantity.box, box) ? text.quantity : null;
-  const lines: Line[] = dialog ? dialogLines(dialog.lines, box) : menu ? menuLines(menu) : box.lines;
+  const lines: Line[] = dialog ? dialogLines(joined ?? dialog.lines, box) : menu ? menuLines(menu) : box.lines;
   const rows = menu ? menuRows(menu) : new Map<number, "selected" | "chosen">();
   const inner = box.x + box.width - 1;
   // Only the menu taking input answers taps; one waiting under a submenu just shows.
@@ -124,8 +145,8 @@ function Box({ box, text, actions }: { box: TextBox; text: ScreenText; actions?:
   );
 }
 
-/** The message box's two lines (rows 14 and 16), without the ▼ the game blinks after them. */
-function dialogLines(lines: readonly [string, string], box: TextBox): TextLine[] {
+/** The message box's lines (rows 14 and 16 for the game's two), without the ▼ it blinks after them. */
+function dialogLines(lines: readonly string[], box: TextBox): TextLine[] {
   return lines.flatMap((text, i) => (text ? [{ row: box.y + 2 + i * 2, col: box.x + 1, text }] : []));
 }
 

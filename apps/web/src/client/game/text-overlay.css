@@ -8,7 +8,7 @@
   width: min(96vw, 64vh * 160 / 144, 760px); aspect-ratio: 160 / 144; container-type: inline-size;
 }
 /* On touch devices the pad owns the bottom of the screen, as for the Game Boy screen. */
-.with-touch-pad .hd-text-stage { bottom: auto; top: calc(52px + env(safe-area-inset-top)); width: min(98vw, 50vh * 160 / 144); }
+.with-touch-pad .hd-text-stage { bottom: auto; top: calc(68px + env(safe-area-inset-top)); width: min(98vw, 50vh * 160 / 144); }
 @media (orientation: landscape) {
   .with-touch-pad .hd-text-stage { top: 8px; width: min(58vw, 92vh * 160 / 144); }
 }

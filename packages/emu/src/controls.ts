@@ -60,7 +60,17 @@ export class Controls {
     const names = options.names;
     if (!names) return;
     this.#removeHooks.push(
-      gb.addHook("ChoosePlayerName", () => this.#ask({ kind: "player", from: "intro" })),
+      // Asked as Oak starts "First, what is your name?", so the page's Oak (who already knows
+      // a signed-in player's name) speaks instead; the game's line goes by unseen.
+      gb.addHook("PrintText", (g) => {
+        const intro = SYMBOLS.IntroducePlayerText;
+        if (g.registers.hl === intro.address && g.read(SYMBOLS.hLoadedROMBank.address) === intro.bank) this.#ask({ kind: "player", from: "intro" });
+      }),
+      gb.addHook("ChoosePlayerName", () => {
+        // Already asked (above), or answered and on its way in: carry on.
+        if (this.#asking?.kind === "player" || this.#name) return;
+        this.#ask({ kind: "player", from: "intro" });
+      }),
       gb.addHook("ChooseRivalName", () => this.#ask({ kind: "rival", from: "intro" })),
       gb.addHook("DisplayNamingScreen", (g) => {
         // From the intro with the page's name: carry on. Otherwise (a nickname) ask.
@@ -129,7 +139,8 @@ export class Controls {
       return;
     }
     this.#name = name;
-    // In the intro the list comes first: A on NEW NAME (where the cursor starts) opens the screen.
+    // In the intro, A reads past Oak's question, then picks NEW NAME (where the cursor starts) in
+    // the list, which opens the naming screen.
     if (ask.from === "intro") this.#pressing = Button.A;
   }
 

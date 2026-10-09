@@ -66,6 +66,7 @@ import { StartScreen } from "./StartScreen.tsx";
 import { IntroStage } from "./IntroStage.tsx";
 import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
 import { Starter, type StartChoice } from "./onboarding.ts";
+import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
 import { LoadingScreen, LOADING_FADE_MS } from "../LoadingScreen.tsx";
@@ -222,6 +223,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const hdTextOnRef = useRef(hdTextOn);
   /** The text on screen, while the HD text layer can show it. */
   const [hdText, setHdText] = useState<ScreenText | null>(null);
+  /** The message box's lines when more than the game's two are read at once (DialogJoiner). */
+  const [dialogLines, setDialogLines] = useState<string[] | null>(null);
   const look = useMemo(() => uiLook(), []);
   /** The signed-in player (their name is the one Oak checks, and kept the same as theirs). */
   const [account, setAccount] = useState<Account | null>(null);
@@ -376,6 +379,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       const textDecoder = new ScreenTextDecoder(glyphs);
       const introImage = new ImageData(SCREEN_WIDTH, STAGE_HEIGHT);
       let shownText = "";
+      const joiner = new DialogJoiner();
       /** Battles are drawn in HD once the renderer is up; until then the screen shows them. */
       let hd = false;
       let battles: BattleTracker | null = null;
@@ -466,10 +470,14 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             introCanvas.current.getContext("2d")!.putImageData(introImage, 0, 0);
           }
           const fits = hdTextOnRef.current && (intro ? introTextFits(text) : hdTextFits(text, state.mode, inWorld));
-          const key = fits ? textKey(text) : "";
+          // Whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
+          const joined = fits ? joiner.frame(text) : { lines: null, press: false };
+          if (joined.press) host?.tap(Button.A);
+          const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}` : "";
           if (key !== shownText) {
             shownText = key;
             setHdText(fits ? text : null);
+            setDialogLines(joined.lines);
           }
           const scene = sceneRef.current;
           const onboard = start !== null;
@@ -713,6 +721,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       delete window.__pokehd;
       sceneRef.current = { mode: "overworld", inWorld: false, hdText: false };
       setHdText(null);
+      setDialogLines(null);
       setBattleHud(null);
       setLayout("full");
       setNoHd(false);
@@ -849,26 +858,48 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         data-testid="gb-screen"
         data-layout={noHd ? "full" : layout}
       />
-      {onboarding?.phase === "intro" && !noHd && !nameAsk && <IntroStage ref={introCanvas} />}
-      {hdText && !noHd && hdTextOn && <TextOverlay text={hdText} actions={textActions} look={look} />}
-      {ready && <div className="game-hud">
-        <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
-        <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
-        <button type="button" onClick={() => setSettings((v) => !v)} aria-expanded={settings}>Settings</button>
-        {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
-        {cloudNewer && <button type="button" onClick={() => setSettings(true)}>Newer save in the cloud</button>}
-        {room && <RoomBadge status={room.status} friends={room.friends.length} />}
-        {gifts && room?.status === "open" && (
-          <button type="button" onClick={() => setGiftOpen((v) => !v)} aria-expanded={giftOpen}>Gift</button>
-        )}
-        {message && <span role="status">{message}</span>}
-      </div>}
+      {onboarding?.phase === "intro" && !noHd && <IntroStage ref={introCanvas} />}
+      {hdText && !noHd && hdTextOn && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} actions={textActions} look={look} />}
+      {/* Everything that isn't the game sits behind one button (the menu), in the HD panels' look. */}
+      {ready && <button
+        type="button"
+        className="game-menu-button"
+        onClick={() => setSettings((v) => !v)}
+        aria-expanded={settings}
+        aria-label="Menu"
+        data-look={look}
+        data-alert={cloudNewer || resumed || undefined}
+      >
+        <i className="hd-ball" aria-hidden />
+      </button>}
+      {message && <div className="game-toast" role="status">{message}</div>}
+      {settings && <div className="game-menu-scrim" onClick={() => setSettings(false)} />}
       {settings && (
-        <div className="game-settings">
+        <div className="game-menu" data-look={look} role="dialog" aria-label="Menu">
+          <i className="hd-corner tl" />
+          <i className="hd-corner tr" />
+          <i className="hd-corner bl" />
+          <i className="hd-corner br" />
+          <button type="button" className="game-menu-close" aria-label="Close" onClick={() => setSettings(false)}>×</button>
+          <div className="game-settings">
           <section>
             <h2>{header.title}</h2>
             {autosave ? <p>Saves itself every 5 minutes and after battles.</p> : <p>Autosave is off.</p>}
           </section>
+          {(resumed || cloudNewer) && (
+            <div className="game-menu-notes">
+              {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
+              {cloudNewer && <p>There's a newer save in the cloud. Grown-ups can load it below.</p>}
+            </div>
+          )}
+          <div className="game-menu-tiles">
+            <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Turn sound on"}</button>
+            <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Game Boy screen</button>
+            {room && <RoomBadge status={room.status} friends={room.friends.length} />}
+            {gifts && room?.status === "open" && (
+              <button type="button" onClick={() => { setGiftOpen((v) => !v); setSettings(false); }} aria-expanded={giftOpen}>Gift</button>
+            )}
+          </div>
           <div className="row">
             <label>
               <input type="checkbox" checked={hdTextOn} onChange={(e) => toggleHdText(e.target.checked)} />
@@ -905,6 +936,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             </div>
             {admin && <Friends />}
           </GrownUps>
+          </div>
         </div>
       )}
       {showStats && stats && (

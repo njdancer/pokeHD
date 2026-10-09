@@ -503,6 +503,11 @@ does, so the game's code still runs every screen (`Controls` in `packages/emu`):
 - **Classic.** Turning "HD words and menus" off in Settings, or `?classic`, brings back the
   game's own title and naming screens.
 
+Phone polish (Nick, 2026-10-09): Oak skips "First, what is your name?" and goes straight to
+"It says here your name is …" in his own message box; a message that stops mid-sentence is read
+on for the player, so up to four lines of a sentence show at once (the game still prints every
+page); and everything that isn't the game sits behind one ball button in the corner.
+
 The panels' look is Storybook with corner pokéballs (Nick's pick, 2026-10-09, over the Game Boy
 frame in HD and chunky candy buttons; all three stay on `/dev/ui` and `?look=`).
 Made while Nick was away; flagged for his review.

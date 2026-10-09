@@ -45,12 +45,18 @@ describe.skipIf(!existsSync(ROM_PATH))("controls", () => {
       run(1);
     }
     expect(asks).toEqual([{ kind: "player", from: "intro" }]);
+    // Asked as Oak starts his question, before the game's list of names.
+    let listed = false;
+    const removeHook = gb.addHook("ChoosePlayerName", () => (listed = true));
+    expect(listed).toBe(false);
     // The player's A presses are held back meanwhile: nothing moves on.
     run(120);
     expect(done()).toBe(0);
     controls.answerName(encodeName("Nick.J"));
     run(240);
     expect(done()).toBe(1);
+    expect(listed).toBe(true);
+    removeHook();
     expect(name(gb, "wPlayerName")).toBe("Nick.J");
     while (asks.length === 1 && frames++ < 6000) {
       controls.setButtons(frames % 6 < 2 ? Button.A : 0);

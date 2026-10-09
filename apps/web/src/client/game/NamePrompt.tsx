@@ -2,7 +2,7 @@
 // asking the player's and the rival's, or a nickname), this asks instead and Controls in
 // @pokehd/emu types the answer into the game's naming screen. A signed-in player already has a
 // name, the one Nick invited them with, so Oak checks it rather than asking from scratch.
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import type { NameAsk } from "@pokehd/emu";
 import { defaultNames, monName, NAME_MAX, nameProblem, NAME_ALPHABET } from "@pokehd/rom";
@@ -58,23 +58,38 @@ export function NamePrompt({ ask, rom, accountName, look, onAnswer }: Props) {
         ? "This is my grandson. Erm, what is his name again?"
         : `What will you call ${species}?`;
 
+  // Oak checking the name the player was invited with: his own message box and a choice box, in
+  // the places the game puts them, so it reads as the next line of his speech.
+  if (!typing && offered) {
+    return (
+      <div className="hd-text name-check" data-look={look} data-testid="name-prompt">
+        <div className="hd-text-stage">
+          <div className="hd-box menu active name-check-choices" style={tiles(10, 4, 10, 7)}>
+            <Corners />
+            <button type="button" className="hd-choice" onClick={() => onAnswer(offered)}>
+              <span className="hd-cursor selected" aria-hidden />
+              That's me!
+            </button>
+            <button type="button" className="hd-choice" onClick={startTyping}>
+              <span className="hd-cursor" aria-hidden />
+              Change it
+            </button>
+          </div>
+          <div className="hd-box dialog name-check-line" style={tiles(0, 11, 20, 7)}>
+            <Corners />
+            <p><span>It says here your name is <strong>{offered}</strong>. Is that right?</span></p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="name-prompt" data-look={look} data-testid="name-prompt">
       <form className="name-panel" onSubmit={submit}>
-        <i className="hd-corner tl" />
-        <i className="hd-corner tr" />
-        <i className="hd-corner bl" />
-        <i className="hd-corner br" />
+        <Corners />
         {oak && <div className="name-speaker">PROF. OAK</div>}
-        {!typing && offered ? (
-          <>
-            <p className="name-line">It says here your name is <strong>{offered}</strong>. Is that right?</p>
-            <div className="name-actions">
-              <button type="button" className="name-button primary" onClick={() => onAnswer(offered)}>Yes, that's me!</button>
-              <button type="button" className="name-button" onClick={startTyping}>Change it</button>
-            </div>
-          </>
-        ) : (
+        {
           <>
             <p className="name-line">{question}</p>
             <div className="name-field">
@@ -111,9 +126,28 @@ export function NamePrompt({ ask, rom, accountName, look, onAnswer }: Props) {
               {offered && <button type="button" className="name-button" onClick={() => onAnswer(offered)}>Keep {offered}</button>}
             </div>
           </>
-        )}
+        }
         <button type="button" className="name-gameboy" onClick={() => onAnswer(null)}>Use the Game Boy keyboard</button>
       </form>
     </div>
+  );
+}
+
+/** A box at the game's tile positions on the 20×18 screen, as the HD text layer places them. */
+const tiles = (x: number, y: number, width: number, height: number): CSSProperties => ({
+  left: `${(x / 20) * 100}%`,
+  top: `${(y / 18) * 100}%`,
+  width: `${(width / 20) * 100}%`,
+  height: `${(height / 18) * 100}%`,
+});
+
+function Corners() {
+  return (
+    <>
+      <i className="hd-corner tl" />
+      <i className="hd-corner tr" />
+      <i className="hd-corner bl" />
+      <i className="hd-corner br" />
+    </>
   );
 }

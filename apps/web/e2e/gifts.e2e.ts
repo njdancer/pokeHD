@@ -102,7 +102,10 @@ async function player(browser: Browser, name: string, sram: Uint8Array): Promise
     await press(page, "z");
   }
   log(name, "in the overworld", await page.locator(".room-badge").textContent().catch(() => "no badge"));
+  // Friends and gifts live in the menu.
+  await page.getByRole("button", { name: "Menu" }).click();
   await expect(page.getByText(/friends? online/)).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: "Close" }).click();
   return page;
 }
 
@@ -113,6 +116,7 @@ test("friends send each other money, an item and a Pokémon", async ({ browser }
   const stamp = Date.now() % 10000;
   const sender = await player(browser, `Sam${stamp}`, senderSave);
   const receiver = await player(browser, `Alex${stamp}`, receiverSave);
+  await sender.getByRole("button", { name: "Menu" }).click();
   await expect(sender.getByText("1 friend online")).toBeVisible({ timeout: 20_000 });
 
   await sender.getByRole("button", { name: "Gift" }).click();
