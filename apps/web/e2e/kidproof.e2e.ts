@@ -131,7 +131,7 @@ test("a new game can't erase the old save by accident", async ({ page }) => {
   await p.clearDialogs();
 
   // The first adventure is under Earlier saves, behind the grown-ups question.
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("button", { name: "Menu" }).click();
   await page.getByRole("button", { name: "Grown-ups…" }).click();
   const question = await page.getByText(/Grown-ups only: what is/).textContent();
   const [, a, b] = /(\d+) × (\d+)/.exec(question ?? "")!;

@@ -64,11 +64,11 @@ export function NamePrompt({ ask, rom, accountName, look, onAnswer }: Props) {
     return (
       <div className="hd-text name-check" data-look={look} data-testid="name-prompt">
         <div className="hd-text-stage">
-          <div className="hd-box menu active name-check-choices" style={tiles(9, 4, 11, 7)}>
+          <div className="hd-box menu active name-check-choices" style={tiles(10, 4, 10, 7)}>
             <Corners />
             <button type="button" className="hd-choice" onClick={() => onAnswer(offered)}>
               <span className="hd-cursor selected" aria-hidden />
-              Yes, that's me!
+              That's me!
             </button>
             <button type="button" className="hd-choice" onClick={startTyping}>
               <span className="hd-cursor" aria-hidden />
@@ -77,7 +77,7 @@ export function NamePrompt({ ask, rom, accountName, look, onAnswer }: Props) {
           </div>
           <div className="hd-box dialog name-check-line" style={tiles(0, 11, 20, 7)}>
             <Corners />
-            <p>It says here your name is <strong>{offered}</strong>. Is that right?</p>
+            <p><span>It says here your name is <strong>{offered}</strong>. Is that right?</span></p>
           </div>
         </div>
       </div>

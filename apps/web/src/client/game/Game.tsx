@@ -66,6 +66,7 @@ import { StartScreen } from "./StartScreen.tsx";
 import { IntroStage } from "./IntroStage.tsx";
 import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
 import { Starter, type StartChoice } from "./onboarding.ts";
+import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
 import { buildCatalogue, dexFlags, type DexProgress } from "../dex/catalogue.ts";
@@ -211,6 +212,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const hdTextOnRef = useRef(hdTextOn);
   /** The text on screen, while the HD text layer can show it. */
   const [hdText, setHdText] = useState<ScreenText | null>(null);
+  /** The message box's lines when more than the game's two are read at once (DialogJoiner). */
+  const [dialogLines, setDialogLines] = useState<string[] | null>(null);
   const look = useMemo(() => uiLook(), []);
   /** The signed-in player (their name is the one Oak checks, and kept the same as theirs). */
   const [account, setAccount] = useState<Account | null>(null);
@@ -366,6 +369,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       const textDecoder = new ScreenTextDecoder(glyphs);
       const introImage = new ImageData(SCREEN_WIDTH, STAGE_HEIGHT);
       let shownText = "";
+      const joiner = new DialogJoiner();
       /** Battles are drawn in HD once the renderer is up; until then the screen shows them. */
       let hd = false;
       let battles: BattleTracker | null = null;
@@ -456,10 +460,14 @@ export function Game({ rom, romKey, header, onForget }: Props) {
             introCanvas.current.getContext("2d")!.putImageData(introImage, 0, 0);
           }
           const fits = hdTextOnRef.current && (intro ? introTextFits(text) : hdTextFits(text, state.mode, inWorld));
-          const key = fits ? textKey(text) : "";
+          // Whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
+          const joined = fits ? joiner.frame(text) : { lines: null, press: false };
+          if (joined.press) host?.tap(Button.A);
+          const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}` : "";
           if (key !== shownText) {
             shownText = key;
             setHdText(fits ? text : null);
+            setDialogLines(joined.lines);
           }
           const scene = sceneRef.current;
           const onboard = start !== null;
@@ -694,6 +702,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       delete window.__pokehd;
       sceneRef.current = { mode: "overworld", inWorld: false, hdText: false };
       setHdText(null);
+      setDialogLines(null);
       setBattleHud(null);
       setLayout("full");
       setNoHd(false);
@@ -812,7 +821,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         data-layout={noHd ? "full" : layout}
       />
       {onboarding?.phase === "intro" && !noHd && <IntroStage ref={introCanvas} />}
-      {hdText && !noHd && hdTextOn && !nameAsk && <TextOverlay text={hdText} actions={textActions} look={look} />}
+      {hdText && !noHd && hdTextOn && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} actions={textActions} look={look} />}
       {/* Everything that isn't the game sits behind one button (the menu), in the HD panels' look. */}
       <button
         type="button"
