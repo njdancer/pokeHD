@@ -39,6 +39,14 @@ export function hdTextFits(text: ScreenText | null, mode: OverworldMode, inWorld
   );
 }
 
+/**
+ * During Oak's HD introduction (before the world): the message box and any boxes, with nothing
+ * outside them (the name list stays hidden under the page's own name question).
+ */
+export function introTextFits(text: ScreenText | null): boolean {
+  return text !== null && text.shown && text.boxes.length > 0 && text.loose.length === 0 && !text.pictures;
+}
+
 /** A cheap fingerprint, so React only re-renders when the text on screen changes. */
 export function textKey(text: ScreenText): string {
   if (!text.shown) return "";

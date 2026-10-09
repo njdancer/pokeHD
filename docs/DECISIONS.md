@@ -472,3 +472,43 @@ phone and fits the warm Diorama/golden-hour tones.
 
 Alternatives: Lantern (serif on dark navy glass with gold lines, the classic HD-2D panel; harder
 for a beginner to read) and Game Boy letters (the ROM's own pixel font on a light panel).
+
+## D32. Tap-first UI: the page's own start, names and buttons; the game still runs every screen
+
+Nick asked on 2026-10-09 for the start of the game not to feel like an emulator, for real
+keyboards and real buttons, and for Oak to check the name Nick already invited the player with.
+Everything works by pressing the game's own buttons for the player, the way D25's erase question
+does, so the game's code still runs every screen (`Controls` in `packages/emu`):
+
+- **Start screen.** Instead of the title screen and CONTINUE / NEW GAME, the page shows its own
+  panel over Pallet Town in HD: Continue (with the save's badges, catches and play time), or
+  start a new adventure. The page then presses START and picks the choice in the game's menu,
+  unseen (`Starter`, `onboarding.ts`). A resume point still skips all of it.
+- **Oak in HD.** Until the world loads, the HD text layer draws the introduction's words, and
+  the pictures (Oak, the Nidorino, the player, the rival) are lifted off the Game Boy screen,
+  background cleared, and stood crisp over the HD world.
+- **Names on the device's keyboard.** When the intro asks a name, or the naming screen opens for
+  a nickname, the page asks instead with a text field (the game's suggestions as chips). The
+  answer goes in through the naming screen: the letters are written into its buffer, what typing
+  them would leave there, and START submits them, so only names the Game Boy keyboard could type
+  are allowed (its letters and symbols, 7 for people, 10 for Pokémon).
+- **Oak checks the invited name.** A signed-in player hears "It says here your name is NICK. Is
+  that right?" and can keep it or change it. A change also renames their player (`PATCH
+  /api/me`), so friends see the same name; names stay unique, and a taken one is said so.
+- **Real buttons.** Every HD menu choice is a button: a tap moves the game's cursor there (one
+  Up or Down at a time, watching wCurrentMenuItem) and presses A. A tapped message presses A, ×
+  presses B, and lists and quantities get arrow and −/+ buttons. On touch devices the D-pad is
+  for the world only: it hides while anything with its own buttons is open. Keys and gamepads
+  still move the cursor as before.
+- **Classic.** Turning "HD words and menus" off in Settings, or `?classic`, brings back the
+  game's own title and naming screens.
+
+The panels' look (Storybook with corner balls, the Game Boy frame in HD, or chunky candy
+buttons; `/dev/ui`) waits for Nick's pick; Storybook with corner balls is the default meanwhile.
+Made while Nick was away; flagged for his review.
+
+Why: a child on a phone shouldn't meet a Game Boy menu driven by a D-pad before anything else,
+and pressing the game's buttons for them keeps every rule of the original game in place.
+
+Alternative: patching the ROM's intro text and menus (level 3 state injection). More control,
+but every screen would be ours to keep right.

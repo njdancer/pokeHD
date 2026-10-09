@@ -180,6 +180,18 @@ export const ALLOWLIST: readonly string[] = [
   "wObtainedBadges",
   "wPlayTimeHours",
   "wPlayTimeMinutes",
+  // Tap-first UI: the intro's name questions and the naming screen, answered from the page
+  "ChoosePlayerName",
+  "ChooseRivalName",
+  "DefaultNamesPlayerList",
+  "DefaultNamesRivalList",
+  "DisplayNamingScreen",
+  "DisplayNamingScreen.inputLoop",
+  "DisplayNamingScreen.submitNickname",
+  "wCurPartySpecies",
+  "wNamingScreenType",
+  "wRivalName",
+  "wStringBuffer",
   // The HD Pokédex (p2-dex): where the game opens and leaves its own, and the data it shows
   "BaseStats",
   "CompressedMap",

@@ -1,6 +1,7 @@
 // Messages between EmulatorHost (main thread) and the emulator Web Worker.
 import type { Gift, LinkMessage } from "@pokehd/protocol";
 import type { GiftEvent } from "./gifts/desk.ts";
+import type { NameAsk } from "./controls.ts";
 import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { DexOpened } from "./dex-guard.ts";
 import type { LinkRole } from "./link.ts";
@@ -11,11 +12,18 @@ export type Watch = readonly [address: number, length: number];
 export type ToWorker =
   /** `resume` is a resume point to start from, used only if it holds exactly `sram` as its save. */
   /** `guardErase` turns on EraseGuard: the page answers the "older file will be erased" question. */
+  /** `askNames` has the page answer name questions (Controls) instead of the game's own screens. */
   /** `guardDex` turns on DexGuard: the page shows its own Pokédex over the game's. */
-  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean }
+  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean }
   /** Switches pacing to the audio clock; the port talks to the audio worklet. */
   | { type: "audio"; port: MessagePort }
   | { type: "buttons"; mask: number }
+  /** Taps buttons once for the player (a tapped dialog, a menu's back button). */
+  | { type: "tap"; mask: number }
+  /** Moves the open menu's cursor to an item, then presses A if `press` (a tapped choice). */
+  | { type: "select"; item: number; press: boolean }
+  /** The page's answer to a name question, encoded for the game; null for the game's own screen. */
+  | { type: "name-answer"; name: Uint8Array | null }
   | { type: "watch"; watches: Record<string, Watch> }
   | { type: "pause"; paused: boolean }
   | { type: "save-state"; id: number }
@@ -66,6 +74,10 @@ export type FromWorker =
   | { type: "erase-prompt" }
   /** The erase question was answered. */
   | { type: "erase-answered"; erase: boolean }
+  /** The game asks for a name (Controls): the page answers with "name-answer". */
+  | { type: "name-ask"; ask: NameAsk }
+  /** The page's name is in: the naming screen has submitted it. */
+  | { type: "name-done" }
   /** The game opened its Pokédex (DexGuard). */
   | { type: "dex-open"; opened: DexOpened }
   /** The game has left its Pokédex. */

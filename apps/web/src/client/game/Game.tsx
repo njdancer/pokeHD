@@ -1,13 +1,16 @@
 // The game page: the player's ROM running in the emulator, its overworld state decoded every
 // frame and rendered as the live HD world, with its text boxes and menus re-typeset over it
 // (p2-text), battles staged in HD (p2-battles), and the Game Boy's own screen beside it for the
-// rest (p1-play). URL options: ?stats shows frame rate and decoded state; in dev,
+// rest (p1-play). Tap-first: the page's own start screen, Oak's introduction in HD, names typed on
+// the device's keyboard, and menus with real buttons. URL options: ?stats shows frame rate and
+// decoded state; ?classic keeps the game's own title and naming screens; in dev,
 // ?fixture=battle-wild starts from a recorded state (tools/record-battles.ts).
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BATTLE_WATCHES,
   Button,
   EmulatorHost,
+  type NameAsk,
   OVERWORLD_WATCHES,
   saveSummary,
   type SaveSummary,
@@ -25,7 +28,7 @@ import {
 } from "@pokehd/emu";
 import { createEngine, type Engine } from "@pokehd/engine";
 import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
-import { decodeText, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
+import { decodeText, encodeName, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
 import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../input/index.ts";
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { cloudBackup } from "../saves/cloud-save.ts";
@@ -43,7 +46,7 @@ import {
   storeResumePoint,
   uploadResumePoint,
 } from "../saves/resume-store.ts";
-import { me } from "../room/account.ts";
+import { me, setMyName, type Account } from "../room/account.ts";
 import { Friends } from "../room/Friends.tsx";
 import { RoomClient, type Friend, type RoomStatus } from "../room/client.ts";
 import { RoomLink } from "../room/link.ts";
@@ -56,8 +59,14 @@ import { inWorldTracker, screenLayout, type BattleScene, type ScreenLayout } fro
 import { BattleTracker, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
-import { TextOverlay } from "./TextOverlay.tsx";
-import { hdTextFits, loadHdTextOn, saveHdTextOn, textKey } from "./hd-text.ts";
+import { TextOverlay, type TextActions } from "./TextOverlay.tsx";
+import { hdTextFits, introTextFits, loadHdTextOn, saveHdTextOn, textKey } from "./hd-text.ts";
+import { NamePrompt } from "./NamePrompt.tsx";
+import { StartScreen } from "./StartScreen.tsx";
+import { IntroStage } from "./IntroStage.tsx";
+import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
+import { Starter, type StartChoice } from "./onboarding.ts";
+import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
 import { buildCatalogue, dexFlags, type DexProgress } from "../dex/catalogue.ts";
 import { DexJournal } from "../dex/journal.ts";
@@ -65,6 +74,10 @@ import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
+/** Dev: ?render=0 skips the 3D renderer (the page and its UI without a GPU, e.g. headless checks). */
+const noRender = import.meta.env.DEV && new URLSearchParams(location.search).get("render") === "0";
+/** ?classic: the game's own title screen and naming screens, as on the Game Boy (scripted play-throughs use it). */
+const classic = new URLSearchParams(location.search).has("classic");
 
 declare global {
   interface Window {
@@ -85,6 +98,30 @@ interface SlowFrame {
   fade: number | null;
   layout: string;
 }
+
+/**
+ * Behind the start screen and Oak's introduction: Pallet Town in HD, the player at their front
+ * door, until the game's own world loads.
+ */
+const TITLE_BACKDROP: OverworldState = {
+  mode: "overworld",
+  mapId: 0,
+  lastMap: 0,
+  player: { x: 5, y: 6, facing: "down", step: null, animFrame: 0, transport: "walk" },
+  npcs: [],
+  fade: 0,
+  palettes: { bgp: 0xe4, obp0: 0xd0, obp1: 0xe0 },
+};
+
+/** Where the TextOverlay's buttons go: the game's buttons, pressed the game's own way. */
+const PRESS: Record<Parameters<TextActions["press"]>[0], number> = { A: Button.A, B: Button.B, Up: Button.Up, Down: Button.Down };
+
+/**
+ * The page's own start (tap-first UI): `choose` while the start screen waits for the player,
+ * `starting` while the page presses the game's buttons for the choice, `intro` while Oak's
+ * introduction plays in HD; null in the world, or when the game's own screens show instead.
+ */
+type Onboarding = { phase: "choose" } | { phase: "starting"; choice: StartChoice } | { phase: "intro" } | null;
 
 /** How often a resume point is taken while playing (also whenever the page is hidden). */
 const RESUME_POINT_MS = 60_000;
@@ -172,10 +209,25 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const hdTextOnRef = useRef(hdTextOn);
   /** The text on screen, while the HD text layer can show it. */
   const [hdText, setHdText] = useState<ScreenText | null>(null);
+  const look = useMemo(() => uiLook(), []);
+  /** The signed-in player (their name is the one Oak checks, and kept the same as theirs). */
+  const [account, setAccount] = useState<Account | null>(null);
+  /** The game is asking for a name: the page asks instead (tap-first UI). */
+  const [nameAsk, setNameAsk] = useState<NameAsk | null>(null);
+  const [onboarding, setOnboardingState] = useState<Onboarding>(null);
+  const onboardingRef = useRef<Onboarding>(null);
+  const setOnboarding = (next: Onboarding) => {
+    onboardingRef.current = next;
+    setOnboardingState(next);
+  };
+  const starterRef = useRef<Starter | null>(null);
+  /** The save the start screen offers to continue. */
+  const [startSave, setStartSave] = useState<SaveSummary | null>(null);
+  const introCanvas = useRef<HTMLCanvasElement>(null);
   // Bumped by a .sav import: restarts the emulator on the imported save.
   const [boot, setBoot] = useState(0);
   // The latest mode and map flag, so the layout can be recomputed when the player toggles pip.
-  const sceneRef = useRef<{ mode: OverworldState["mode"]; inWorld: boolean; hdText: boolean; battle?: BattleScene }>({ mode: "overworld", inWorld: false, hdText: false });
+  const sceneRef = useRef<{ mode: OverworldState["mode"]; inWorld: boolean; hdText: boolean; battle?: BattleScene; onboarding?: boolean }>({ mode: "overworld", inWorld: false, hdText: false });
   /** The HD Pokédex (p2-dex): its look, and while it's up what it shows. */
   const [dexLook, setDexLook] = useState<DexSetting>(loadDexLook);
   const dexLookRef = useRef(dexLook);
@@ -214,8 +266,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     pipRef.current = !pipRef.current;
     savePip(pipRef.current);
     setPip(pipRef.current);
-    const { mode, inWorld, hdText, battle } = sceneRef.current;
-    setLayout(screenLayout(mode, inWorld, pipRef.current, hdText, battle));
+    const { mode, inWorld, hdText, battle, onboarding } = sceneRef.current;
+    setLayout(screenLayout(mode, inWorld, pipRef.current, hdText, battle, onboarding));
   };
 
   useEffect(() => {
@@ -287,6 +339,10 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       const recorded = fixture ? await fetch(`/__dev/fixture/${fixture}.state`).then((r) => (r.ok ? r.arrayBuffer() : null)) : null;
       const resume = recorded ? new Uint8Array(recorded) : (resumePoint?.state ?? null);
       if (disposed) return;
+      // The page's own start screen, unless the game's own screens are wanted (HD words off).
+      const custom = hdTextOnRef.current && !recorded && !classic;
+      if (custom && !resume) setOnboarding({ phase: "choose" });
+      setStartSave(slot.sram ? saveSummary(slot.sram) : null);
       if (!restored) void cloudBackup(romKey).status().then((s) => !disposed && setCloudNewer(s.kind === "newer"), () => {});
 
       // The emulator starts at once; the HD view joins when the renderer is ready.
@@ -294,6 +350,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       const image = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
       const decoder = new OverworldDecoder();
       const textDecoder = new ScreenTextDecoder(glyphs);
+      const introImage = new ImageData(SCREEN_WIDTH, STAGE_HEIGHT);
       let shownText = "";
       /** Battles are drawn in HD once the renderer is up; until then the screen shows them. */
       let hd = false;
@@ -327,14 +384,17 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           });
         },
         onEraseAnswered: () => setErasing(null),
-        onFrame: ({ pixels, watched }) => {
+        ...(custom ? { onNameAsk: (ask: NameAsk) => setNameAsk(ask) } : {}),
+        onFrame: ({ pixels, watched, count }) => {
           image.data.set(new Uint8Array(pixels));
           emuFrames++;
           const bytes = watched as OverworldWatched;
           const state = decoder.decode(bytes);
           const inWorld = trackInWorld(bytes);
-          // Before the first map loads (title, intro) the state is meaningless; the HD view waits.
+          // Before the first map loads (title, intro) the state is meaningless; the HD view waits,
+          // or shows Pallet Town behind the page's own start.
           if (inWorld) live!.push(state, performance.now() / 1000);
+          else if (onboardingRef.current) live!.push(TITLE_BACKDROP, performance.now() / 1000);
           latest = state;
           if (inWorld && state.mapId !== lastMap && journal) {
             lastMap = state.mapId;
@@ -365,16 +425,33 @@ export function Game({ rom, romKey, header, onForget }: Props) {
               for (const line of d.lines) if (line && talking.lines.at(-1) !== line && !talking.lines.includes(line)) talking.lines.push(line);
             }
           }
-          const fits = hdTextOnRef.current && hdTextFits(text, state.mode, inWorld);
+          // The page's own start: press the game's buttons for the choice, then Oak in HD.
+          let start = onboardingRef.current;
+          const starter = starterRef.current;
+          if (starter && start?.phase === "starting") {
+            starter.frame(text, inWorld, count);
+            if (starter.done) {
+              starterRef.current = null;
+              setOnboarding((start = starter.choice === "new" && !inWorld ? { phase: "intro" } : null));
+            }
+          }
+          if (start && inWorld) setOnboarding((start = null));
+          const intro = start?.phase === "intro";
+          if (intro && introCanvas.current) {
+            liftPictures(new Uint8ClampedArray(pixels), introImage);
+            introCanvas.current.getContext("2d")!.putImageData(introImage, 0, 0);
+          }
+          const fits = hdTextOnRef.current && (intro ? introTextFits(text) : hdTextFits(text, state.mode, inWorld));
           const key = fits ? textKey(text) : "";
           if (key !== shownText) {
             shownText = key;
             setHdText(fits ? text : null);
           }
           const scene = sceneRef.current;
-          if (scene.mode !== state.mode || scene.inWorld !== inWorld || scene.hdText !== fits || scene.battle !== battle) {
-            sceneRef.current = { mode: state.mode, inWorld, hdText: fits, battle };
-            setLayout(screenLayout(state.mode, inWorld, pipRef.current, fits, battle));
+          const onboard = start !== null;
+          if (scene.mode !== state.mode || scene.inWorld !== inWorld || scene.hdText !== fits || scene.battle !== battle || scene.onboarding !== onboard) {
+            sceneRef.current = { mode: state.mode, inWorld, hdText: fits, battle, onboarding: onboard };
+            setLayout(screenLayout(state.mode, inWorld, pipRef.current, fits, battle, onboard));
           }
         },
         onError: (text) => setMessage(`Emulator error: ${text}`),
@@ -428,6 +505,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       };
       // A point the emulator turned down is stale (the save changed since) or damaged.
       if (resume && !started.resumed) void deleteResumePoint(romKey);
+      if (custom && resume && !started.resumed) setOnboarding({ phase: "choose" });
       if (started.resumed) {
         // Before the first frame: the worker says it's ready before it runs one.
         trackInWorld = inWorldTracker(true);
@@ -473,6 +551,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         (account) => {
           if (disposed) return;
           if (!account) return setRoom({ status: "signed-out", friends: [] });
+          setAccount(account);
           setAdmin(account.admin);
           const client = new RoomClient();
           roomClient = client;
@@ -555,6 +634,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         tick();
       }
 
+      if (noRender) return setMessage("");
       let created: Engine;
       try {
         created = await createEngine(canvas, { world: live });
@@ -608,6 +688,9 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       setSound(false);
       setResumed(false);
       setErasing(null);
+      setNameAsk(null);
+      starterRef.current = null;
+      setOnboarding(null);
       setDex(null);
     };
   }, [rom, romKey, boot, glyphs]);
@@ -653,6 +736,41 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     hostRef.current?.setAutosave(on);
   };
 
+  /** The TextOverlay's buttons: a tapped choice, or a button pressed the game's own way. */
+  const textActions = useMemo<TextActions>(
+    () => ({
+      select: (item) => hostRef.current?.select(item, true),
+      press: (button) => hostRef.current?.tap(PRESS[button]),
+    }),
+    [],
+  );
+
+  const start = (choice: StartChoice) => {
+    const host = hostRef.current;
+    if (!host || onboardingRef.current?.phase !== "choose") return;
+    starterRef.current = new Starter(choice, { tap: (m) => host.tap(m), select: (i, p) => host.select(i, p) });
+    setOnboarding({ phase: "starting", choice });
+  };
+
+  /** The page's answer to the game's name question; null hands the game's own screen back. */
+  const answerName = (name: string | null) => {
+    const ask = nameAsk;
+    setNameAsk(null);
+    hostRef.current?.answerName(name === null ? null : encodeName(name));
+    // The game's keyboard is on its screen: the HD introduction steps aside for it.
+    if (name === null && onboardingRef.current?.phase === "intro") setOnboarding(null);
+    // Oak's name and the player's name are one: a new one here renames the player.
+    if (ask?.kind === "player" && name && account && name !== account.player.name) {
+      void setMyName(name).then((result) => {
+        if ("error" in result) {
+          if (result.error === "name-taken") setMessage(`Another player is already called ${name}, so friends still see you as ${account.player.name}.`);
+          return;
+        }
+        setAccount(result);
+      });
+    }
+  };
+
   const chooseDexLook = (look: DexSetting) => {
     dexLookRef.current = look;
     saveDexLook(look);
@@ -677,7 +795,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         data-testid="gb-screen"
         data-layout={noHd ? "full" : layout}
       />
-      {hdText && !noHd && hdTextOn && <TextOverlay text={hdText} />}
+      {onboarding?.phase === "intro" && !noHd && !nameAsk && <IntroStage ref={introCanvas} />}
+      {hdText && !noHd && hdTextOn && <TextOverlay text={hdText} actions={textActions} look={look} />}
       <div className="game-hud">
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
         <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
@@ -762,7 +881,18 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       {gifts && <GiftNotices rom={rom} courier={gifts} />}
       {battleHud && !noHd && layout === "battle" && <BattleHud state={battleHud.state} huds={battleHud.huds} />}
       {/* The pad hides while Settings is open so it can't cover the panel's forms (and unmounting releases any held button). */}
-      {input && touch && !settings && !dex && <TouchPad onChange={onTouch} />}
+      {/* The pad is for the world: anything with buttons of its own (HD menus, messages, the start and names) hides it. */}
+      {input && touch && !settings && !(hdText && hdTextOn && !noHd) && !nameAsk && !onboarding && !dex && <TouchPad onChange={onTouch} />}
+      {(onboarding?.phase === "choose" || onboarding?.phase === "starting") && (
+        <StartScreen
+          save={startSave}
+          accountName={account?.player.name ?? null}
+          look={look}
+          starting={onboarding.phase === "starting" ? onboarding.choice : null}
+          onStart={start}
+        />
+      )}
+      {nameAsk && <NamePrompt ask={nameAsk} rom={rom} accountName={account?.player.name ?? null} look={look} onAnswer={answerName} />}
       {dex && world && catalogue && dexLook !== "off" && (
         <Pokedex
           rom={rom}

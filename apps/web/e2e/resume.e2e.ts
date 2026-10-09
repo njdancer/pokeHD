@@ -12,7 +12,7 @@ test.use(PLAY_USE);
 test("a hidden tab resumes where it was after a reload", async ({ page }) => {
   test.setTimeout(10 * 60_000);
   const world = loadWorld();
-  await page.goto("/?stats");
+  await page.goto("/?stats&classic");
   const p = new Player(page, world);
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   await p.playIntro();
@@ -43,7 +43,7 @@ test("a hidden tab resumes where it was after a reload", async ({ page }) => {
 test("a save after the last resume point still resumes", async ({ page }) => {
   test.setTimeout(10 * 60_000);
   const world = loadWorld();
-  await page.goto("/?stats");
+  await page.goto("/?stats&classic");
   const p = new Player(page, world);
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   await p.playIntro();

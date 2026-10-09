@@ -1,0 +1,10 @@
+.ui-looks { padding: 16px; min-height: 100vh; box-sizing: border-box; background: #10141c; color: #e6edf3; font-family: system-ui, sans-serif; }
+.ui-looks-grid { display: grid; gap: 16px; max-width: 1500px; margin: 0 auto; }
+.ui-looks-grid h2 { margin: 0; font-size: 1rem; text-transform: capitalize; text-align: center; }
+.ui-looks-cell {
+  position: relative; aspect-ratio: 160 / 144; border-radius: 10px; overflow: hidden;
+  background: linear-gradient(#9fd3ff, #cfe9c4 60%, #8dbb72) center / cover;
+}
+.ui-looks-cell .hd-text { position: absolute; }
+.ui-looks-cell .hd-text-stage { inset: 4%; width: auto; height: auto; translate: none; aspect-ratio: auto; }
+.ui-looks-log { max-width: 1500px; margin: 16px auto 0; color: #8b949e; }

@@ -20,7 +20,7 @@ async function newPlayer(browser: Browser, baseURL: string | undefined, name: st
   const context = await browser.newContext({ ...PLAY_USE, baseURL });
   await signInWith(context.request, (await addFriend(context.request, name)).link);
   const page = await context.newPage();
-  await page.goto("/?stats");
+  await page.goto("/?stats&classic");
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   return { context, page };
 }

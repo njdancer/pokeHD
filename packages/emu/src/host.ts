@@ -1,6 +1,7 @@
 // Main-thread handle on an emulator running in a Web Worker.
 import { createAudioOutput } from "./audio.ts";
 import type { Gift, LinkMessage } from "@pokehd/protocol";
+import type { NameAsk } from "./controls.ts";
 import type { GiftEvent } from "./gifts/desk.ts";
 import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { DexOpened } from "./dex-guard.ts";
@@ -36,6 +37,14 @@ export interface EmulatorHostOptions {
   onErasePrompt?: () => void;
   /** The erase question was answered (by `answerErase()`). */
   onEraseAnswered?: (erase: boolean) => void;
+  /**
+   * The game asks for a name (the intro's player and rival, a nickname). Passing this has the
+   * page answer instead of the game's own screens: the player's buttons are held back until
+   * `answerName()` is called.
+   */
+  onNameAsk?: (ask: NameAsk) => void;
+  /** The answered name is in the game. */
+  onNameDone?: () => void;
   /**
    * The game opened its Pokédex (p2-dex). Passing this turns the guard on: the player's buttons
    * are held back until `closeDex()` is called, and the game then leaves its own.
@@ -110,6 +119,12 @@ export class EmulatorHost {
         case "erase-answered":
           options.onEraseAnswered?.(data.erase);
           break;
+        case "name-ask":
+          options.onNameAsk?.(data.ask);
+          break;
+        case "name-done":
+          options.onNameDone?.();
+          break;
         case "frame":
           options.onFrame?.(data);
           break;
@@ -151,8 +166,9 @@ export class EmulatorHost {
     const { rom, sram, resume } = options;
     // The page answers the erase question only if it's listening for it.
     const guardErase = !!options.onErasePrompt;
+    const askNames = !!options.onNameAsk;
     const guardDex = !!options.onDexOpen;
-    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase, guardDex });
+    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase, guardDex, askNames });
     if (options.autosave === false) this.setAutosave(false);
   }
 
@@ -217,6 +233,21 @@ export class EmulatorHost {
 
   setButtons(mask: number): void {
     this.#post({ type: "buttons", mask });
+  }
+
+  /** Taps buttons once for the player, the game's own way (a mask: `Button.A`, …). */
+  tap(mask: number): void {
+    this.#post({ type: "tap", mask });
+  }
+
+  /** Moves the open menu's cursor to `item` (its wCurrentMenuItem), then presses A if `press`. */
+  select(item: number, press = true): void {
+    this.#post({ type: "select", item, press });
+  }
+
+  /** Answers `onNameAsk` with a name (see `encodeName`), or null to use the game's own screen. */
+  answerName(name: Uint8Array | null): void {
+    this.#post({ type: "name-answer", name });
   }
 
   /** Memory ranges to read after every frame; their bytes arrive in `FrameMessage.watched`. */

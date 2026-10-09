@@ -5,6 +5,7 @@
 // never starves and video follows at the core's own ~59.73 Hz. Without audio (no user gesture
 // yet, or muted), a wall-clock timer runs frames at FRAME_RATE instead.
 import { AutoSave, loadResumePoint } from "./autosave.ts";
+import { Controls } from "./controls.ts";
 import { FRAME_RATE, GameBoy } from "./core.ts";
 import { DexGuard } from "./dex-guard.ts";
 import { EraseGuard } from "./erase-guard.ts";
@@ -34,12 +35,14 @@ let link: LinkPort | undefined;
 let desk: GiftDesk | undefined;
 let autosave: AutoSave | undefined;
 let guard: EraseGuard | undefined;
+let controls: Controls | undefined;
 let dex: DexGuard | undefined;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
 
 function runOneFrame() {
   if (!gb) return;
+  controls?.frame();
   guard?.frame();
   dex?.frame();
   gb.runFrame();
@@ -128,12 +131,19 @@ async function handle(data: ToWorker) {
         }) : undefined;
         const g = gb;
         const erase = guard;
+        const toGame = (mask: number) => (erase ? erase.setButtons(mask) : g.setButtons(mask));
         dex = data.guardDex ? new DexGuard(g, {
           rom: data.rom,
           onOpen: (opened) => post({ type: "dex-open", opened }),
           onClosed: () => post({ type: "dex-closed" }),
           onTalk: (map, npc) => post({ type: "talk", map, npc }),
-        }, (mask) => (erase ? erase.setButtons(mask) : g.setButtons(mask))) : undefined;
+        }, toGame) : undefined;
+        // The page's taps and the player's buttons go through the Pokédex, then the erase guard.
+        const next = dex;
+        controls = new Controls(gb, {
+          setButtons: (mask) => (next ? next.setButtons(mask) : toGame(mask)),
+          ...(data.askNames ? { names: { ask: (ask) => post({ type: "name-ask", ask }), done: () => post({ type: "name-done" }) } } : {}),
+        });
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();
         // Before the first frame, so the page knows how the game started before it sees one.
@@ -158,9 +168,16 @@ async function handle(data: ToWorker) {
         break;
       }
       case "buttons":
-        if (dex) dex.setButtons(data.mask);
-        else if (guard) guard.setButtons(data.mask);
-        else gb?.setButtons(data.mask);
+        controls?.setButtons(data.mask);
+        break;
+      case "tap":
+        controls?.tap(data.mask);
+        break;
+      case "select":
+        controls?.select(data.item, data.press);
+        break;
+      case "name-answer":
+        controls?.answerName(data.name);
         break;
       case "dex-close":
         dex?.close();
@@ -188,7 +205,7 @@ async function handle(data: ToWorker) {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.
         // Signed-in players always have a port open (RoomLink keeps one ready), so it's the
         // session that counts, not the port.
-        const g = gb && !link?.inSession && !guard?.asking && !dex?.open && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !dex?.open && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
         // Hand over any newer save first, so the stored save matches the one in the state.
         if (g?.sramDirty) flushSram();
         post({ type: "resume-point", id: data.id, state: g ? g.saveState() : null });

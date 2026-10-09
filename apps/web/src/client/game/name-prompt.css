@@ -1,0 +1,57 @@
+/* Names typed on the device (NamePrompt.tsx): a panel in the HD text look, near the top so a
+   phone's keyboard doesn't cover it. Sized in --tile like the text layer. */
+.name-prompt {
+  position: fixed; inset: 0; z-index: 6; display: flex; justify-content: center; align-items: flex-start;
+  padding: calc(env(safe-area-inset-top) + 7vh) 16px 16px; background: #1a10063d; backdrop-filter: blur(2px);
+}
+.name-panel {
+  --tile: clamp(15px, 4.6vw, 22px);
+  --hd-accent: #e0702a; --hd-pick: #f2b46a55; --hd-ink: #3e2a1c; --hd-edge: #d6a866;
+  --hd-ball-red: #e8473b; --hd-ball-ink: #2b2b33;
+  position: relative; box-sizing: border-box; width: min(100%, 30rem); padding: calc(var(--tile) * 1.2) calc(var(--tile) * 1.3) calc(var(--tile) * .8);
+  color: var(--hd-ink); font: 800 calc(var(--tile) * 1.1) / 1.35 Nunito, ui-rounded, system-ui, sans-serif;
+  border-radius: calc(var(--tile) * .7); background: linear-gradient(#fffaf0, #f7ead0);
+  border: calc(var(--tile) * .14) solid var(--hd-edge);
+  box-shadow: 0 calc(var(--tile) * .3) calc(var(--tile) * 1.2) #4a2a0a70, inset 0 0 0 calc(var(--tile) * .12) #fff8;
+  animation: hd-box-in .16s ease-out;
+}
+.name-panel .hd-corner.tl { left: 0; top: 0; }
+.name-panel .hd-corner.tr { left: 100%; top: 0; }
+.name-panel .hd-corner.bl { left: 0; top: 100%; }
+.name-panel .hd-corner.br { left: 100%; top: 100%; }
+.name-speaker { margin-bottom: calc(var(--tile) * .3); font-size: .75em; letter-spacing: .08em; color: var(--hd-accent); }
+.name-line { margin: 0 0 calc(var(--tile) * .8); }
+.name-line strong { color: var(--hd-accent); }
+.name-field { position: relative; }
+.name-field input {
+  box-sizing: border-box; width: 100%; padding: calc(var(--tile) * .5) calc(var(--tile) * 2.6) calc(var(--tile) * .5) calc(var(--tile) * .6);
+  font: inherit; font-size: max(16px, 1.15em); color: var(--hd-ink); background: #fff;
+  border: calc(var(--tile) * .12) solid var(--hd-edge); border-radius: calc(var(--tile) * .45); outline: none;
+}
+.name-field input:focus { border-color: var(--hd-accent); box-shadow: 0 0 0 calc(var(--tile) * .18) #e0702a33; }
+.name-field input[aria-invalid="true"] { border-color: #c2412f; }
+.name-count { position: absolute; right: calc(var(--tile) * .6); top: 50%; translate: 0 -50%; font-size: .7em; opacity: .55; }
+.name-problem { margin: calc(var(--tile) * .4) 0 0; font-size: .8em; color: #b23a26; }
+.name-suggestions { display: flex; flex-wrap: wrap; gap: calc(var(--tile) * .4); margin-top: calc(var(--tile) * .6); }
+.name-chip, .name-button, .name-gameboy { font: inherit; color: var(--hd-ink); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.name-chip {
+  min-height: 44px; padding: 0 calc(var(--tile) * .8); font-size: .85em;
+  background: #fff8ea; border: calc(var(--tile) * .1) solid #e2bd83; border-radius: 999px;
+}
+.name-actions { display: flex; flex-wrap: wrap; gap: calc(var(--tile) * .5); margin-top: calc(var(--tile) * .9); }
+.name-button {
+  flex: 1 1 auto; min-height: 48px; padding: 0 calc(var(--tile) * 1);
+  background: linear-gradient(#fffdf7, #f6e7c8); border: calc(var(--tile) * .1) solid #e2bd83; border-radius: calc(var(--tile) * .6);
+  box-shadow: 0 calc(var(--tile) * .16) 0 #d4a565;
+}
+.name-button.primary { color: #fff; background: linear-gradient(#f08a45, #d9642a); border-color: #b9521f; box-shadow: 0 calc(var(--tile) * .16) 0 #9c4318; }
+.name-button:active:not(:disabled) { translate: 0 calc(var(--tile) * .12); box-shadow: 0 calc(var(--tile) * .04) 0 #d4a565; }
+.name-button:disabled { opacity: .5; cursor: default; }
+.name-gameboy { display: block; margin: calc(var(--tile) * .8) auto 0; padding: calc(var(--tile) * .3); font-size: .65em; background: none; border: 0; opacity: .55; text-decoration: underline; }
+
+/* frame: white panel with the Game Boy's double line. */
+.name-prompt[data-look="frame"] .name-panel {
+  --hd-ink: #23263a; --hd-edge: #2f3550; border: 0; border-radius: calc(var(--tile) * .35); background: linear-gradient(#fff, #f1f2f6);
+  box-shadow: inset 0 0 0 calc(var(--tile) * .1) var(--hd-edge), inset 0 0 0 calc(var(--tile) * .24) #fff, inset 0 0 0 calc(var(--tile) * .42) var(--hd-edge), 0 calc(var(--tile) * .3) calc(var(--tile) * 1.2) #10142a70;
+}
+.name-prompt[data-look="candy"] .hd-corner { display: none; }
