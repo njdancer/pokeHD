@@ -70,7 +70,20 @@ export function shouldKeep(entries: StoredEntry[], reason: HistoryReason, sha1: 
  * Keeps a copy of `sram` if the policy says so, and sends it to the cloud. Saves without a
  * valid game in them (a blank cartridge) are never kept.
  */
-export async function keepSave(key: string, sram: Uint8Array, reason: HistoryReason, f: Fetch = fetch): Promise<boolean> {
+export function keepSave(key: string, sram: Uint8Array, reason: HistoryReason, f: Fetch = fetch): Promise<boolean> {
+  // Each keep reads the list and writes it back, so two at once (a periodic copy still storing
+  // while a new game saves over it) would drop one. They take turns per key instead.
+  const next = (keeping.get(key) ?? Promise.resolve()).then(() => keepNow(key, sram, reason, f));
+  const settled = next.catch(() => {});
+  keeping.set(key, settled);
+  void settled.then(() => {
+    if (keeping.get(key) === settled) keeping.delete(key);
+  });
+  return next;
+}
+const keeping = new Map<string, Promise<unknown>>();
+
+async function keepNow(key: string, sram: Uint8Array, reason: HistoryReason, f: Fetch): Promise<boolean> {
   if (!saveSummary(sram)) return false;
   const sha1 = await sha1Hex(sram);
   const now = Date.now();
