@@ -503,8 +503,8 @@ does, so the game's code still runs every screen (`Controls` in `packages/emu`):
 - **Classic.** Turning "HD words and menus" off in Settings, or `?classic`, brings back the
   game's own title and naming screens.
 
-The panels' look (Storybook with corner balls, the Game Boy frame in HD, or chunky candy
-buttons; `/dev/ui`) waits for Nick's pick; Storybook with corner balls is the default meanwhile.
+The panels' look is Storybook with corner pokéballs (Nick's pick, 2026-10-09, over the Game Boy
+frame in HD and chunky candy buttons; all three stay on `/dev/ui` and `?look=`).
 Made while Nick was away; flagged for his review.
 
 Why: a child on a phone shouldn't meet a Game Boy menu driven by a D-pad before anything else,
