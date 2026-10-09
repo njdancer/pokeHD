@@ -33,4 +33,19 @@ describe("DialogJoiner", () => {
     const m = new DialogJoiner();
     expect(m.frame(screen(["Which will", "you take"], "waiting", true))).toEqual({ lines: null, press: false });
   });
+
+  it("never carries lines into the next message", () => {
+    const j = new DialogJoiner();
+    expect(j.frame(screen(["Hi NICK!", "JACK is out at"], "waiting")).press).toBe(true);
+    j.frame(screen(["JACK is out at", "Grandpa's lab."], "waiting"));
+    // The box closes while the HD layer isn't showing it, then someone else speaks.
+    j.reset();
+    expect(j.frame(screen(["You know PROF.", "OAK, right?"], "waiting"))).toEqual({ lines: null, press: false });
+    // Even without a reset, a page that doesn't carry on from the last starts afresh.
+    const k = new DialogJoiner();
+    k.frame(screen(["Hi NICK!", "JACK is out at"], "waiting"));
+    k.frame(screen(["JACK is out at", "Grandpa's lab."], "printing"));
+    expect(k.frame(screen(["JACK is out at", "Grandpa's lab."], "waiting")).lines).toEqual(["Hi NICK!", "JACK is out at", "Grandpa's lab."]);
+    expect(k.frame(screen(["Hey! You came from", "PALLET TOWN?"], "waiting"))).toEqual({ lines: null, press: false });
+  });
 });
