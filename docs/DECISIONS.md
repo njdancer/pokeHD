@@ -512,3 +512,13 @@ and pressing the game's buttons for them keeps every rule of the original game i
 
 Alternative: patching the ROM's intro text and menus (level 3 state injection). More control,
 but every screen would be ours to keep right.
+
+## D33. Render at a whole fraction of the screen's pixel ratio
+
+Nick, 2026-10-09: a 3× screen shouldn't get a 2× render, but a 1.5× one, so rendered pixels line
+up with screen pixels. The engine now takes the largest whole fraction of `devicePixelRatio`
+within `render.maxPixelRatio` (3 → 1.5, 2 → 2, 2.625 → 1.3125) and scales the canvas up with
+`image-rendering: pixelated` when each rendered pixel is a whole block of screen pixels. On an
+iPhone that's 2×2 blocks, no resampling blur, and 44% fewer pixels to shade. Dynamic
+resolution's finer rungs stay fractional (whole-fraction steps would be 1.5 → 1 → 0.75, cuts of
+over 40% each) and keep smooth scaling. See docs/PERF.md, "Pixel ratio".

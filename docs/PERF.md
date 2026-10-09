@@ -44,8 +44,8 @@ Post-processing scales with pixels: 75% render size takes the shipped frame from
 
 ## Why the iPhone 13 Pro struggles (estimate)
 
-Not measured on the phone yet; this scales the Mac numbers. The phone draws 780×1688 (its 3×
-screen capped at 2×), 36% of 1440p's pixels. Its 5-core A15 GPU has roughly an eighth of the M1
+Not measured on the phone yet; this scales the Mac numbers. The phone drew 780×1688 (its 3×
+screen capped at 2×), 36% of 1440p's pixels. It now draws 585×1266 (see "Pixel ratio" below). Its 5-core A15 GPU has roughly an eighth of the M1
 Max's compute and a twelfth of its memory bandwidth, so take 8–10× per unit of work.
 
 | | M1 Max at phone size | iPhone 13 Pro estimate |
@@ -56,6 +56,17 @@ Max's compute and a twelfth of its memory bandwidth, so take 8–10× per unit o
 
 That's at full clocks. Phones throttle the GPU within minutes of sustained load, which puts it at
 roughly 40–45 fps: under the 16.7 ms a 60 Hz frame allows, which matches what Nick saw.
+
+## Pixel ratio
+
+The render pixel ratio is the largest whole fraction of the screen's own ratio within the cap
+(`alignedPixelRatio`, `packages/engine/src/look/quality.ts`). A 3× iPhone used to render at 2×,
+so each rendered pixel covered 1.5 screen pixels and the browser had to blur the image to fit.
+It now renders at 1.5×: each rendered pixel is exactly 2×2 screen pixels, scaled up with
+`image-rendering: pixelated`, and the frame has 44% fewer pixels (585×1266 instead of 780×1688),
+which takes roughly that much off the per-pixel post-processing estimate above. 2× and 1× screens
+are unchanged. Dynamic resolution's lower rungs (90%, 80%, ...) aren't whole fractions, so they
+keep the browser's smooth scaling.
 
 ## Main-thread CPU per frame
 
