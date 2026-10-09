@@ -18,10 +18,10 @@ test("Oak's speech, a whole message at a time", async ({ page }) => {
   const prompt = page.getByTestId("name-prompt");
   const seen: string[] = [];
   for (let i = 0; i < 200 && !(await prompt.isVisible()); i++) {
-    if (await box.count()) {
-      const lines = await box.locator(".hd-line").allInnerTexts();
-      const text = lines.join(" / ");
-      if (text && seen.at(-1) !== text) {
+    const text = (await box.count()) ? (await box.locator(".hd-line").allInnerTexts()).join(" / ") : "";
+    // A box whose lines haven't drawn yet isn't tapped: it would be read on unseen.
+    if (text) {
+      if (seen.at(-1) !== text) {
         seen.push(text);
         if (seen.length <= 3) await page.screenshot({ path: `test-results/whole-${seen.length}.png` });
       }
