@@ -136,4 +136,40 @@ describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
     expect(ended).toEqual([id]);
     expect(gb.read(SYMBOLS.wStatusFlags5.address) & 0x40).toBe(0);
   });
+
+  it("leaves the game's yes/no menu up after a question it stood in for", { timeout: 60_000 }, async () => {
+    const rom = new Uint8Array(readFileSync(ROM_PATH));
+    const gb = await GameBoy.create({ rom, wasmBinary: readFileSync(WASM_PATH) });
+    const messages: ScriptMessage[] = [];
+    const controls = new Controls(gb, {
+      setButtons: (m) => gb.setButtons(m),
+      script: { message: (m) => messages.push(m), end: () => {}, press: () => {} },
+    });
+    playIntro(gb);
+    controls.setScriptText(rom);
+    const run = (frames: number) => {
+      for (let i = 0; i < frames; i++) {
+        controls.frame();
+        gb.runFrame();
+      }
+    };
+    let menus = 0;
+    gb.addHook("HandleMenuInput", () => menus++);
+    controls.tap(Button.Start);
+    run(30);
+    // POKéMON, ITEM, the player, SAVE: no Pokédex yet.
+    controls.select(3, true);
+    for (let i = 0; i < 300 && messages.length === 0; i++) run(1);
+    expect(messageBoxes(messages[0]!.message).flat().join(" ")).toMatch(/SAVE the game\?/);
+    menus = 0;
+    // One box: the page reads on at once, as Game.tsx does.
+    controls.readOn(messages[0]!.id);
+    run(60);
+    // The question is in the game's box and its YES/NO menu takes input.
+    expect(boxRow(gb, 14)).toBe(messages[0]!.message.pages[0]!.lines[0]);
+    expect(menus).toBeGreaterThan(0);
+    controls.select(0, true);
+    for (let i = 0; i < 600 && messages.length === 1; i++) run(1);
+    expect(messageBoxes(messages[1]!.message).flat().join(" ")).toMatch(/saved the game/);
+  });
 });
