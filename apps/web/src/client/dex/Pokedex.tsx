@@ -62,14 +62,15 @@ function DeviceDex({ rom, world, catalogue, progress, openOn, tab, closeSignal, 
       if (disposed) return;
       let size = { w: 0, h: 0 };
       device = await createDexDevice(canvasRef.current!, {
-        onScreen(quad, open) {
+        model: "/models/pokedex.glb",
+        onScreen(quad, open, settled) {
           const el = screenRef.current;
           if (!el) return;
-          // Sized to the screen once it's square to the camera (open), so the page lays out once
-          // and its text is drawn at its real size.
+          // Sized to the screen once it's square to the camera and as close as it comes (settled),
+          // so the page lays out once and its text is drawn at its real size.
           const w = Math.round(Math.hypot(quad[1]![0] - quad[0]![0], quad[1]![1] - quad[0]![1]));
           const h = Math.round(Math.hypot(quad[3]![0] - quad[0]![0], quad[3]![1] - quad[0]![1]));
-          if (!size.w || open === 1) {
+          if (!size.w || settled) {
             if (w !== size.w || h !== size.h) {
               size = { w, h };
               el.style.width = `${w}px`;
