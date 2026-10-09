@@ -6,7 +6,9 @@ import {
   dexPicture,
   readGlyphs,
   readSgbPalettes,
+  romOffset,
   SGB_PAL,
+  SYMBOLS,
   townMap,
   type Glyph,
   type Pic,
@@ -105,6 +107,14 @@ function glyphs(rom: Uint8Array): Map<string, Glyph> {
   if (!map) {
     map = new Map();
     for (const g of readGlyphs(rom)) if (!map.has(g.char)) map.set(g.char, g);
+    // The feet and inches marks live with the game's Pokédex tiles (its $60 and $61), not the font.
+    const marks = romOffset(SYMBOLS.PokedexTileGraphics);
+    ["′", "″"].forEach((char, i) => map!.set(char, { code: 0x60 + i, char, tile: rom.slice(marks + i * 16, marks + i * 16 + 16) }));
+    // The font has no left arrow (the dex's Back and Previous): the right one, mirrored.
+    const right = map.get("▶");
+    if (right) map.set("◀", { ...right, char: "◀", tile: right.tile.map((b) => parseInt(b.toString(2).padStart(8, "0").split("").reverse().join(""), 2)) });
+    const times = map.get("×");
+    if (times) map.set("✕", { ...times, char: "✕" });
     glyphCache.set(rom, map);
   }
   return map;

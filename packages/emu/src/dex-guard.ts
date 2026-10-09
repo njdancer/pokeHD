@@ -19,7 +19,12 @@ export interface DexGuardOptions {
    * its objects. For the Pokédex's people (p2-dex).
    */
   onTalk?(map: number, npc: number): void;
+  /** The player beat a trainer on the map: the map and their index in its objects. */
+  onBeat?(map: number, npc: number): void;
 }
+
+/** `ld a, TRAINER_EVENT_FLAG_POINTER`: EndTrainerBattle past its check for a lost battle. */
+const LD_A = 0x3e;
 
 /** `pop af` straight after the data page's wait for A or B (its `jr z, .waitForButtonPress`). */
 const POP_AF = 0xf1;
@@ -30,7 +35,11 @@ export function dexHooks(rom: Uint8Array) {
   // call JoypadLowSensitivity (3), ldh a, [hJoy5] (2), and PAD_A | PAD_B (2), jr z (2).
   const dataLeft = { bank: wait.bank, address: wait.address + 9 };
   if (rom[romOffset(dataLeft)] !== POP_AF) throw new Error("No Pokédex data page wait where expected");
-  return { menu: SYMBOLS.ShowPokedexMenu, menuLeft: SYMBOLS["ShowPokedexMenu.exitPokedex"], data: SYMBOLS.ShowPokedexData, dataLeft };
+  // ld hl (3), set (2), set (2), ld hl (3), res (2), ld hl (3), res (2), ld a, [wIsInBattle] (3),
+  // cp LOST_BATTLE (2), jp z (3): the trainer's flag is set from here on, so the player won.
+  const won = { bank: SYMBOLS.EndTrainerBattle.bank, address: SYMBOLS.EndTrainerBattle.address + 25 };
+  if (rom[romOffset(won)] !== LD_A) throw new Error("No trainer win where expected");
+  return { menu: SYMBOLS.ShowPokedexMenu, menuLeft: SYMBOLS["ShowPokedexMenu.exitPokedex"], data: SYMBOLS.ShowPokedexData, dataLeft, won };
 }
 
 export class DexGuard {
@@ -46,7 +55,7 @@ export class DexGuard {
   constructor(gb: GameBoy, options: DexGuardOptions, next: (mask: number) => void = (m) => gb.setButtons(m)) {
     this.#gb = gb;
     this.#next = next;
-    const { menu, menuLeft, data, dataLeft } = dexHooks(options.rom);
+    const { menu, menuLeft, data, dataLeft, won } = dexHooks(options.rom);
     const open = (opened: DexOpened) => {
       this.#open = true;
       this.#closing = false;
@@ -74,6 +83,16 @@ export class DexGuard {
         gb.addHook("DisplayTextID", (g) => {
           const id = g.read(SYMBOLS.hSpriteIndex.address);
           if (id >= 1 && id <= g.read(SYMBOLS.wNumSprites.address)) talk(g.read(SYMBOLS.wCurMap.address), id - 1);
+        }),
+      );
+    }
+    // wSpriteIndex is the trainer's sprite slot, as when they spoke.
+    const beat = options.onBeat;
+    if (beat) {
+      this.#removeHooks.push(
+        gb.addHook(won, (g) => {
+          const id = g.read(SYMBOLS.wSpriteIndex.address);
+          if (id >= 1) beat(g.read(SYMBOLS.wCurMap.address), id - 1);
         }),
       );
     }

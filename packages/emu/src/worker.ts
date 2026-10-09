@@ -137,6 +137,7 @@ async function handle(data: ToWorker) {
           onOpen: (opened) => post({ type: "dex-open", opened }),
           onClosed: () => post({ type: "dex-closed" }),
           onTalk: (map, npc) => post({ type: "talk", map, npc }),
+          onBeat: (map, npc) => post({ type: "beat", map, npc }),
         }, toGame) : undefined;
         // The page's taps and the player's buttons go through the Pokédex, then the erase guard.
         const next = dex;

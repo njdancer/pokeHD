@@ -82,7 +82,7 @@ export function DexBook({ rom, world, catalogue, progress, look, openOn, tab: fi
         </header>
         <main className="dex-body">
           {view.tab === "pokemon" &&
-            (view.dex ? <MonPage dex={view.dex} go={(dex) => setView({ tab: "pokemon", dex })} /> : <MonGrid open={(dex) => setView({ tab: "pokemon", dex })} />)}
+            (view.dex ? <MonPage key={view.dex} dex={view.dex} go={(dex) => setView({ tab: "pokemon", dex })} /> : <MonGrid open={(dex) => setView({ tab: "pokemon", dex })} />)}
           {view.tab === "people" && (view.key ? <PersonPage k={view.key} /> : <PeopleList open={(key) => setView({ tab: "people", key })} />)}
           {view.tab === "places" &&
             (view.name ? (
@@ -144,6 +144,7 @@ function MonPage({ dex, go }: { dex: number; go(dex: number): void }) {
   const prev = [...progress.seen].filter((d) => d < dex).sort((a, b) => b - a)[0];
   const next = [...progress.seen].filter((d) => d > dex).sort((a, b) => a - b)[0];
   const max = 160;
+  const [page, setPage] = useState(0);
   return (
     <article className="dex-mon">
       <div className="dex-mon-top">
@@ -167,13 +168,22 @@ function MonPage({ dex, go }: { dex: number; go(dex: number): void }) {
           )}
         </div>
       </div>
-      {owned && (
-        <blockquote className="dex-words">
-          {e.pages.flat().map((line, i) => (
-            <span key={i} className="dex-line"><T>{line}</T> </span>
-          ))}
-        </blockquote>
-      )}
+      {owned &&
+        (look === "pixel" ? (
+          // The game's way: a page at a time, ▼ to turn it.
+          <button type="button" className="dex-words" onClick={() => setPage((p) => (p + 1) % e.pages.length)} aria-label={e.pages.flat().join(" ")}>
+            {e.pages[page % e.pages.length]!.map((line, i) => (
+              <span key={i} className="dex-line"><T>{line}</T></span>
+            ))}
+            {e.pages.length > 1 && <span className="dex-more"><T>{page % e.pages.length < e.pages.length - 1 ? "▼" : "▶"}</T></span>}
+          </button>
+        ) : (
+          <blockquote className="dex-words">
+            {e.pages.flat().map((line, i) => (
+              <span key={i} className="dex-line"><T>{line}</T> </span>
+            ))}
+          </blockquote>
+        ))}
       {owned && look !== "pixel" && (
         <div className="dex-stats">
           {(
