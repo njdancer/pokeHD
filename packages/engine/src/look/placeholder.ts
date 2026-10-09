@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
 import { color, float, floor, mix, mod, normalWorldGeometry, positionWorld, texture, transformNormalToView, normalize, vec3 } from "three/tsl";
+import { markMovingShadow } from "./cached-shadow.ts";
 
 // Stand-in world for look-dev until the real map renderer lands (Track D): a patch of ground on
 // a step grid, two gabled houses, a ledge, a pond, trees, a fence and some crisp pixel-sprite
@@ -86,6 +87,7 @@ function createBillboard(tex: THREE.Texture): Billboard {
   // sun would otherwise go flat black. Sprites read like the HD-2D references this way.
   material.normalNode = transformNormalToView(normalize(normalWorldGeometry.add(vec3(0, 1.4, 0))));
   const sprite = new THREE.Mesh(geometry, material);
+  markMovingShadow(sprite);
   sprite.receiveShadow = true;
 
   const shadowMaterial = new THREE.MeshBasicNodeMaterial({ alphaTest: 0.5, side: THREE.DoubleSide, colorWrite: false, depthWrite: false });
@@ -93,6 +95,7 @@ function createBillboard(tex: THREE.Texture): Billboard {
   shadowMaterial.opacityNode = map.a;
   const shadowCaster = new THREE.Mesh(geometry, shadowMaterial);
   shadowCaster.castShadow = true;
+  markMovingShadow(shadowCaster);
 
   const group = new THREE.Group();
   group.add(sprite, shadowCaster);

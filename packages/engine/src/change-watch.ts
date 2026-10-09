@@ -8,8 +8,11 @@ import type * as THREE from "three/webgpu";
 // other way (a uniform, a vertex attribute) has to ask for frames itself.
 
 export interface ChangeWatch {
-  /** Whether anything differs from the previous call. The first call always says yes. */
-  changed(root: THREE.Object3D, extra: readonly number[]): boolean;
+  /**
+   * Whether anything differs from the previous call. The first call always says yes. Objects
+   * `skip` returns true for are left out (their children aren't).
+   */
+  changed(root: THREE.Object3D, extra: readonly number[], skip?: (o: THREE.Object3D) => boolean): boolean;
 }
 
 export function createChangeWatch(): ChangeWatch {
@@ -33,7 +36,9 @@ export function createChangeWatch(): ChangeWatch {
     put(m.opacity);
     put((m as THREE.MeshStandardMaterial).map?.version ?? -1);
   };
+  let skip: ((o: THREE.Object3D) => boolean) | undefined;
   const visit = (o: THREE.Object3D) => {
+    if (skip?.(o)) return;
     put(o.id);
     const { position: p, quaternion: q, scale: s } = o;
     put(p.x);
@@ -58,7 +63,8 @@ export function createChangeWatch(): ChangeWatch {
     }
   };
   return {
-    changed(root, extra) {
+    changed(root, extra, leaveOut) {
+      skip = leaveOut;
       n = 0;
       same = true;
       for (const v of extra) put(v);

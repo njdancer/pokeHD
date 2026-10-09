@@ -1,4 +1,5 @@
 import * as THREE from "three/webgpu";
+import { markMovingShadow } from "../look/cached-shadow.ts";
 import type { CameraView } from "../index.ts";
 import type { Ramp } from "../world/palette.ts";
 import { faceCamera } from "../world/sprites.ts";
@@ -116,6 +117,7 @@ function createPicture(): Picture {
   const size = PIC * PICTURE_SCALE;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(size, size).translate(0, size / 2, 0), material);
   mesh.castShadow = true;
+  markMovingShadow(mesh);
   mesh.visible = false;
   return { mesh, material, texture, painted: null, mask: new Uint8Array(PIC * PIC) };
 }

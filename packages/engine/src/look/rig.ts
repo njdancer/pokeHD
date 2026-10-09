@@ -32,6 +32,8 @@ export function createRig(scene: THREE.Scene, sky: ReturnType<typeof createSky>)
 
   const tmp = { a: new THREE.Color(), b: new THREE.Color(), c: new THREE.Color() };
   const dir = new THREE.Vector3();
+  /** Where the shadow frustum is centred: the target, re-centred only once it strays (D35). */
+  const anchor = new THREE.Vector3(Infinity, 0, 0);
   const fogColor = new THREE.Color();
 
   return {
@@ -39,14 +41,18 @@ export function createRig(scene: THREE.Scene, sky: ReturnType<typeof createSky>)
     hemi,
     fogColor,
     sunDirection: dir,
+    shadowAnchor: anchor,
     /** Applies the look for this frame. `target` is what the shadow frustum stays centred on. */
     update(p: LookParams, phase: number, target: THREE.Vector3) {
       sunDirection(p.sun, phase, dir);
 
       sun.intensity = p.sun.intensity;
       threeWay(tmp.a.set(p.sun.morningColor), tmp.b.set(p.sun.middayColor), tmp.c.set(p.sun.eveningColor), phase, sun.color);
-      sun.target.position.copy(target);
-      sun.position.copy(target).addScaledVector(dir, 80);
+      // The cached shadow map stays valid while the frustum holds still, so it follows the target
+      // in jumps of a quarter of its half-width rather than every frame.
+      if (Math.hypot(target.x - anchor.x, target.z - anchor.z) > p.shadows.extent / 4 || Math.abs(target.y - anchor.y) > 2) anchor.copy(target);
+      sun.target.position.copy(anchor);
+      sun.position.copy(anchor).addScaledVector(dir, 80);
 
       const s = sun.shadow;
       const cam = s.camera;
