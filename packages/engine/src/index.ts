@@ -12,6 +12,7 @@ import { NEUTRAL_TINT, normTint } from "./look/grade.ts";
 import { createPost } from "./look/post.ts";
 import { alignedPixelRatio, defaultQuality, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
 import { createGovernor, RUNGS } from "./look/governor.ts";
+import { castsMovingShadow, installCachedShadow } from "./look/cached-shadow.ts";
 import { createRig } from "./look/rig.ts";
 import { webgpuViewsWork } from "./webgpu-probe.ts";
 
@@ -169,6 +170,9 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const camera = new THREE.PerspectiveCamera(params.camera.fov, 1, 0.5, 1200);
   const sky = createSky(scene);
   const rig = createRig(scene, sky);
+  /** The town's shadows drawn only when they change (D35); `?shadowcache=0` draws them every frame. */
+  const shadowCache = query.get("shadowcache") === "0" ? null : installCachedShadow(rig.sun);
+  const staticShadows = createChangeWatch();
   let world: WorldContent = options.world ?? createPlaceholder();
   scene.add(world.root);
   const post = createPost(renderer, scene, camera);
@@ -220,6 +224,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     rebuildTimer = undefined;
     rig.setShadowMapSize(params.shadows.mapSize);
     rig.sun.castShadow = params.shadows.enabled;
+    shadowCache?.invalidate();
     scene.fogNode = params.fog.enabled ? fog(fogColor, rangeFogFactor(fogNear, fogFar)) : null;
     scene.traverse((o) => {
       if (o instanceof THREE.Mesh) (o.material as THREE.Material).needsUpdate = true;
@@ -340,6 +345,12 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     // compiling skip draws that a later frame has to make up.
     if (!(force || moved || dirty || world.view || warmup.busy() || lookdev)) return false;
     dirty = false;
+    if (shadowCache) {
+      const d = rig.sunDirection, a = rig.shadowAnchor;
+      watched.length = 0;
+      watched.push(d.x, d.y, d.z, a.x, a.y, a.z, p.shadows.mapSize, p.shadows.extent);
+      if (staticShadows.changed(world.root, watched, castsMovingShadow)) shadowCache.invalidate();
+    }
     const tRender = performance.now();
     post.render();
     stats.renderMs = performance.now() - tRender;
@@ -462,6 +473,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       if (superseded()) return;
       canvasOwner.delete(canvas);
       post.dispose();
+      shadowCache?.dispose();
       renderer.dispose();
     },
   };

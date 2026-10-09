@@ -533,3 +533,14 @@ camera and clocks match the last one drawn. A still view draws about 3 frames a 
 of 60; walking still draws every frame. Why: idle time (text, menus, standing about) is a large
 share of play on a phone, and a phone that idles cheaply runs cooler and throttles less when the
 player walks. `?ambient=N` overrides the rate. See docs/PERF.md, "Drawing only frames that change".
+
+## D35. The town's shadows are cached; only sprites' shadows are drawn every frame
+
+Nick asked (2026-10-09) whether render passes can run on their own schedules. The screen-space
+passes (AO, bloom, depth of field) change whenever the camera does, but the sun's shadow map
+doesn't: it's the same until the sun steps, the shadow frustum moves or the scene changes. Its
+static casters are now drawn into a cached depth map only then, and each frame that's copied in
+and the moving casters (sprites, marked `markMovingShadow`) drawn on top. The frustum is
+re-centred on the player only after they move 6 units. Depth is 32-bit float so WebGPU can copy
+it. Alternative: re-render everything every frame (as before, `?shadowcache=0`), or temporal
+reuse of screen-space passes, which needs motion vectors and risks ghosting.

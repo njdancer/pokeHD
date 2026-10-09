@@ -1,4 +1,5 @@
 import * as THREE from "three/webgpu";
+import { markMovingShadow } from "../look/cached-shadow.ts";
 import type { LiveActor } from "./live.ts";
 import { faceCamera, PERSON_GEOMETRY, personMaterial } from "./sprites.ts";
 
@@ -112,6 +113,7 @@ export function createGhosts(initial: GhostLook = GHOST_LOOKS[DEFAULT_GHOST_LOOK
         if (!g) {
           const sprite = new THREE.Mesh(PERSON_GEOMETRY, material);
           sprite.castShadow = true;
+          markMovingShadow(sprite);
           sprite.visible = false;
           group.add(sprite);
           g = { name: s.name ?? "", samples: [], sprite, tag: null };

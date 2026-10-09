@@ -107,6 +107,20 @@ clock. Battles always draw (they animate through textures the watch doesn't see)
 owed by shaders still compiling and anything after a look, size or content change. `?stats`
 shows `drawn N/s`. Dynamic resolution only judges the interval after a drawn frame.
 
+## Cached shadows
+
+The sun's shadow pass draws every shadow caster again (about 520k triangles) and makes half the
+frame's draw calls, but the town's shadows only change when the sun steps (3 times a second),
+the shadow frustum moves, or the scene changes. So the shadow map comes in two layers (D35,
+`packages/engine/src/look/cached-shadow.ts`): the town's casters are drawn into a cached depth
+map only then, and each frame that map is copied into the live one and just the sprites (marked
+with `markMovingShadow`) are drawn on top. The frustum follows the player in jumps of a quarter
+of its half-width (6 units) instead of every frame. While walking that's about 4 town redraws a
+second instead of 60, plus one 16 MB depth copy a frame.
+
+Measured in `/dev/live` on the cloud sandbox (software WebGL, evening, two friends' sprites):
+engine CPU 4.6 → 3.0 ms a frame, and the same picture. `?shadowcache=0` turns it off.
+
 ## Dynamic resolution and the mobile tier
 
 Two layers keep a phone near 60 fps without costing a fast machine anything.

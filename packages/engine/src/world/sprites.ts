@@ -1,4 +1,5 @@
 import * as THREE from "three/webgpu";
+import { markMovingShadow } from "../look/cached-shadow.ts";
 import type { NpcMovement, SpriteSheet } from "@pokehd/rom";
 import type { Ramp } from "./palette.ts";
 import type { Region } from "./region.ts";
@@ -157,6 +158,7 @@ export function createSpriteSet(defaultRamp: Ramp = SPRITE_RAMP) {
     actor(): SpriteActor {
       const mesh = new THREE.Mesh(PERSON_GEOMETRY, fallback);
       mesh.castShadow = true;
+      markMovingShadow(mesh);
       return {
         mesh,
         show(sheet, facing, animFrame, ramp = defaultRamp) {
