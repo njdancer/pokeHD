@@ -142,6 +142,28 @@ app.post("/admin/players", async (c) => {
   return c.json({ player: added.player, ...(await invite(c, added.player, body.send === true)) });
 });
 
+// The relief editor's painted normals (/tools/relief). Training material only: the game never reads
+// them. Kept in the private bucket so Nick's phone and Mac see the same work; scripts export them
+// with ADMIN_TOKEN.
+const RELIEF_KEY = "relief/normals.json";
+const RELIEF_MAX_BYTES = 8 * 1024 * 1024;
+
+app.get("/admin/relief", async (c) => {
+  const doc = await c.env.PRIVATE.get(RELIEF_KEY);
+  if (!doc) return c.json({ version: 1, tiles: {}, pics: {} });
+  return new Response(doc.body, { headers: { "content-type": "application/json", "cache-control": "private, no-store" } });
+});
+
+app.put("/admin/relief", async (c) => {
+  const text = await c.req.text();
+  if (text.length > RELIEF_MAX_BYTES) return c.json({ error: "too-large" }, 413);
+  let doc: { version?: unknown; tiles?: unknown; pics?: unknown };
+  try { doc = JSON.parse(text); } catch { return c.json({ error: "not-json" }, 400); }
+  if (doc.version !== 1 || typeof doc.tiles !== "object" || typeof doc.pics !== "object") return c.json({ error: "bad-shape" }, 400);
+  await c.env.PRIVATE.put(RELIEF_KEY, text, { httpMetadata: { contentType: "application/json" } });
+  return c.json({ ok: true, savedAt: new Date().toISOString() });
+});
+
 /** A fresh sign-in link for a player, e.g. when the first one expired. */
 app.post("/admin/players/:id/link", async (c) => {
   const body = await c.req.json<{ send?: unknown }>().catch(() => ({}) as never);

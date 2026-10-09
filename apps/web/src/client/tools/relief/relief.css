@@ -1,0 +1,41 @@
+/* /tools/relief: 2D pixels on the left, 3D on the right; stacked when the phone is upright. */
+.relief {
+  --r-bg: #141912;
+  --r-panel: #1c2319;
+  --r-ink: #e2e9d6;
+  --r-muted: #98a68c;
+  --r-line: #2f3a2a;
+  --r-on: #9cc77f;
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: var(--r-bg);
+  color: var(--r-ink);
+  font: 13px/1.4 system-ui, sans-serif;
+  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+}
+@media (orientation: portrait) {
+  .relief { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.1fr) minmax(0, 0.9fr); }
+}
+.relief-left, .relief-right { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; position: relative; }
+.relief-left { border-right: 1px solid var(--r-line); }
+.relief-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 4px 8px; background: var(--r-panel); border-bottom: 1px solid var(--r-line); }
+.relief-bar-3d { border-bottom: 0; border-top: 1px solid var(--r-line); }
+.relief-saved { color: var(--r-muted); margin-left: auto; font-size: 12px; }
+.relief-tools { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 4px 8px; border-bottom: 1px solid var(--r-line); }
+.relief-group { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.relief button, .relief select { font: 600 12px system-ui, sans-serif; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--r-line); background: #252e22; color: var(--r-ink); }
+.relief select { max-width: 46%; }
+.relief button[aria-pressed="true"] { background: var(--r-ink); color: var(--r-bg); }
+.relief button:focus-visible, .relief select:focus-visible, .relief canvas:focus-visible { outline: 2px solid var(--r-on); outline-offset: 2px; }
+.relief label { display: inline-flex; gap: 5px; align-items: center; color: var(--r-ink); }
+.relief a { color: var(--r-on); }
+.relief-wheel { width: 34px; height: 34px; border-radius: 50%; touch-action: none; cursor: crosshair; }
+.relief-canvas { flex: 1; min-height: 0; position: relative; }
+.relief-canvas canvas { position: absolute; inset: 4px; width: calc(100% - 8px); height: calc(100% - 8px); object-fit: contain; image-rendering: pixelated; touch-action: none; cursor: crosshair; }
+.relief-pop { position: absolute; inset: 40px 8px 8px; background: var(--r-panel); border: 1px solid var(--r-line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 2; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.relief-pop p { margin: 0; color: var(--r-muted); }
+.relief-map { flex: 1; min-height: 0; width: 100%; object-fit: contain; image-rendering: pixelated; touch-action: none; cursor: pointer; }
+.relief-3d { flex: 1; min-height: 0; width: 100%; display: block; touch-action: none; }
+.relief-msg { padding: 24px; font: 15px system-ui, sans-serif; }
