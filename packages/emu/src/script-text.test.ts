@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { Controls } from "./controls.ts";
 import { Button, GameBoy } from "./core.ts";
 import type { ScriptMessage } from "./script-text.ts";
+import { SafePoint } from "./gifts/safepoint.ts";
 import { playIntro } from "./testing.ts";
 
 const ROM_PATH = new URL("../../../rom/pokeblue.gb", import.meta.url);
@@ -16,10 +17,7 @@ const boxRow = (gb: GameBoy, row: number) =>
   [...gb.readBytes(SYMBOLS.wTileMap.address + row * 20 + 1, 18)].map((t) => (t >= 0x80 ? FONT_CHARS[t - 0x80] : " ")).join("").trim();
 
 describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
-  it.each([
-    ["standing in for the printing routine", true],
-    ["running the game's printing at speed", false],
-  ])("holds each of Oak's messages for the page, %s", { timeout: 60_000 }, async (_, replace) => {
+  it("holds each of Oak's messages for the page, then runs through it", { timeout: 60_000 }, async () => {
     const rom = new Uint8Array(readFileSync(ROM_PATH));
     const gb = await GameBoy.create({ rom, wasmBinary: readFileSync(WASM_PATH) });
     const messages: ScriptMessage[] = [];
@@ -29,7 +27,7 @@ describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
       setButtons: (m) => gb.setButtons(m),
       script: { message: (m) => messages.push(m), end: (id) => ended.push(id), press: () => presses++ },
     });
-    controls.setScriptText(rom, { replace });
+    controls.setScriptText(rom);
     const run = (frames: number) => {
       for (let i = 0; i < frames; i++) {
         controls.frame();
@@ -65,11 +63,9 @@ describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
     expect(presses).toBe(10);
     run(120);
     expect(messages).toHaveLength(1);
-    if (replace) {
-      // The routine never ran: the game's box shows the first page, as it would have.
-      expect(boxRow(gb, 14)).toBe(first.message.pages[0]!.lines[0]);
-      expect(first.message.simple).toBe(true);
-    } else expect(gb.read(SYMBOLS.wStatusFlags5.address) & 0x40).toBe(0x40);
+    // The game printed the first page itself and waits at its ▼ for the page.
+    expect(boxRow(gb, 14)).toBe(first.message.pages[0]!.lines[0]);
+    expect(gb.read(SYMBOLS.wStatusFlags5.address) & 0x40).toBe(0x40);
     // Read: the game runs through the rest, on to Oak's next message.
     controls.readOn(first.id);
     controls.closeMessage(first.id);
@@ -137,7 +133,7 @@ describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
     expect(gb.read(SYMBOLS.wStatusFlags5.address) & 0x40).toBe(0);
   });
 
-  it("leaves the game's yes/no menu up after a question it stood in for", { timeout: 60_000 }, async () => {
+  it("leaves the game's yes/no menu up after a question", { timeout: 60_000 }, async () => {
     const rom = new Uint8Array(readFileSync(ROM_PATH));
     const gb = await GameBoy.create({ rom, wasmBinary: readFileSync(WASM_PATH) });
     const messages: ScriptMessage[] = [];
@@ -154,14 +150,14 @@ describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
       }
     };
     let menus = 0;
-    gb.addHook("HandleMenuInput", () => menus++);
+    // Menus that take input once the question is out.
+    gb.addHook("HandleMenuInput", () => void (messages.length && menus++));
     controls.tap(Button.Start);
     run(30);
     // POKéMON, ITEM, the player, SAVE: no Pokédex yet.
     controls.select(3, true);
     for (let i = 0; i < 300 && messages.length === 0; i++) run(1);
     expect(messageBoxes(messages[0]!.message).flat().join(" ")).toMatch(/SAVE the game\?/);
-    menus = 0;
     // One box: the page reads on at once, as Game.tsx does.
     controls.readOn(messages[0]!.id);
     run(60);
@@ -171,5 +167,57 @@ describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
     controls.select(0, true);
     for (let i = 0; i < 600 && messages.length === 1; i++) run(1);
     expect(messageBoxes(messages[1]!.message).flat().join(" ")).toMatch(/saved the game/);
+  });
+
+  it("lets the game play a message's own sound, its way", { timeout: 60_000 }, async () => {
+    const rom = new Uint8Array(readFileSync(ROM_PATH));
+    const gb = await GameBoy.create({ rom, wasmBinary: readFileSync(WASM_PATH) });
+    const messages: ScriptMessage[] = [];
+    const ended: number[] = [];
+    const controls = new Controls(gb, {
+      setButtons: (m) => gb.setButtons(m),
+      script: { message: (m) => messages.push(m), end: (id) => ended.push(id), press: () => {} },
+    });
+    playIntro(gb);
+    controls.setScriptText(rom);
+    const run = (frames: number) => {
+      for (let i = 0; i < frames; i++) {
+        controls.frame();
+        gb.runFrame();
+      }
+    };
+    // "<player> received a …!" and its key-item jingle, printed from the bedroom: the text lives
+    // in Oak's lab's bank, so that bank goes in for the call.
+    const text = 0x5227; // OaksLabReceivedMonText, bank 7 (pokeblue.sym)
+    let bank = 0;
+    let jingles = 0;
+    gb.addHook("WaitForSoundToFinish", () => jingles++);
+    let done = false;
+    SafePoint.of(gb).enqueue({
+      scratch: [],
+      steps: [
+        {
+          routine: "PrintText",
+          registers: () => ({ hl: text }),
+          before: (g) => {
+            bank = g.read(SYMBOLS.hLoadedROMBank.address);
+            g.write(SYMBOLS.hLoadedROMBank.address, 7);
+            g.write(0x2000, 7);
+          },
+          after: (g) => {
+            g.write(SYMBOLS.hLoadedROMBank.address, bank);
+            g.write(0x2000, bank);
+          },
+        },
+      ],
+      done: () => (done = true),
+    });
+    for (let i = 0; i < 300 && messages.length === 0; i++) run(1);
+    expect(messages).toHaveLength(1);
+    expect(messageBoxes(messages[0]!.message).flat().join(" ")).toMatch(/received/);
+    // The game printed it and played the jingle itself; nothing waits on the page after that.
+    for (let i = 0; i < 600 && !done; i++) run(1);
+    expect(jingles).toBe(1);
+    expect(done).toBe(true);
   });
 });

@@ -155,15 +155,12 @@ export class Controls {
     if (ask.from === "intro") this.#pressing = Button.A;
   }
 
-  /**
-   * Turns whole messages from the script (`ControlsOptions.script`) on or off. `replace: false`
-   * keeps the game's own printing routine, run through at speed (ScriptText).
-   */
-  setScriptText(rom: Uint8Array | null, { replace = true }: { replace?: boolean } = {}): void {
+  /** Turns whole messages from the script (`ControlsOptions.script`) on or off. */
+  setScriptText(rom: Uint8Array | null): void {
     this.#script?.dispose();
     this.#script = null;
     const script = this.#options.script;
-    if (rom && script) this.#script = new ScriptText(this.#gb, { rom, replace, onMessage: script.message, onEnd: script.end, tap: (mask) => this.tap(mask) });
+    if (rom && script) this.#script = new ScriptText(this.#gb, { rom, onMessage: script.message, onEnd: script.end });
     this.#apply();
   }
 
