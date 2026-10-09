@@ -1,0 +1,47 @@
+/* The start screen (StartScreen.tsx): one panel in the HD text look over the HD world. */
+.start-screen {
+  /* Low on the screen, so the player stands at their door above it. */
+  position: fixed; inset: 0; z-index: 5; display: flex; align-items: flex-end; justify-content: center;
+  padding: 16px 16px max(9vh, calc(env(safe-area-inset-bottom) + 24px));
+  background: radial-gradient(ellipse at 50% 60%, transparent 30%, #1a100660);
+}
+.start-panel {
+  --tile: clamp(16px, 4.8vw, 24px);
+  --hd-accent: #e0702a; --hd-ink: #3e2a1c; --hd-edge: #d6a866; --hd-ball-red: #e8473b; --hd-ball-ink: #2b2b33;
+  position: relative; box-sizing: border-box; width: min(100%, 26rem); padding: calc(var(--tile) * 1.4) calc(var(--tile) * 1.4) calc(var(--tile) * 1.1);
+  text-align: center; color: var(--hd-ink); font: 800 var(--tile) / 1.35 Nunito, ui-rounded, system-ui, sans-serif;
+  border-radius: calc(var(--tile) * .8); background: linear-gradient(#fffaf0, #f7ead0);
+  border: calc(var(--tile) * .14) solid var(--hd-edge);
+  box-shadow: 0 calc(var(--tile) * .4) calc(var(--tile) * 1.4) #4a2a0a80, inset 0 0 0 calc(var(--tile) * .12) #fff8;
+  animation: hd-box-in .2s ease-out;
+}
+.start-panel .hd-corner.tl { left: 0; top: 0; }
+.start-panel .hd-corner.tr { left: 100%; top: 0; }
+.start-panel .hd-corner.bl { left: 0; top: 100%; }
+.start-panel .hd-corner.br { left: 100%; top: 100%; }
+.start-title { margin: 0 0 calc(var(--tile) * .5); font-size: 1.45em; line-height: 1.15; }
+.start-wait { margin: calc(var(--tile) * .6) 0; animation: start-pulse 1.2s ease-in-out infinite; }
+@keyframes start-pulse { 50% { opacity: .55; } }
+.start-sub { margin: 0 0 calc(var(--tile) * 1); font-size: .9em; opacity: .8; }
+.start-facts { display: flex; justify-content: center; gap: calc(var(--tile) * .5); flex-wrap: wrap; margin: 0 0 calc(var(--tile) * 1.1); padding: 0; list-style: none; font-size: .8em; }
+.start-facts li { padding: calc(var(--tile) * .25) calc(var(--tile) * .6); background: #fff8ea; border: calc(var(--tile) * .08) solid #e9cb98; border-radius: 999px; }
+.start-facts strong { color: var(--hd-accent); }
+.start-button, .start-link { font: inherit; color: var(--hd-ink); cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.start-button {
+  display: block; width: 100%; min-height: 52px; padding: 0 calc(var(--tile) * 1);
+  background: linear-gradient(#fffdf7, #f6e7c8); border: calc(var(--tile) * .1) solid #e2bd83; border-radius: calc(var(--tile) * .7);
+  box-shadow: 0 calc(var(--tile) * .18) 0 #d4a565;
+}
+.start-button.primary { min-height: 60px; font-size: 1.25em; color: #fff; background: linear-gradient(#f08a45, #d9642a); border-color: #b9521f; box-shadow: 0 calc(var(--tile) * .2) 0 #9c4318; }
+.start-button:active { translate: 0 calc(var(--tile) * .14); box-shadow: 0 calc(var(--tile) * .04) 0 #d4a565; }
+.start-link { margin-top: calc(var(--tile) * .9); padding: calc(var(--tile) * .3) calc(var(--tile) * .6); font-size: .75em; background: none; border: 0; opacity: .6; text-decoration: underline; }
+.start-new-check { margin-top: calc(var(--tile) * 1); font-size: .75em; }
+.start-new-check p { margin: 0 0 calc(var(--tile) * .6); }
+.start-row { display: flex; gap: calc(var(--tile) * .5); }
+.start-row .start-button { font-size: .95em; }
+
+.start-screen[data-look="frame"] .start-panel {
+  --hd-ink: #23263a; --hd-edge: #2f3550; border: 0; border-radius: calc(var(--tile) * .4); background: linear-gradient(#fff, #f1f2f6);
+  box-shadow: inset 0 0 0 calc(var(--tile) * .1) var(--hd-edge), inset 0 0 0 calc(var(--tile) * .24) #fff, inset 0 0 0 calc(var(--tile) * .42) var(--hd-edge), 0 calc(var(--tile) * .4) calc(var(--tile) * 1.4) #10142a80;
+}
+.start-screen[data-look="candy"] .hd-corner { display: none; }

@@ -43,9 +43,12 @@ export function inWorldTracker(resumed = false) {
  * `pip` is the player's choice for the overworld: the small screen in the corner, or none.
  * `hdText` is true while the HD text layer shows the game's text and menus (p2-text), so the
  * screen needn't come up for them. `battle` is what a battle shows, when there's an HD view to
- * show it in (p2-battles).
+ * show it in (p2-battles). `onboarding` is true while the page's own start screen or Oak's HD
+ * introduction is showing (tap-first UI).
  */
-export function screenLayout(mode: OverworldMode, inWorld: boolean, pip: boolean, hdText = false, battle?: BattleScene): ScreenLayout {
+export function screenLayout(mode: OverworldMode, inWorld: boolean, pip: boolean, hdText = false, battle?: BattleScene, onboarding = false): ScreenLayout {
+  // The page's own start screen and HD introduction stand in for the screen until the world loads.
+  if (!inWorld && onboarding) return "hidden";
   if (inWorld && mode === "battle" && battle) return battle === "scene" ? "battle" : battle === "transition" ? "hidden" : "full";
   if (!inWorld || mode === "battle") return "full";
   if (mode === "dialog" && !hdText) return "dialog";

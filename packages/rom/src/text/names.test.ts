@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
-import { decodeText, encodeText, isKeyItem, itemName, monName, pokedexNumber } from "./names.ts";
+import { decodeText, defaultNames, encodeName, encodeText, isKeyItem, itemName, monName, NAME_MAX, nameProblem, pokedexNumber } from "./names.ts";
 
 const ROM_PATH = new URL("../../../../rom/pokeblue.gb", import.meta.url);
 
@@ -41,5 +41,23 @@ describe.skipIf(!existsSync(ROM_PATH))("names from the ROM", () => {
     expect(isKeyItem(rom, 0x04)).toBe(false); // POKé BALL
     expect(isKeyItem(rom, 0xc4)).toBe(true); // HM01
     expect(isKeyItem(rom, 0xc9)).toBe(false); // TM01
+  });
+});
+
+describe.skipIf(!existsSync(ROM_PATH))("intro names", () => {
+  it("reads the names the intro offers", () => {
+    const rom = new Uint8Array(readFileSync(ROM_PATH));
+    expect(defaultNames(rom, "player")).toEqual(["BLUE", "GARY", "JOHN"]);
+    expect(defaultNames(rom, "rival")).toEqual(["RED", "ASH", "JACK"]);
+  });
+});
+
+describe("names typed on the device", () => {
+  it("takes what the naming screen could type, up to its length", () => {
+    expect(nameProblem("Nick", NAME_MAX.player)).toBeNull();
+    expect(nameProblem("Dr. Q-T!", 10)).toBeNull();
+    expect(nameProblem("Nicholas", NAME_MAX.player)).toBe("7 letters at most");
+    expect(nameProblem("Zoë", 7)).toMatch(/“ë”/);
+    expect(Array.from(encodeName("A.").subarray(0, 3))).toEqual([0x80, 0xf2, 0x50]);
   });
 });

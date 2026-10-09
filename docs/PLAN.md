@@ -22,6 +22,7 @@ data (`p2-text-read`, `p2-battle-read`); battles draw in HD (`p2-battles`, D28).
 | `p1-labels-more` | Labels for the remaining tilesets (forest, gates/museum and caves merged in #51) | — |
 | `p1-transitions` | Hitches between maps, and the slow first frame without WebGPU | — |
 | `p2-text` | HD text boxes and menus | Nick's pick of font and box style |
+| `p2-tapfirst` | Tap-first UI (D32): own start screen, Oak in HD, keyboard names, real buttons | Nick's pick of panel look (`/dev/ui`) |
 | `p4-bundle` | Code-splitting and Playwright screenshot regression tests | — |
 | `p4-vlm-colour` | Sprite colour and relief models, on Nick's Mac (brief: project file `plan/vision-model.md`) | Bake-off results for Nick |
 
@@ -193,6 +194,11 @@ Done: the data side, `p2-text-read` (`ScreenText`, `/dev/text`) and `p2-battle-r
 ### p2-text: re-typeset text boxes and menus
 Decode the window/BG tilemap through the charmap (`constants/charmap.asm`) and render text
 boxes and menus as styled overlays with a modern font; the game still drives them.
+### p2-tapfirst: tap-first UI (D32)
+The page's own start screen, Oak's introduction in HD, names typed on the device's keyboard
+(Oak checks the invited name and a change renames the player) and real buttons on every HD
+menu, all pressing the game's own buttons (`Controls`). Next: tappable battle menus (FIGHT,
+moves, PKMN, ITEM, RUN), which still show on the Game Boy screen.
 ### p2-battles: HD battle scenes
 3D arenas per environment, lit billboarded battle sprites, move effects keyed off the
 animation the game is playing. Built screen-driven (D28): pictures, sprites, flashes and shakes

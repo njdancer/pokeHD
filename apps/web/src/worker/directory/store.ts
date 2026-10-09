@@ -287,6 +287,20 @@ export class DirectoryStore {
       }));
   }
 
+  /**
+   * A player's new name (they changed it in the game, where Oak asks it). Names stay unique,
+   * ignoring case, among players still in; a player may change the case of their own.
+   */
+  setName(playerId: string, nameInput: string): { ok: true; player: Player } | { ok: false; error: "bad-name" | "name-taken" | "not-found" } {
+    const player = this.#activePlayer(playerId);
+    if (!player) return { ok: false, error: "not-found" };
+    const name = cleanName(nameInput);
+    if (!name) return { ok: false, error: "bad-name" };
+    if (name.toLowerCase() !== player.name.toLowerCase() && this.#nameTaken(name)) return { ok: false, error: "name-taken" };
+    this.#sql.exec("UPDATE players SET name = ? WHERE id = ?", name, playerId);
+    return { ok: true, player: { ...player, name } };
+  }
+
   /** Lets a player load Nick's cartridge, or stops them (D26). */
   setRomAccess(playerId: string, allowed: boolean): boolean {
     if (!this.#activePlayer(playerId)) return false;

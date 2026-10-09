@@ -44,13 +44,96 @@
 
 /* Storybook (D31): rounded letters on warm paper, like a picture book. */
 .hd-box {
-  --hd-accent: #e0702a; --hd-pick: #f2b46a55;
-  color: #3e2a1c; font: 800 calc(var(--tile) * 1.12) / 1 Nunito, ui-rounded, system-ui, sans-serif;
+  --hd-accent: #e0702a; --hd-pick: #f2b46a55; --hd-ink: #3e2a1c; --hd-edge: #d6a866;
+  --hd-ball-red: #e8473b; --hd-ball-ink: #2b2b33;
+  color: var(--hd-ink); font: 800 calc(var(--tile) * 1.12) / 1 Nunito, ui-rounded, system-ui, sans-serif;
 }
 .hd-box::before {
   border-radius: calc(var(--tile) * .7);
   background: linear-gradient(#fffaf0, #f7ead0);
-  border: calc(var(--tile) * .14) solid #d6a866;
+  border: calc(var(--tile) * .14) solid var(--hd-edge);
   box-shadow: 0 calc(var(--tile) * .3) calc(var(--tile) * .9) #4a2a0a59, inset 0 0 0 calc(var(--tile) * .12) #fff8;
 }
 .hd-box.dialog { font-size: calc(var(--tile) * 1.3); }
+
+/* Tap-first: choices are real buttons, the message box reads on when tapped (TextOverlay.tsx). */
+.hd-text button, .hd-box.tappable { pointer-events: auto; cursor: pointer; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.hd-choice {
+  font: inherit; color: inherit; text-align: left; background: none; border: 0; margin: 0;
+  /* One tile of text, two tiles to tap. */
+  box-sizing: content-box; padding: calc(var(--tile) * .5) 0; margin-block: calc(var(--tile) * -.5);
+  border-radius: calc(var(--tile) * .5);
+}
+.hd-choice:active { background: var(--hd-pick); }
+@media (hover: hover) { .hd-choice:hover { background: #f2b46a2e; } }
+.hd-back, .hd-scroll button {
+  display: grid; place-items: center; padding: 0; font: 800 calc(var(--tile) * 1.1) / 1 Nunito, ui-rounded, system-ui, sans-serif;
+  color: var(--hd-ink); background: linear-gradient(#fffaf0, #f2e0bc); border: calc(var(--tile) * .12) solid var(--hd-edge);
+  box-shadow: 0 calc(var(--tile) * .12) calc(var(--tile) * .3) #4a2a0a40;
+}
+.hd-back:active, .hd-scroll button:active { translate: 0 calc(var(--tile) * .08); filter: brightness(.95); }
+.hd-back {
+  position: absolute; z-index: 1; right: calc(var(--tile) * -.2); top: calc(var(--tile) * -.45);
+  width: calc(var(--tile) * 1.9); height: calc(var(--tile) * 1.9); border-radius: 50%; font-size: calc(var(--tile) * 1.3);
+}
+/* Arrows for a list, and − + OK for a quantity, in a row under the box's right edge. */
+.hd-scroll { position: absolute; z-index: 1; right: calc(var(--tile) * .4); top: calc(100% - var(--tile) * .5); display: flex; gap: calc(var(--tile) * .4); }
+.hd-scroll button { width: calc(var(--tile) * 1.8); height: calc(var(--tile) * 1.8); border-radius: calc(var(--tile) * .5); font-size: calc(var(--tile) * .8); }
+.hd-quantity .ok { width: auto; padding-inline: calc(var(--tile) * .6); font-size: calc(var(--tile) * .9); }
+
+/* A ball in each corner of the panel, where the game's frame has its beads. */
+.hd-corner {
+  position: absolute; width: calc(var(--tile) * .95); aspect-ratio: 1; border-radius: 50%; translate: -50% -50%;
+  background:
+    radial-gradient(circle at 32% 26%, #fffc 0 9%, transparent 11%),
+    radial-gradient(circle, #fff 0 16%, var(--hd-ball-ink) 17% 29%, transparent 30%),
+    linear-gradient(var(--hd-ball-red) 0 44%, var(--hd-ball-ink) 44% 56%, #fbfbfb 56%);
+  box-shadow: 0 0 0 calc(var(--tile) * .08) var(--hd-ball-ink), 0 calc(var(--tile) * .08) calc(var(--tile) * .2) #0005;
+}
+.hd-corner.tl { left: calc(var(--tile) * .2); top: calc(var(--tile) * .2); }
+.hd-corner.tr { left: calc(100% - var(--tile) * .2); top: calc(var(--tile) * .2); }
+.hd-corner.bl { left: calc(var(--tile) * .2); top: calc(100% - var(--tile) * .2); }
+.hd-corner.br { left: calc(100% - var(--tile) * .2); top: calc(100% - var(--tile) * .2); }
+/* The back button sits on the top-right ball. */
+.hd-box:has(> .hd-back) > .hd-corner.tr { display: none; }
+
+/* A small ball as the cursor and the "more" sign (frame, candy). */
+.hd-text:is([data-look="frame"], [data-look="candy"]) :is(.hd-cursor, .hd-more)::before {
+  width: calc(var(--tile) * .72); height: calc(var(--tile) * .72); clip-path: none; border-radius: 50%;
+  background:
+    radial-gradient(circle, #fff 0 15%, var(--hd-ball-ink) 16% 28%, transparent 29%),
+    linear-gradient(var(--hd-ball-red) 0 44%, var(--hd-ball-ink) 44% 56%, #fbfbfb 56%);
+  box-shadow: 0 0 0 calc(var(--tile) * .07) var(--hd-ball-ink);
+}
+
+/* frame: the Game Boy's own frame, a dark double line on white, in HD. */
+.hd-text[data-look="frame"] .hd-box { --hd-ink: #23263a; --hd-edge: #2f3550; --hd-pick: #c9d6ff66; --hd-accent: #2f3550; }
+.hd-text[data-look="frame"] .hd-box::before {
+  border-radius: calc(var(--tile) * .35); border: 0;
+  background: linear-gradient(#ffffff, #f1f2f6);
+  box-shadow:
+    inset 0 0 0 calc(var(--tile) * .1) var(--hd-edge), inset 0 0 0 calc(var(--tile) * .24) #fff,
+    inset 0 0 0 calc(var(--tile) * .42) var(--hd-edge),
+    0 calc(var(--tile) * .3) calc(var(--tile) * .9) #10142a55;
+}
+.hd-text[data-look="frame"] :is(.hd-back, .hd-scroll button) { background: linear-gradient(#fff, #e9ebf2); border-color: var(--hd-edge); }
+.hd-text[data-look="frame"] .hd-choice:hover { background: #c9d6ff40; }
+
+/* candy: Storybook paper, chunky raised buttons, no corner balls. */
+.hd-text[data-look="candy"] .hd-corner { display: none; }
+.hd-text[data-look="candy"] .hd-box.menu.active .hd-choice {
+  background: linear-gradient(#fffdf7, #f6e7c8); border: calc(var(--tile) * .1) solid #e2bd83;
+  box-shadow: 0 calc(var(--tile) * .16) 0 #d4a565, 0 calc(var(--tile) * .3) calc(var(--tile) * .3) #4a2a0a30;
+  padding-inline: calc(var(--tile) * .4); margin-inline-start: calc(var(--tile) * -.4);
+  padding-block: calc(var(--tile) * .3); margin-block: calc(var(--tile) * -.3);
+}
+.hd-text[data-look="candy"] .hd-box.menu.active .hd-choice:active { translate: 0 calc(var(--tile) * .14); box-shadow: 0 calc(var(--tile) * .02) 0 #d4a565; }
+/* The buttons carry the cursor: the chosen one glows. */
+.hd-text[data-look="candy"] .hd-box.menu.active:has(.hd-choice) :is(.hd-pick, .hd-cursor) { display: none; }
+.hd-text[data-look="candy"] .hd-row:has(.hd-cursor.selected) .hd-choice { background: linear-gradient(#fff4e0, #ffd9a0); border-color: var(--hd-accent); }
+.hd-text[data-look="frame"] .hd-cursor { translate: calc(var(--tile) * -.18) 0; }
+
+/* Oak's introduction (IntroStage.tsx): the game's pictures over the HD world, above the words. */
+.intro-stage { z-index: 1; }
+.intro-stage canvas { position: absolute; left: 0; top: 0; width: 100%; height: calc(100% * 96 / 144); image-rendering: pixelated; filter: drop-shadow(0 6px 10px #0006); }
+.intro-light { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 38%, #fff6e033 0, transparent 45%), radial-gradient(ellipse at 50% 50%, transparent 35%, #140c0499); }

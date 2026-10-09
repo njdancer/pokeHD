@@ -82,6 +82,16 @@ app.get("/me", async (c) => {
   return c.json(account(c, player));
 });
 
+/** The player renames themselves: the name Oak asks in the game, kept the same as this one. */
+app.patch("/me", async (c) => {
+  const player = await currentPlayer(c);
+  if (!player) return c.json({ error: "signed-out" }, 401);
+  const body = await c.req.json<{ name?: unknown }>().catch(() => ({}) as never);
+  const result = await directory(c).setName(player.id, typeof body.name === "string" ? body.name : "");
+  if (!result.ok) return c.json({ error: result.error }, result.error === "name-taken" ? 409 : 400);
+  return c.json(account(c, result.player));
+});
+
 app.post("/sign-out", async (c) => {
   const token = getCookie(c, SESSION_COOKIE);
   if (token) await directory(c).endSession(token);

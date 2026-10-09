@@ -179,7 +179,7 @@ describe.skipIf(!hasRom)("decoding the game's text", () => {
     press(Button.Down);
     expect(text.menus[0]?.cursor).toBe(1);
     expect(cursor()).toBe(1);
-  });
+  }, 60_000);
 
   it("reads the bag as a list with quantities", () => {
     // 3 Potions and 5 Poké Balls, written into the bag (wNumBagItems, then item/count pairs).

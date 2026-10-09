@@ -68,7 +68,7 @@ test("a new game can't erase the old save by accident", async ({ page }) => {
   test.setTimeout(15 * 60_000);
   const world = loadWorld();
   const p = new Player(page, world);
-  await page.goto("/?stats");
+  await page.goto("/?stats&classic");
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
 
   // The first adventure, saved by hand.

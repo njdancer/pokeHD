@@ -66,3 +66,43 @@ export function isKeyItem(rom: Uint8Array, item: number): boolean {
   const bit = item - 1;
   return ((rom[romOffset(SYMBOLS.KeyItemFlags) + (bit >> 3)]! >> (bit & 7)) & 1) === 1;
 }
+
+/**
+ * What the naming screen's keyboard can type (data/text/alphabets.asm), leaving out its PK and
+ * MN tiles. A name made of these is one a player could have typed on the Game Boy.
+ */
+export const NAME_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz ×():;[]-?!♂♀/.,";
+
+/** The longest names the naming screen takes: the player and rival 7 letters, a Pokémon 10. */
+export const NAME_MAX = { player: 7, rival: 7, mon: 10 } as const;
+
+/** Why `text` can't be typed on the naming screen as it is, or null if it can. */
+export function nameProblem(text: string, max: number): string | null {
+  const chars = [...text];
+  if (chars.length > max) return `${max} letters at most`;
+  const bad = chars.filter((c) => !NAME_ALPHABET.includes(c));
+  if (bad.length) return `The game can't write ${[...new Set(bad)].map((c) => `“${c}”`).join(" ")}`;
+  return null;
+}
+
+/** A name as the naming screen writes it (its "." is the <DOT> tile), ended and padded with "@". */
+export function encodeName(text: string): Uint8Array {
+  const out = encodeText(text);
+  [...text].forEach((c, i) => {
+    if (c === "." && i < out.length - 1) out[i] = 0xf2;
+  });
+  return out;
+}
+
+/** The names the intro offers after NEW NAME (BLUE, GARY, JOHN for the player in Blue). */
+export function defaultNames(rom: Uint8Array, who: "player" | "rival"): string[] {
+  let at = romOffset(who === "player" ? SYMBOLS.DefaultNamesPlayerList : SYMBOLS.DefaultNamesRivalList);
+  const names: string[] = [];
+  for (let i = 0; i < 4; i++) {
+    let end = at;
+    while (rom[end] !== TERMINATOR && end - at < NAME_LENGTH) end++;
+    names.push(decodeText(rom.subarray(at, end)));
+    at = end + 1;
+  }
+  return names.slice(1);
+}
