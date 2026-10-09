@@ -1,0 +1,10 @@
+{
+ "source": "p4_41_seed_41.png",
+ "model_pixel": 14.0,
+ "grid": [
+  24,
+  47
+ ],
+ "edge_row": 15,
+ "colors": 12
+}

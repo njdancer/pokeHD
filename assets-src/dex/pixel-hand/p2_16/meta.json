@@ -1,0 +1,10 @@
+{
+ "source": "p2_16_seed_16.png",
+ "model_pixel": 12.0,
+ "grid": [
+  35,
+  55
+ ],
+ "edge_row": 16,
+ "colors": 12
+}
