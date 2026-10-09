@@ -181,6 +181,8 @@ function skyline(items, maxW, gap) {
 }
 
 const ZW = 76; // a zone's width
+// the scope is drawn on a 26 x 22 canvas and shown this much bigger, so a phone can read it
+const SCOPE_K = 1.5;
 const SPECIAL = {}; // rack, mbc, bay0, bay, cpu, ppu, lcd, scope: {x, z, w, h}
 const ZONES = [];
 let LAYOUT_MODE = "";
@@ -234,9 +236,17 @@ function layoutBoard(landscape) {
   // OAM, the graphics chip and the screen
   const lcd = { id: "lcd", w: 33, h: 30 + LABEL_H };
   const ppu = { id: "ppu", w: 14, h: 9 + LABEL_H };
-  const scope = { id: "scope", w: 26, h: 22 + LABEL_H };
-  const oItems = [lcd, ppu, { p: RAMP.io, w: RAMP.io.w, h: RAMP.io.h }, { p: RAMP.oam, w: RAMP.oam.w, h: RAMP.oam.h }, scope];
-  const zo = zone("out", "Graphics chip and screen", "its registers $FF40, OAM $FE00, the LCD", COL.oam, oItems, skyline(oItems, ZW, 3));
+  const scope = { id: "scope", w: 26 * SCOPE_K, h: 22 * SCOPE_K + LABEL_H };
+  // the screen with the scope right under it (level 8 frames the two together, tall enough for a
+  // phone), and the chip, its registers and OAM in a column beside them
+  const left = [lcd, scope];
+  const right = [ppu, { p: RAMP.io, w: RAMP.io.w, h: RAMP.io.h }, { p: RAMP.oam, w: RAMP.oam.w, h: RAMP.oam.h }];
+  const lw = Math.max(lcd.w, scope.w);
+  const ls = skyline(left, lw, 3);
+  const rs = skyline(right, ZW - lw - 3, 3);
+  for (const it of right) it.x += lw + 3;
+  const oItems = [...left, ...right];
+  const zo = zone("out", "Graphics chip and screen", "its registers $FF40, OAM $FE00, the LCD", COL.oam, oItems, { w: lw + 3 + rs.w, h: Math.max(ls.h, rs.h) });
   // zones: stacked in portrait, three across in landscape. The graphics chip sits between work
   // RAM and video RAM, so a step's tile map, the screen and the BG map are close together.
   const zitems = [zr, zc, zw, zo, zv].map((z) => ({ zone: z, w: z.w + 4, h: z.h + 4 }));

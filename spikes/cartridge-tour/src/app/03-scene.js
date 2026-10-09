@@ -429,7 +429,8 @@ function buildBoard() {
   lcd = { data: lcdData, tex: lcdTex, x: L.x + 1, z: L.z + LABEL_H + 1, w: sw, h: sh, mesh: screen };
   // the scope (frame timeline and pixel decoder in level 8)
   const SC = SPECIAL.scope;
-  scope = dynLabel(SC.w, SC.h - LABEL_H, () => {});
+  scope = dynLabel(SC.w / SCOPE_K, (SC.h - LABEL_H) / SCOPE_K, () => {});
+  scope.mesh.scale.setScalar(SCOPE_K);
   scope.mesh.position.set(SC.x, 0.05, SC.z + LABEL_H);
   board.add(scope.mesh);
   const scl = flatLabel("Scope", { size: 1.25, sub: "what the chip is doing" });

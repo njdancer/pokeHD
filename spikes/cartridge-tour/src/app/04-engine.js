@@ -653,6 +653,17 @@ function computeShots() {
 }
 const _cam = new THREE.PerspectiveCamera();
 function fitBox(b) {
+  // a tiny focus (one or two bytes) still gets enough board around it to read
+  const MINW = 34;
+  const MIND = 22;
+  if (b.x1 - b.x0 < MINW) {
+    const c = (b.x0 + b.x1) / 2;
+    b = { ...b, x0: c - MINW / 2, x1: c + MINW / 2 };
+  }
+  if (b.z1 - b.z0 < MIND) {
+    const c = (b.z0 + b.z1) / 2;
+    b = { ...b, z0: c - MIND / 2, z1: c + MIND / 2 };
+  }
   const cx = (b.x0 + b.x1) / 2;
   const cz = (b.z0 + b.z1) / 2;
   const pts = [];
