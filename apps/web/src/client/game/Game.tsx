@@ -68,6 +68,7 @@ import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
 import { Starter, type StartChoice } from "./onboarding.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
+import { LoadingScreen, LOADING_FADE_MS } from "../LoadingScreen.tsx";
 import { buildCatalogue, dexFlags, type DexProgress } from "../dex/catalogue.ts";
 import { DexJournal } from "../dex/journal.ts";
 import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
@@ -125,6 +126,8 @@ type Onboarding = { phase: "choose" } | { phase: "starting"; choice: StartChoice
 
 /** How often a resume point is taken while playing (also whenever the page is hidden). */
 const RESUME_POINT_MS = 60_000;
+/** The loading screen gives up waiting for the HD world after this long, rather than stay up for good. */
+const LOADING_GIVE_UP_MS = 25_000;
 /** How long start-up waits for the cloud (a save for an empty device, a resume point). */
 const CLOUD_WAIT_MS = 4000;
 
@@ -188,6 +191,14 @@ export function Game({ rom, romKey, header, onForget }: Props) {
   const [message, setMessage] = useState<string>("Starting…");
   const [stats, setStats] = useState<Stats>();
   const [noHd, setNoHd] = useState(false);
+  /**
+   * Start-up, for the loading screen: the emulator has run a frame, and the HD world has drawn a
+   * finished frame (or there won't be one: no renderer, or start-up failed).
+   */
+  const [startup, setStartup] = useState({ emu: false, world: false });
+  /** The start (`boot`) whose loading screen has faded out, or given up waiting. */
+  const [loaderGoneFor, setLoaderGoneFor] = useState(-1);
+  const [gaveUpFor, setGaveUpFor] = useState(-1);
   /** The shared world: how we're connected and how many friends are in it. */
   const [room, setRoom] = useState<{ status: RoomStatus; friends: Friend[] } | null>(null);
   /** The link cable over the room, once the room has said who we are. */
@@ -389,7 +400,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         ...(custom ? { onNameAsk: (ask: NameAsk) => setNameAsk(ask) } : {}),
         onFrame: ({ pixels, watched, count }) => {
           image.data.set(new Uint8Array(pixels));
-          emuFrames++;
+          if (++emuFrames === 1) setStartup((s) => ({ ...s, emu: true }));
           const bytes = watched as OverworldWatched;
           const state = decoder.decode(bytes);
           const inWorld = trackInWorld(bytes);
@@ -638,7 +649,10 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         tick();
       }
 
-      if (noRender) return setMessage("");
+      if (noRender) {
+        setStartup((s) => ({ ...s, world: true }));
+        return setMessage("");
+      }
       let created: Engine;
       try {
         created = await createEngine(canvas, { world: live });
@@ -646,10 +660,13 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         // Still playable on the Game Boy screen alone.
         console.error("[pokeHD] renderer failed", e);
         setNoHd(true);
+        setStartup((s) => ({ ...s, world: true }));
         return setMessage("The HD view couldn't start in this browser, so this is the Game Boy screen alone.");
       }
       if (disposed) return created.dispose();
       engine = created;
+      // The loading screen lifts once the world has drawn a finished frame.
+      void created.ready.then(() => !disposed && setStartup((s) => ({ ...s, world: true })));
       live.setLook(engine.look);
       hd = true;
       setMessage(
@@ -662,7 +679,10 @@ export function Game({ rom, romKey, header, onForget }: Props) {
               : "No save in this browser yet.",
       );
       setTimeout(() => !disposed && setMessage(""), 4000);
-    })().catch((e: unknown) => setMessage(`Couldn't start: ${String(e)}`));
+    })().catch((e: unknown) => {
+      setStartup({ emu: true, world: true });
+      setMessage(`Couldn't start: ${String(e)}`);
+    });
 
     return () => {
       disposed = true;
@@ -685,6 +705,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       setBattleHud(null);
       setLayout("full");
       setNoHd(false);
+      setStartup({ emu: false, world: false });
       setRoom(null);
       setLink(null);
       setGifts(null);
@@ -698,6 +719,24 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       setDex(null);
     };
   }, [rom, romKey, boot, glyphs]);
+
+  // The loading screen: up until the world is drawn, or the Game Boy screen is all there is to see.
+  const loaded = startup.emu && (startup.world || layout === "full");
+  useEffect(() => {
+    if (loaded) return;
+    const timer = setTimeout(() => {
+      console.warn("[pokeHD] the world took too long to load; showing the page anyway");
+      setGaveUpFor(boot);
+    }, LOADING_GIVE_UP_MS);
+    return () => clearTimeout(timer);
+  }, [boot, loaded]);
+  const ready = loaded || gaveUpFor === boot;
+  useEffect(() => {
+    if (!ready) return;
+    const timer = setTimeout(() => setLoaderGoneFor(boot), LOADING_FADE_MS);
+    return () => clearTimeout(timer);
+  }, [ready, boot]);
+  const loaderGone = ready && loaderGoneFor === boot;
 
   const onTouch = useMemo(() => (mask: number) => input?.setTouchMask(mask), [input]);
   // Without an emulator (it's restarting) the panel just stays on "Reading your game…".
@@ -801,7 +840,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       />
       {onboarding?.phase === "intro" && !noHd && !nameAsk && <IntroStage ref={introCanvas} />}
       {hdText && !noHd && hdTextOn && <TextOverlay text={hdText} actions={textActions} look={look} />}
-      <div className="game-hud">
+      {ready && <div className="game-hud">
         <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Sound"}</button>
         <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Screen</button>
         <button type="button" onClick={() => setSettings((v) => !v)} aria-expanded={settings}>Settings</button>
@@ -812,7 +851,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           <button type="button" onClick={() => setGiftOpen((v) => !v)} aria-expanded={giftOpen}>Gift</button>
         )}
         {message && <span role="status">{message}</span>}
-      </div>
+      </div>}
       {settings && (
         <div className="game-settings">
           <section>
@@ -887,7 +926,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       {/* The pad hides while Settings is open so it can't cover the panel's forms (and unmounting releases any held button). */}
       {/* The pad is for the world: anything with buttons of its own (HD menus, messages, the start and names) hides it. */}
       {input && touch && !settings && !(hdText && hdTextOn && !noHd) && !nameAsk && !onboarding && !dex && <TouchPad onChange={onTouch} />}
-      {(onboarding?.phase === "choose" || onboarding?.phase === "starting") && (
+      {ready && (onboarding?.phase === "choose" || onboarding?.phase === "starting") && (
         <StartScreen
           save={startSave}
           accountName={account?.player.name ?? null}
@@ -914,6 +953,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       )}
       {savedAt > 0 && <SavedToast shownAt={savedAt} />}
       {erasing && <EraseConfirm old={erasing.old} onAnswer={answerErase} />}
+      {!loaderGone && <LoadingScreen leaving={ready} />}
     </div>
   );
 }

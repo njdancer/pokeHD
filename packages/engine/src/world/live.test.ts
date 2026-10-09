@@ -145,6 +145,93 @@ describe("createLiveWorld with a background builder", () => {
   });
 });
 
+describe("createLiveWorld holding the view while it loads", () => {
+  const camera = new THREE.PerspectiveCamera();
+  camera.position.set(0, 20, 20);
+  const fadeOf = (live: ReturnType<typeof createLiveWorld>) => {
+    const quad = live.root.children.find((o) => o.renderOrder === 1000) as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicNodeMaterial>;
+    return quad.visible ? quad.material.opacity : 0;
+  };
+  const setup = () => {
+    const local = inPlaceBuilder(fakeWorld());
+    const queue: { job: ChunkJob; resolve: (r: ChunkResult) => void }[] = [];
+    const builder: ChunkBuilder = { build: (job) => new Promise((resolve) => queue.push({ job, resolve })), dispose() {} };
+    const flush = async () => {
+      for (const q of queue.splice(0)) q.resolve(local.build(q.job) as ChunkResult);
+      await Promise.resolve();
+      await Promise.resolve();
+    };
+    let now = 0;
+    const live = createLiveWorld(fakeWorld(), { builder, clock: () => now });
+    const tick = (t: number) => {
+      now = t;
+      live.update(0, camera, new THREE.Vector3(), false);
+    };
+    return { live, flush, tick };
+  };
+
+  it("stays black until the map and the neighbours in view are drawn, then fades up", async () => {
+    const { live, flush, tick } = setup();
+    const base = walk()[0]!;
+    live.push(base, 0);
+    tick(0);
+    expect(live.ready).toBe(false);
+    expect(fadeOf(live)).toBe(1);
+    await flush(); // map A
+    tick(0.1);
+    expect(live.ready).toBe(false); // map B, just north, isn't drawn yet
+    expect(fadeOf(live)).toBe(1);
+    await flush(); // map B
+    tick(0.2);
+    expect(live.ready).toBe(true);
+    expect(fadeOf(live)).toBeGreaterThan(0);
+    tick(0.3);
+    tick(0.4);
+    tick(0.5);
+    expect(fadeOf(live)).toBe(0);
+    live.dispose();
+  });
+
+  it("goes black again on a warp, whatever the game's fade says, until the new map is drawn", async () => {
+    const { live, flush, tick } = setup();
+    const base = walk()[0]!;
+    live.push(base, 0);
+    tick(0);
+    await flush();
+    tick(0.1);
+    await flush();
+    for (let t = 0.2; t < 1; t += 0.1) tick(t);
+    expect(fadeOf(live)).toBe(0);
+    live.push({ ...base, mapId: 2, player: { ...base.player, x: 0, y: 0 }, fade: 0 }, 1);
+    tick(1);
+    expect(live.ready).toBe(false);
+    expect(fadeOf(live)).toBe(1);
+    await flush();
+    tick(1.1);
+    expect(live.ready).toBe(true);
+    live.dispose();
+  });
+
+  it("never holds the view across a connection", async () => {
+    const { live, flush, tick } = setup();
+    const frames = walk();
+    live.push(frames[0]!, 0);
+    tick(0);
+    await flush();
+    tick(0.1);
+    await flush();
+    let t = 0.2;
+    for (const state of frames) {
+      live.push(state, t);
+      tick((t += GB_FRAME_SECONDS));
+      if (t > 1) expect(live.ready).toBe(true);
+      await flush();
+    }
+    expect(frames.at(-1)!.mapId).toBe(1);
+    live.dispose();
+  });
+});
+
 describe("ghosts", () => {
   const camera = new THREE.PerspectiveCamera();
   camera.position.set(0, 20, 20);
