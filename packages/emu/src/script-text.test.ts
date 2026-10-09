@@ -1,7 +1,7 @@
 // ROM test for whole messages from the script: the page gets Oak's messages whole, the game waits
 // on each until the page has read it, then runs through the rest by itself. Skips without the ROM.
 import { existsSync, readFileSync } from "node:fs";
-import { messageBoxes, SYMBOLS } from "@pokehd/rom";
+import { FONT_CHARS, messageBoxes, SYMBOLS } from "@pokehd/rom";
 import { describe, expect, it } from "vitest";
 import { Controls } from "./controls.ts";
 import { Button, GameBoy } from "./core.ts";
@@ -11,8 +11,15 @@ import { playIntro } from "./testing.ts";
 const ROM_PATH = new URL("../../../rom/pokeblue.gb", import.meta.url);
 const WASM_PATH = new URL("./generated/sameboy.wasm", import.meta.url);
 
+/** One row of the Game Boy's own message box, as text. */
+const boxRow = (gb: GameBoy, row: number) =>
+  [...gb.readBytes(SYMBOLS.wTileMap.address + row * 20 + 1, 18)].map((t) => (t >= 0x80 ? FONT_CHARS[t - 0x80] : " ")).join("").trim();
+
 describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
-  it("holds each of Oak's messages for the page, then runs through it", { timeout: 60_000 }, async () => {
+  it.each([
+    ["standing in for the printing routine", true],
+    ["running the game's printing at speed", false],
+  ])("holds each of Oak's messages for the page, %s", { timeout: 60_000 }, async (_, replace) => {
     const rom = new Uint8Array(readFileSync(ROM_PATH));
     const gb = await GameBoy.create({ rom, wasmBinary: readFileSync(WASM_PATH) });
     const messages: ScriptMessage[] = [];
@@ -22,7 +29,7 @@ describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
       setButtons: (m) => gb.setButtons(m),
       script: { message: (m) => messages.push(m), end: (id) => ended.push(id), press: () => presses++ },
     });
-    controls.setScriptText(rom);
+    controls.setScriptText(rom, { replace });
     const run = (frames: number) => {
       for (let i = 0; i < frames; i++) {
         controls.frame();
@@ -58,7 +65,11 @@ describe.skipIf(!existsSync(ROM_PATH))("script text", () => {
     expect(presses).toBe(10);
     run(120);
     expect(messages).toHaveLength(1);
-    expect(gb.read(SYMBOLS.wStatusFlags5.address) & 0x40).toBe(0x40);
+    if (replace) {
+      // The routine never ran: the game's box shows the first page, as it would have.
+      expect(boxRow(gb, 14)).toBe(first.message.pages[0]!.lines[0]);
+      expect(first.message.simple).toBe(true);
+    } else expect(gb.read(SYMBOLS.wStatusFlags5.address) & 0x40).toBe(0x40);
     // Read: the game runs through the rest, on to Oak's next message.
     controls.readOn(first.id);
     controls.closeMessage(first.id);

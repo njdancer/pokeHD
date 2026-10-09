@@ -188,6 +188,8 @@ export const ALLOWLIST: readonly string[] = [
   "CloseTextDisplay",
   "EnemyText",
   "HandleMenuInput",
+  "NextTextCommand",
+  "wLetterPrintingDelayFlags",
   "PrintText_NoCreatingTextBox",
   "WaitForTextScrollButtonPress",
   "hLoadedROMBank",

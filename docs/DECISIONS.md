@@ -568,3 +568,11 @@ show a message, it goes back to the game untouched.
 **Why not static analysis of the scripts:** the branches depend on live state (flags, the bag,
 answers) and their effects must happen the game's way, so the game has to decide anyway. The
 moment it calls PrintText it has decided, and that is when we read the message.
+
+**Standing in for the printer (2026-10-09, Nick's "replace it like an FFI"):** for a message that
+is only text, names, numbers, waits and a trailing `text_asm` (1,818 of 1,864 text labels), we
+don't run the game's routine at all. Our hook takes its place: it writes the first page into the
+game's box, then parks the CPU in `DelayFrame` each frame (returning to the hook) until the page
+has read it, writes the last page, and returns as the routine would, or jumps to the `text_asm`
+code the way `TextCommand_START_ASM` does. No presses, no clicks. Messages with sounds, moves or
+boxes inside (mostly "got item" jingles) still run the game's routine at speed, as above.

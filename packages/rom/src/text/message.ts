@@ -26,6 +26,13 @@ export type MessageEnding = "prompt" | "done" | "code";
 export interface Message {
   pages: MessagePage[];
   ending: MessageEnding;
+  /**
+   * Only text, names, numbers and waits: nothing that draws elsewhere or plays a sound. A message
+   * ending in code counts if the code is `text_asm`, at `asm`.
+   */
+  simple: boolean;
+  /** Where `text_asm` code takes over (the bank it's in, and the address after the command). */
+  asm?: { bank: number; address: number };
 }
 
 /** Values the game fills in as it prints. Unset, placeholders show instead. */
@@ -52,6 +59,8 @@ const offsetOf = (bank: number, address: number) => (address < BANK_SIZE ? addre
 /** Reads the text script at a CPU address with `bank` switched in. */
 export function readMessage(rom: Uint8Array, bank: number, address: number, fill: MessageFill = {}): Message {
   const pages: MessagePage[] = [];
+  let simple = true;
+  let asm: Message["asm"];
   const box: [string, string] = ["", ""];
   let row: 0 | 1 = 0;
   const stop = (wait: MessagePage["wait"], next?: NextPage) =>
@@ -92,7 +101,7 @@ export function readMessage(rom: Uint8Array, bank: number, address: number, fill
   };
 
   /** Runs text commands; returns how the text ended, or null at `text_end` (back to the caller). */
-  const commands = (at: number, depth: number): MessageEnding | null => {
+  const commands = (bank: number, at: number, depth: number): MessageEnding | null => {
     let i = at;
     const end = (wait: MessagePage["wait"], how: MessageEnding, next?: NextPage) => {
       stop(wait, next);
@@ -108,14 +117,25 @@ export function readMessage(rom: Uint8Array, bank: number, address: number, fill
         continue;
       }
       if (code === 0x17) {
-        const target = offsetOf(rom[i + 3]!, rom[i + 1]! | (rom[i + 2]! << 8));
-        const ending = depth < 4 ? commands(target, depth + 1) : null;
+        const farBank = rom[i + 3]!;
+        const ending = depth < 4 ? commands(farBank, offsetOf(farBank, rom[i + 1]! | (rom[i + 2]! << 8)), depth + 1) : null;
         if (ending) return ending;
         i += 4;
         continue;
       }
       if (code === 0x50) return null; // text_end
-      if (code === 0x08 || code >= 0x17) return end("end", "code"); // text_asm, or a mart, the nurse…
+      if (code === 0x08) {
+        // text_asm: the code right after it runs.
+        const offset = i + 1;
+        asm = { bank, address: bank ? 0x4000 + (offset % BANK_SIZE) : offset };
+        return end("end", "code");
+      }
+      if (code >= 0x17) {
+        simple = false; // a mart, the nurse, the PC…
+        return end("end", "code");
+      }
+      // Commands that move the cursor, draw a box or play a sound need the game's own routine.
+      if (code === 0x03 || code === 0x04 || code >= 0x0b) simple = false;
       const arg = rom[i + 1]! | (rom[i + 2]! << 8);
       if (code === 0x01) put(fill.ram?.(arg) ?? RAM_NAME); // text_ram
       else if (code === 0x02) put(fill.number?.("bcd", arg, rom[i + 3]!) ?? RAM_NUMBER); // text_bcd
@@ -131,14 +151,14 @@ export function readMessage(rom: Uint8Array, bank: number, address: number, fill
     return end("end", "done");
   };
 
-  let ending = commands(offsetOf(bank, address), 0);
+  let ending = commands(bank, offsetOf(bank, address), 0);
   if (!ending) {
     stop("end");
     ending = "done";
   }
   // A stop right after another with nothing new printed isn't a page the player sees.
   const seen = pages.filter((p, i) => p.wait !== "end" || i === 0 || p.lines.join() !== pages[i - 1]!.lines.join());
-  return { pages: seen, ending };
+  return { pages: seen, ending, simple, ...(asm ? { asm } : {}) };
 }
 
 /** True if the message prints anything at all (some scripts start straight into code). */
