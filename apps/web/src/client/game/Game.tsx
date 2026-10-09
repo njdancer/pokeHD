@@ -263,8 +263,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       if (document.visibilityState === "hidden") hidden = true;
       else if (hidden) {
         hidden = false;
-        hostRef.current?.restartAudio();
-        setSound(false);
+        if (hostRef.current?.restartAudio()) setSound(false);
       }
     };
     const types = ["pointerup", "touchend", "click", "keydown"] as const;
