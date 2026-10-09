@@ -51,6 +51,15 @@ export class DexJournal {
     this.#changed();
   }
 
+  /** The player beat this trainer. */
+  beat(map: number, npc: number): void {
+    let person = this.#find(map, npc);
+    if (!person) this.#data.people.push((person = { map, npc, at: Date.now() }));
+    if (person.beaten) return;
+    person.beaten = true;
+    this.#changed();
+  }
+
   /** What they said, the first time (kept once there's something). */
   said(map: number, npc: number, lines: readonly string[]): void {
     const person = this.#find(map, npc);

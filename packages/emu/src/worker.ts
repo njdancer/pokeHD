@@ -133,6 +133,7 @@ async function handle(data: ToWorker) {
           onOpen: (opened) => post({ type: "dex-open", opened }),
           onClosed: () => post({ type: "dex-closed" }),
           onTalk: (map, npc) => post({ type: "talk", map, npc }),
+          onBeat: (map, npc) => post({ type: "beat", map, npc }),
         }, (mask) => (erase ? erase.setButtons(mask) : g.setButtons(mask))) : undefined;
         samplesPerFrame = data.sampleRate / FRAME_RATE;
         nextFrameAt = performance.now();

@@ -72,6 +72,7 @@ export type FromWorker =
   | { type: "dex-closed" }
   /** Someone on the map is speaking: the map and their index in its objects. */
   | { type: "talk"; map: number; npc: number }
+  | { type: "beat"; map: number; npc: number }
   /** An outbound link message for the friend. */
   | { type: "link-send"; message: LinkMessage }
   | { type: "read"; id: number; bytes: Uint8Array[] }

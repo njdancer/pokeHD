@@ -153,27 +153,29 @@
 .dex-pixel .dex-tab[aria-selected="true"] .px-text img, .dex-pixel .dex-badge .px-text img { filter: invert(1); }
 .dex-pixel * { border-radius: 0 !important; box-shadow: none !important; }
 .dex-pixel .dex-cell, .dex-pixel .dex-person, .dex-pixel .dex-words, .dex-pixel .dex-place-list button, .dex-pixel .dex-back, .dex-pixel .dex-close, .dex-pixel .dex-step button {
-  outline: var(--px) solid var(--ink); outline-offset: calc(var(--px) * -1); background: #f8f8f0 !important;
+  outline: calc(var(--px) * 1px) solid var(--ink); outline-offset: calc(var(--px) * -1); background: #f8f8f0 !important;
 }
 .dex-pixel .dex-tab small, .dex-pixel .dex-cell .dex-name { display: none; }
 .dex-pixel .dex-cell .dex-no { opacity: 1; font-size: inherit; }
 .dex-pixel .dex-cell.seen .dex-pic { filter: brightness(0); opacity: 1; }
 .dex-pixel .dex-pic { width: auto; height: auto; zoom: var(--px); }
 .dex-pixel .dex-cell .dex-pic { zoom: round(down, calc(var(--px) / 2), 1); }
-.dex-pixel .dex-stage { background: none; outline: var(--px) solid var(--ink); }
+.dex-pixel .dex-stage { background: none; outline: calc(var(--px) * 1px) solid var(--ink); }
 .dex-pixel .dex-type, .dex-pixel .dex-homes li { background: none; padding: 0; opacity: 1; box-shadow: none; }
-.dex-pixel .dex-words { display: flex; flex-direction: column; gap: calc(var(--px) * 4px); }
+.dex-pixel .dex-words { display: flex; flex-direction: column; gap: calc(var(--px) * 4px); position: relative; width: 100%; text-align: left; font: inherit; color: inherit; background: none; cursor: pointer; }
+.dex-pixel .dex-more { position: absolute; right: calc(var(--px) * 3px); bottom: calc(var(--px) * 1px); animation: dex-blink 1s steps(1) infinite; }
+@keyframes dex-blink { 50% { opacity: 0; } }
 .dex-pixel .dex-face { zoom: var(--px); width: auto; height: auto; background: none; }
 .dex-pixel .dex-person .dex-face { zoom: calc(var(--px) * .75); }
 .dex-pixel .dex-pin { zoom: 1; }
-.dex-pixel .dex-map { outline: var(--px) solid var(--ink); }
+.dex-pixel .dex-map { outline: calc(var(--px) * 1px) solid var(--ink); }
 .dex-pixel .dex-head { padding: calc(var(--u) * .5) calc(var(--u) * .5) calc(var(--u) * .25); gap: 0; }
 .dex-pixel .dex-title, .dex-pixel .dex-close { display: none; }
 .dex-pixel .dex-tabs { margin: 0; gap: 0; }
 .dex-pixel .dex-tab { padding: calc(var(--px) * 2px) calc(var(--px) * 4px) !important; }
 .dex-pixel .dex-back { width: auto; height: auto; outline: 0; margin-right: calc(var(--u) * .5); }
 .dex-pixel .dex-body { padding: 0 calc(var(--u) * .5) calc(var(--u) * .5); }
-.dex-pixel .dex-words { padding: calc(var(--px) * 3px) calc(var(--px) * 3px) !important; }
+.dex-pixel .dex-words { padding: calc(var(--px) * 3px) calc(var(--px) * 3px) calc(var(--px) * 9px) !important; }
 .dex-pixel .dex-mon-top { align-items: flex-start; }
 .dex-pixel .dex-stage { width: auto; aspect-ratio: auto; }
 .dex-pixel .dex-mon-id { gap: calc(var(--px) * 3px); }

@@ -45,6 +45,8 @@ export interface EmulatorHostOptions {
   onDexClosed?: () => void;
   /** Someone on the map is speaking (with `onDexOpen`): the map and their index in its objects. */
   onTalk?: (map: number, npc: number) => void;
+  /** The player beat a trainer on the map (with `onDexOpen`): the map and their index in its objects. */
+  onBeat?: (map: number, npc: number) => void;
   /** Called for every emulated frame, in the order they were produced. */
   onFrame?: (frame: FrameMessage) => void;
   /** Called (at most about once a second) when the game has written its save. */
@@ -142,6 +144,9 @@ export class EmulatorHost {
           break;
         case "talk":
           options.onTalk?.(data.map, data.npc);
+          break;
+        case "beat":
+          options.onBeat?.(data.map, data.npc);
           break;
         case "error":
           options.onError?.(data.message);

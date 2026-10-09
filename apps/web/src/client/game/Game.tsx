@@ -404,6 +404,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
           journal?.met(map, npc);
           talking = { map, npc, lines: [], frames: 0 };
         },
+        onBeat: (map, npc) => journal?.beat(map, npc),
       });
       const watching = host;
       battles = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...TEXT_WATCHES, ...BATTLE_WATCHES }, (w) => watching.watch(w));

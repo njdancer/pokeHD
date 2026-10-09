@@ -188,27 +188,57 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
     base.add(slit);
   }
 
-  // The cover, hinged on the left edge. Its inside has a grid of blue keys, like the anime's.
+  // The cover, hinged on the left edge. Its inside is laid out like the anime's: a little
+  // readout up top, a block of blue keys, a pair of white keys and a light, and a grille.
   const hinge = new THREE.Group();
   hinge.position.set(-W / 2, 0, 0.12);
   base.add(hinge);
   const cover = new THREE.Mesh(extrude(coverShape(), COVER_DEPTH, 0.1), red);
   hinge.add(cover);
+  // Turned to face out of the cover's inside: x runs from the hinge (0) to the far edge (-W).
   const inside = new THREE.Group();
   inside.position.z = -0.1;
   inside.rotation.y = Math.PI;
   hinge.add(inside);
-  const keyShape = new RoundedBoxGeometry(1.4, 0.62, 0.2, 3, 0.12);
-  for (let row = 0; row < 5; row++) {
-    for (let col = 0; col < 2; col++) {
+  const mid = -W / 2;
+  const panel = new THREE.Mesh(extrude(roundedRect(mid - 3.85, -6.35, 7.7, 9.45, 0.55), 0.01, 0.04), redDark);
+  inside.add(panel);
+  const readoutBezel = new THREE.Mesh(extrude(roundedRect(mid - 3.2, 0.55, 6.4, 2.1, 0.3), 0.02, 0.04), bezel);
+  readoutBezel.position.z = 0.04;
+  inside.add(readoutBezel);
+  const readoutMat = new THREE.MeshStandardMaterial({ color: 0x0f2a24, emissive: 0x1e7a5c, emissiveIntensity: 0.45, roughness: 0.15 });
+  const readout = new THREE.Mesh(new THREE.PlaneGeometry(5.8, 1.6), readoutMat);
+  readout.position.set(mid, 1.6, 0.11);
+  inside.add(readout);
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x8ff0c4 });
+  for (const [w, y] of [[3.6, 2.0], [4.6, 1.6], [2.4, 1.2]] as const) {
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.1), glowMat);
+    line.position.set(mid - 2.5 + w / 2, y, 0.115);
+    inside.add(line);
+  }
+  const keyShape = new RoundedBoxGeometry(1.15, 0.8, 0.22, 3, 0.12);
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 5; col++) {
       const k = new THREE.Mesh(keyShape, blueKey);
-      k.position.set(-(W / 2 + 1.05 + col * 1.75), -1.0 - row * 0.95, 0.06);
+      k.position.set(mid + (col - 2) * 1.35, -0.7 - row * 1.05, 0.08);
       inside.add(k);
     }
   }
-  const insideScreen = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 2.0), new THREE.MeshStandardMaterial({ color: 0x1f3a33, emissive: 0x2a8a6a, emissiveIntensity: 0.35, roughness: 0.2 }));
-  insideScreen.position.set(-W / 2 + 0.35, 1.5, 0.08);
-  inside.add(insideScreen);
+  const pill = new RoundedBoxGeometry(1.7, 0.42, 0.18, 3, 0.2);
+  for (const x of [mid - 2.4, mid - 0.4]) {
+    const k = new THREE.Mesh(pill, white);
+    k.position.set(x, -3.45, 0.06);
+    inside.add(k);
+  }
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.32, 20, 12), lights[1]!);
+  lamp.scale.z = 0.5;
+  lamp.position.set(mid + 2.2, -3.45, 0.06);
+  inside.add(lamp);
+  for (let i = 0; i < 4; i++) {
+    const slit = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.09, 0.05), black);
+    slit.position.set(mid, -4.7 - i * 0.32, 0.04);
+    inside.add(slit);
+  }
   const hingeBar = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, H * 0.8, 16), redDark);
   hingeBar.position.set(-W / 2 - 0.05, 0, 0.1);
   base.add(hingeBar);
