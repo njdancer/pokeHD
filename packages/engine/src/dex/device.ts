@@ -26,6 +26,8 @@ export interface DexDeviceOptions {
    * its screen nearly fills the view. Without one, or if it won't load, the simple built one.
    */
   model?: string;
+  /** A hand to hold the model (its GLB), as if the player had pulled it out. */
+  hand?: string;
 }
 
 export interface DexDevice {
@@ -253,7 +255,7 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
 
   // The modelled device in place of the built one, centred as it is open.
   const model: DexModel | null = options.model
-    ? await loadDexModel(options.model).catch((e: unknown) => {
+    ? await loadDexModel(options.model, options.hand).catch((e: unknown) => {
         console.warn("[pokeHD] Pokédex model failed; using the simple one", e);
         return null;
       })
@@ -280,7 +282,8 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-    const fitH = (frameH * 1.06) / (2 * tan);
+    // Held in a hand, it stands back a little and sits high, so the hand shows below it.
+    const fitH = (frameH * (model?.held ? 1.4 : 1.06)) / (2 * tan);
     // On a narrow (phone) screen the screen itself fills the width and the body's sides go past
     // the edges, so the page is as big as it can be. The model's camera pushes in to its screen
     // anyway, so it starts with the whole device in view.
@@ -332,8 +335,9 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
     // The camera: back far enough for the whole device, then (the model) in to its screen until
     // it nearly fills the view: by height on a wide window, by width on a phone.
     const push = model ? easeInOut(clamp01(phase - 2)) : 0;
-    camera.position.set(0, 0, far);
-    look.set(0, 0, 0);
+    const low = model?.held ? frameH * 0.16 : 0;
+    camera.position.set(0, -low, far);
+    look.set(0, -low, 0);
     if (push > 0) {
       screenAt.set(0, 0, 0);
       for (const c of corners) screenAt.add(v.copy(c).applyMatrix4(space.matrixWorld));
@@ -341,7 +345,7 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
       const sw = v.copy(corners[1]!).applyMatrix4(space.matrixWorld).distanceTo(look.copy(corners[0]!).applyMatrix4(space.matrixWorld));
       const sh = v.copy(corners[3]!).applyMatrix4(space.matrixWorld).distanceTo(look.copy(corners[0]!).applyMatrix4(space.matrixWorld));
       const near = Math.max((sh * 1.05) / (2 * tan()), (sw * 1.03) / (2 * tan() * camera.aspect));
-      look.set(0, 0, 0).lerp(screenAt, push);
+      look.set(0, -low, 0).lerp(screenAt, push);
       camera.position.set(look.x, look.y, THREE.MathUtils.lerp(far, screenAt.z + near, push));
     }
     camera.lookAt(look);

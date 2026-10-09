@@ -63,6 +63,8 @@ function DeviceDex({ rom, world, catalogue, progress, openOn, tab, closeSignal, 
       let size = { w: 0, h: 0 };
       device = await createDexDevice(canvasRef.current!, {
         model: "/models/pokedex.glb",
+        // The hand that holds it is a prototype, off unless asked for (?hand).
+        ...(new URLSearchParams(location.search).has("hand") && { hand: "/models/pokedex-hand.glb" }),
         onScreen(quad, open, settled) {
           const el = screenRef.current;
           if (!el) return;
@@ -78,9 +80,9 @@ function DeviceDex({ rom, world, catalogue, progress, openOn, tab, closeSignal, 
             }
           }
           el.style.transform = quadTransform(size.w, size.h, quad);
-          // The cover hides the screen until it's swung past halfway.
-          el.style.opacity = String(Math.min(1, Math.max(0, (open - 0.35) / 0.4)));
-          el.style.visibility = open > 0.35 ? "visible" : "hidden";
+          // The cover hides the screen until it has swung clear of it.
+          el.style.opacity = String(Math.min(1, Math.max(0, (open - 0.6) / 0.3)));
+          el.style.visibility = open > 0.6 ? "visible" : "hidden";
           if (shadeRef.current) shadeRef.current.style.opacity = String(Math.min(1, device ? device.progress * 1.6 : 0));
         },
       }).catch((e: unknown) => {
