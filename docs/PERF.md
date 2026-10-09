@@ -90,9 +90,22 @@ The rest of the CPU is three.js preparing passes and draws: bloom (12 passes) an
 field (10) are about a quarter of it each, shadows half the draw calls. The governor now gets the
 engine's CPU time and won't lower resolution for a window whose frames are mostly CPU work.
 
-Ambient motion costs no CPU: grass sway and water ripples are a time uniform evaluated in the
-vertex and fragment shaders. Stepping them to a few frames a second wouldn't save GPU time
-either, since every frame is redrawn anyway (the camera follows the player).
+## Drawing only frames that change
+
+Ambient motion costs no CPU by itself: grass sway and water ripples are a time uniform evaluated
+in the shaders. But it made every frame different, so a still view was redrawn 60 times a second.
+Now grass, water and the time of day advance in steps, 3 a second by default (about the rate the
+original game animates water; `?ambient=60` for smooth), and the engine skips a frame that would
+look the same as the last one drawn (D34). A still view (reading a sign, a menu, standing about)
+draws about 3 frames a second instead of 60, roughly 95% less 3D work; walking still draws every
+frame, since the camera moves.
+
+What counts as a change (`packages/engine/src/change-watch.ts`): every visible object's
+transform, each mesh's geometry, material and texture version (sprites change pose by swapping
+geometry), the camera, the place tint easing in, the wrap fade, the time of day and the ambient
+clock. Battles always draw (they animate through textures the watch doesn't see), as do frames
+owed by shaders still compiling and anything after a look, size or content change. `?stats`
+shows `drawn N/s`. Dynamic resolution only judges the interval after a drawn frame.
 
 ## Dynamic resolution and the mobile tier
 

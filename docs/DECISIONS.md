@@ -522,3 +522,14 @@ within `render.maxPixelRatio` (3 → 1.5, 2 → 2, 2.625 → 1.3125) and scales 
 iPhone that's 2×2 blocks, no resampling blur, and 44% fewer pixels to shade. Dynamic
 resolution's finer rungs stay fractional (whole-fraction steps would be 1.5 → 1 → 0.75, cuts of
 over 40% each) and keep smooth scaling. See docs/PERF.md, "Pixel ratio".
+
+## D34. Draw only frames that change; ambient motion steps 3 times a second
+
+Nick, 2026-10-09 (thread "Phone performance"): only draw a frame when its contents changed, with
+grass and other ambient motion on a few fixed steps a second like the original game; he picked
+3 a second over 10, 30 or smooth. Grass sway, water ripples and the time of day (sun, shadows,
+sky, colour grade) now advance on that tick, and the engine skips any frame whose scene graph,
+camera and clocks match the last one drawn. A still view draws about 3 frames a second instead
+of 60; walking still draws every frame. Why: idle time (text, menus, standing about) is a large
+share of play on a phone, and a phone that idles cheaply runs cooler and throttles less when the
+player walks. `?ambient=N` overrides the rate. See docs/PERF.md, "Drawing only frames that change".

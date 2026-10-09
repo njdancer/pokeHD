@@ -1,5 +1,6 @@
 import * as THREE from "three/webgpu";
 import { fog, rangeFogFactor, uniform } from "three/tsl";
+import { createChangeWatch } from "./change-watch.ts";
 import { sceneTime } from "./scene-time.ts";
 import { createSky } from "./sky.ts";
 import { createDayClock, stepDay, wrapNow } from "./look/clock.ts";
@@ -79,6 +80,8 @@ export interface EngineStats {
   dof: boolean;
   width: number;
   height: number;
+  /** 3D frames drawn in the last second. Frames that would look the same as the last are skipped. */
+  drawn: number;
 }
 
 export interface BenchResult {
@@ -127,6 +130,11 @@ export interface EngineOptions {
    * it again when they don't. Defaults to on unless the page URL has `?dynres=0`.
    */
   dynamicResolution?: boolean;
+  /**
+   * Steps per second for grass, water and the time of day (D34). Between steps a still view
+   * isn't redrawn. Defaults to `?ambient=`, else 3, about the rate the original animates water.
+   */
+  ambientRate?: number;
 }
 
 // The newest engine created on a canvas owns it. React StrictMode mounts, unmounts and
@@ -173,10 +181,13 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const fogColor = uniform(rig.fogColor);
 
   let fixedSize: { width: number; height: number } | null = null;
-  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, scale: 1, dof: true, width: 0, height: 0 };
+  const stats: EngineStats = { cpuMs: 0, updateMs: 0, renderMs: 0, scale: 1, dof: true, width: 0, height: 0, drawn: 0 };
+  /** Something outside the scene graph changed (size, look, content): draw the next frame. */
+  let dirty = true;
   const governor = (options.dynamicResolution ?? query.get("dynres") !== "0") ? createGovernor() : null;
   let rung = RUNGS[0]!;
   const resize = () => {
+    dirty = true;
     if (fixedSize) {
       renderer.setPixelRatio(1);
       renderer.setSize(fixedSize.width, fixedSize.height, false);
@@ -204,6 +215,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   // Structural changes rebuild materials or the post graph; batch a slider drag into one.
   let rebuildTimer: ReturnType<typeof setTimeout> | undefined;
   const rebuild = () => {
+    dirty = true;
     clearTimeout(rebuildTimer);
     rebuildTimer = undefined;
     rig.setShadowMapSize(params.shadows.mapSize);
@@ -257,6 +269,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       rebuild();
     },
     changed(path) {
+      dirty = true;
       if (path === "render.maxPixelRatio") resize();
       if (path === undefined || STRUCTURAL.has(path)) {
         clearTimeout(rebuildTimer);
@@ -273,15 +286,24 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   let elapsed = 0;
   const frameHooks: { before?: () => void; after?: () => void } = {};
 
-  /** Renders a frame, unless the canvas isn't laid out yet; says whether it did. */
-  const renderFrame = (dt: number): boolean => {
+  const ambientRate = options.ambientRate ?? (Number(query.get("ambient")) || 3);
+  const watch = createChangeWatch();
+  const watched: number[] = [];
+
+  /**
+   * Advances the scene by `dt` seconds (grass, water and the time of day by `ambientDt`, which
+   * the frame loop steps) and renders it, unless the canvas isn't laid out yet or, without
+   * `force`, the frame would look the same as the last one drawn (D34). Says whether it drew.
+   */
+  const renderFrame = (dt: number, ambientDt = dt, force = true): boolean => {
     if (stats.width === 0 || stats.height === 0) return false; // not laid out yet
     const t0 = performance.now();
-    if (params.time.animate) elapsed += dt;
+    if (params.time.animate) elapsed += ambientDt;
     sceneTime.value = elapsed;
     const p = params;
 
-    stepDay(p.time, clock, dt);
+    // The wrap's fade to black runs smoothly; the day itself moves in steps.
+    stepDay(p.time, clock, clock.fading ? dt : ambientDt);
     if (cycle) blendCycle(cycle, p.time.phase, p);
     if (p.camera.orbit) p.camera.yaw = ((p.camera.yaw + dt * 8 + 180) % 360) - 180;
 
@@ -309,20 +331,37 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     const k = 1 - Math.exp(-dt / PLACE_TINT_SECONDS);
     for (let i = 0; i < 3; i++) placeTint[i]! += (want[i]! - placeTint[i]!) * k;
     post.update(p, camera.position.distanceTo(world.target), clock.fade, placeTint, dt);
+
+    const { position: cp, quaternion: cq } = camera;
+    watched.length = 0;
+    watched.push(cp.x, cp.y, cp.z, cq.x, cq.y, cq.z, cq.w, camera.fov, camera.aspect, ...placeTint, clock.fade, p.time.phase, elapsed);
+    const moved = watch.changed(world.root, watched);
+    // A battle animates through textures and attributes the watch doesn't see; shaders still
+    // compiling skip draws that a later frame has to make up.
+    if (!(force || moved || dirty || world.view || warmup.busy() || lookdev)) return false;
+    dirty = false;
     const tRender = performance.now();
     post.render();
     stats.renderMs = performance.now() - tRender;
     stats.cpuMs = performance.now() - t0;
+    drawnThisSecond++;
     return true;
 
   };
 
+  let drawnThisSecond = 0;
+  let secondStart = 0;
+  let drewLast = false;
+  /** Ambient time: the frame loop's clock, and where its last step landed. */
+  let ambientClock = 0;
+  let ambientAt = 0;
   renderer.setAnimationLoop((t) => {
     if (superseded()) return renderer.setAnimationLoop(null);
     timer.update(t);
     const delta = timer.getDelta();
-    // The raw interval, vsync and all, is what the governor judges.
-    const changed = governor && !fixedSize ? governor.sample(delta * 1000, t / 1000, stats.cpuMs) : null;
+    // The raw interval, vsync and all, is what the governor judges: only after a drawn frame,
+    // since a skipped one costs nothing and says nothing about the load.
+    const changed = governor && !fixedSize && drewLast ? governor.sample(delta * 1000, t / 1000, stats.cpuMs) : null;
     if (changed !== null) {
       const next = RUNGS[changed]!;
       const dofChanged = next.dof !== rung.dof;
@@ -335,8 +374,21 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     frameHooks.before?.();
     // The first delta can be negative (rAF time vs. the timer's clock); clamp long stalls too.
     warmup.beforeFrame();
-    const rendered = renderFrame(Math.min(Math.max(delta, 0), 0.1));
+    const dt = Math.min(Math.max(delta, 0), 0.1);
+    ambientClock += dt;
+    let ambientDt = 0;
+    if (Math.floor(ambientClock * ambientRate) !== Math.floor(ambientAt * ambientRate)) {
+      ambientDt = ambientClock - ambientAt;
+      ambientAt = ambientClock;
+    }
+    const rendered = renderFrame(dt, ambientDt, false);
+    drewLast = rendered;
     warmup.afterFrame(rendered);
+    if (t - secondStart >= 1000) {
+      stats.drawn = Math.round((drawnThisSecond * 1000) / (t - secondStart));
+      drawnThisSecond = 0;
+      secondStart = t;
+    }
     frameHooks.after?.();
   });
 
@@ -369,6 +421,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       world.setCompiler?.(null);
       world = next;
       scene.add(world.root);
+      dirty = true;
       world.setCompiler?.(compile);
     },
     setFixedSize(size) {
@@ -439,12 +492,25 @@ function nonBlockingShaders(renderer: THREE.WebGPURenderer, scene: THREE.Scene, 
   /** Post-processing programs still linking, and ones this frame started. */
   let linking = 0;
   let started = 0;
+  /** Scene objects whose draws were skipped for a pipeline still compiling, and whether one
+   * has finished since the last drawn frame (so the next frame must draw it). */
+  let sceneLinking = 0;
+  let owed = false;
   pipelines.updateForRender = (renderObject) => {
     const inScene = (renderObject as { scene: unknown }).scene === scene;
     if (warm && !inScene) return void pipelines.getForRender(renderObject);
     const promises: Promise<void>[] = [];
     pipelines.getForRender(renderObject, promises);
-    if (inScene) return;
+    if (inScene) {
+      for (const p of promises) {
+        sceneLinking++;
+        void p.then(() => {
+          sceneLinking--;
+          owed = true;
+        });
+      }
+      return;
+    }
     for (const p of promises) {
       linking++;
       started++;
@@ -454,11 +520,14 @@ function nonBlockingShaders(renderer: THREE.WebGPURenderer, scene: THREE.Scene, 
   if (!warm) canvas.style.visibility = "hidden";
   let complete = false;
   return {
+    /** Frames still owe something: the first full frame, or a draw skipped while compiling. */
+    busy: () => !warm || linking > 0 || sceneLinking > 0 || owed,
     beforeFrame() {
       complete = linking === 0;
       started = 0;
     },
     afterFrame(rendered: boolean) {
+      if (rendered) owed = false;
       if (warm || !rendered || !complete || started > 0) return;
       warm = true;
       canvas.style.visibility = "";
