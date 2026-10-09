@@ -26,8 +26,8 @@ export interface DexDeviceOptions {
    * its screen nearly fills the view. Without one, or if it won't load, the simple built one.
    */
   model?: string;
-  /** A hand to hold the model (its GLB), as if the player had pulled it out. */
-  hand?: string;
+  /** Ash's hand holding the model, as if he'd pulled it out. */
+  hand?: boolean;
 }
 
 export interface DexDevice {
@@ -257,7 +257,7 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
 
   // The modelled device in place of the built one, centred as it is open.
   const model: DexModel | null = options.model
-    ? await loadDexModel(options.model, options.hand).catch((e: unknown) => {
+    ? await loadDexModel(options.model, { hand: options.hand ?? false }).catch((e: unknown) => {
         console.warn("[pokeHD] Pokédex model failed; using the simple one", e);
         return null;
       })
