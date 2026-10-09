@@ -38,3 +38,27 @@ export function directionMask(x: number, y: number, deadzone: number): number {
   if (within <= 60) return DIAGONAL[quadrant]!;
   return CARDINAL[(quadrant + 1) % 4]!;
 }
+
+const HORIZONTAL = Button.Left | Button.Right;
+
+/** A held stick direction lets go only once the thumb comes back inside this fraction of the dead zone. */
+const STICK_RELEASE = 0.7;
+/** To turn, the other axis has to beat the held one by this ratio (about 54° off the held axis). */
+const STICK_TURN = 1.4;
+
+/**
+ * One direction for a thumbstick at (x, y), with x right and y down and 1 the stick's reach. The
+ * game walks on a grid in four directions, so the stick only ever holds one: the axis the thumb
+ * leans furthest along. Two kinds of hysteresis stop it flickering where a thumb wobbles: a held
+ * direction lets go a little inside the dead zone rather than right at it, and switching to the
+ * other axis needs a clear lean (`STICK_TURN`), not just crossing the diagonal.
+ */
+export function stickDirection(x: number, y: number, held: number, deadzone: number): number {
+  const reach = Math.hypot(x, y);
+  if (reach < (held ? deadzone * STICK_RELEASE : deadzone)) return 0;
+  const ax = Math.abs(x);
+  const ay = Math.abs(y);
+  const horizontal = held & HORIZONTAL ? ay <= ax * STICK_TURN : held ? ax > ay * STICK_TURN : ax >= ay;
+  if (horizontal) return x < 0 ? Button.Left : Button.Right;
+  return y < 0 ? Button.Up : Button.Down;
+}

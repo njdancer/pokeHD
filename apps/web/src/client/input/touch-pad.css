@@ -3,7 +3,7 @@
   position: fixed;
   inset: auto 0 0 0;
   display: grid;
-  grid-template: "dpad . face" auto "menu menu menu" auto / auto 1fr auto;
+  grid-template: ". face" minmax(var(--pad-size), auto) "menu menu" auto / 1fr auto;
   align-items: end;
   gap: 8px 12px;
   padding: 16px max(16px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
@@ -23,30 +23,48 @@
   touch-action: none;
 }
 
-.touch-dpad {
-  position: relative;
-  width: var(--pad-size);
+/*
+ * The stick's zone is the lower-left of the screen: a thumb landing anywhere in it puts the stick
+ * there. At rest the stick waits where the old D-pad was, dimmed, to show where it lives.
+ */
+.touch-stick {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 50%;
+  height: calc(var(--pad-size) * 2.2);
+  --rest-x: calc(max(16px, env(safe-area-inset-left)) + var(--pad-size) / 2);
+  --rest-y: calc(100% - max(20px, env(safe-area-inset-bottom)) - 48px - var(--pad-size) / 2);
+}
+.touch-stick-base {
+  position: absolute;
+  left: var(--rest-x);
+  top: var(--rest-y);
+  width: calc(var(--pad-size) * .85);
   aspect-ratio: 1;
   border-radius: 50%;
+  transform: translate(-50%, -50%);
   background: rgb(20 20 28 / .3);
-}
-.touch-dpad span {
-  position: absolute;
-  width: 33%;
-  height: 33%;
-  background: rgb(20 20 28 / .55);
   border: 1px solid rgb(255 255 255 / .25);
+  opacity: .6;
   pointer-events: none;
+  transition: opacity .15s;
 }
-.touch-dpad .up { left: 33.5%; top: 2%; border-radius: 8px 8px 0 0; }
-.touch-dpad .down { left: 33.5%; bottom: 2%; border-radius: 0 0 8px 8px; }
-.touch-dpad .left { top: 33.5%; left: 2%; border-radius: 8px 0 0 8px; }
-.touch-dpad .right { top: 33.5%; right: 2%; border-radius: 0 8px 8px 0; }
+.touch-stick.active .touch-stick-base { opacity: 1; transition: none; }
+.touch-stick-knob {
+  position: absolute;
+  inset: 25%;
+  border-radius: 50%;
+  background: rgb(20 20 28 / .55);
+  border: 1px solid rgb(255 255 255 / .4);
+  backdrop-filter: blur(6px);
+  transition: translate .12s ease-out;
+}
+.touch-stick.active .touch-stick-knob { transition: none; }
 
-.touch-dpad { grid-area: dpad; }
-.touch-face { grid-area: face; }
+.touch-face { grid-area: face; position: relative; z-index: 1; }
 /* Select and Start sit centred under the rest, as on the Game Boy, so narrow phones still fit. */
-.touch-menu { grid-area: menu; display: flex; gap: 16px; justify-content: center; }
+.touch-menu { grid-area: menu; position: relative; z-index: 1; display: flex; gap: 16px; justify-content: center; }
 .touch-small { min-height: 40px; min-width: 76px; padding: 6px 14px; border-radius: 999px; font-size: .8rem; letter-spacing: .05em; }
 
 .touch-face { display: flex; gap: 14px; align-items: end; }
