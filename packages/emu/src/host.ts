@@ -85,9 +85,11 @@ export class EmulatorHost {
   readonly #worker: Worker;
   /** Resolves once the emulator is running. */
   readonly started: Promise<Started>;
-  readonly #audio: AudioContext;
+  #audio: AudioContext;
   #audioNode: AudioWorkletNode | undefined;
   #audioSetup: Promise<void> | undefined;
+  /** The context stopped (suspended, or iOS interrupted it) since sound started. */
+  #stopped = false;
   #nextId = 1;
   readonly #pending = new Map<number, (state: Uint8Array) => void>();
   readonly #reads = new Map<number, (bytes: Uint8Array[]) => void>();
@@ -96,7 +98,7 @@ export class EmulatorHost {
   #linkSend: ((message: LinkMessage) => void) | undefined;
 
   constructor(options: EmulatorHostOptions) {
-    this.#audio = new AudioContext({ latencyHint: "interactive" });
+    this.#audio = this.#context();
     this.#worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module", name: "pokehd-emu" });
     let ready: (started: Started) => void = () => {};
     this.started = new Promise((resolve) => (ready = resolve));
@@ -219,8 +221,14 @@ export class EmulatorHost {
     // Checked and set with no await in between, so calls that were all waiting on resume() make
     // one worklet. Two worklets both reporting what they consumed would make the worker run the
     // game twice as fast to keep up, and the one being fed would drop half its sound.
-    this.#audioSetup ??= createAudioOutput(this.#audio).then(({ port, node }) => {
+    const context = this.#audio;
+    this.#audioSetup ??= createAudioOutput(context).then(({ port, node }) => {
+      // restartAudio() swapped the context while this one was still being set up: drop it, or
+      // its port could reach the worker after the fresh one's and pace the game off a closed
+      // context, which never plays.
+      if (context !== this.#audio) return node.disconnect();
       this.#audioNode = node;
+      this.#stopped = false;
       this.#post({ type: "audio", port }, [port]);
     });
     const setup = this.#audioSetup;
@@ -230,6 +238,37 @@ export class EmulatorHost {
       if (this.#audioSetup === setup) this.#audioSetup = undefined; // the next gesture tries again
       throw err;
     }
+  }
+
+  /**
+   * Swaps the audio output for a fresh one, started again by the next `enableAudio()`. For after
+   * the page comes back from the background: iOS can leave a context it interrupted playing
+   * fast and garbled, as if there were two. The new context keeps the old one's sample rate, so
+   * the emulator's samples still fit; the worker drops the old worklet's port when the new one
+   * arrives, so there is still only ever one. Returns whether it swapped (sound is then off until
+   * the next `enableAudio()`).
+   */
+  restartAudio(): boolean {
+    // Only a context that stopped while the page was away needs it. One that kept running (a
+    // desktop tab switch) is fine as it is, and closing it would leave the game paused until a
+    // click or key, which a gamepad press isn't.
+    if (!this.#audioSetup || (!this.#stopped && this.#audio.state === "running")) return false;
+    const old = this.#audio;
+    this.#audioNode?.disconnect();
+    this.#audioNode = undefined;
+    this.#audioSetup = undefined;
+    this.#audio = this.#context(old.sampleRate);
+    void old.close();
+    return true;
+  }
+
+  /** A context that notes when it stops running after sound started, for `restartAudio()`. */
+  #context(sampleRate?: number): AudioContext {
+    const context = new AudioContext({ latencyHint: "interactive", ...(sampleRate ? { sampleRate } : {}) });
+    context.onstatechange = () => {
+      if (context === this.#audio && this.#audioNode && context.state !== "running") this.#stopped = true;
+    };
+    return context;
   }
 
   get audioEnabled(): boolean {
