@@ -258,13 +258,14 @@ export class Machine {
       this.set(de, 0xff, "end of list");
     });
     this.cp(S("wCurMapTileset"), S("wUnusedCurMapTilesetCopy"));
-    this.beat("header-ptr");
+    this.beat("header-bank");
     const map = this.mem[S("wCurMap")];
     this.SwitchToMapRomBank(map);
     const prevTileset = this.mem[S("wCurMapTileset")];
     this.set(S("wCurMapTileset"), prevTileset & 0x7f, "res BIT_NO_PREVIOUS_MAP");
     this.cp(S("wCurMapTileset"), S("hPreviousTileset"));
     // hl = MapHeaderPointers + map * 2 (bank 0)
+    this.beat("header-ptr");
     const ptrAddr = S("MapHeaderPointers") + map * 2;
     this.look(ptrAddr, "MapHeaderPointers + map × 2: low byte");
     this.look(ptrAddr + 1, "high byte");
@@ -409,6 +410,7 @@ export class Machine {
       // (no split set for Pallet; wFontLoaded bit 0 clear; wSpriteSetID 0 ≠ set ID, so load it)
       this.set(S("wSpriteSetID"), setId, "the sprite set ID", [this.pv(setAddr)]);
       let de = S("SpriteSets") + (setId - 1) * 11;
+      this.beat("sprite-set-list");
       this.set(0xc20d, 0x01, "SPRITE_RED for the player slot"); // wSpritePlayerStateData2PictureID
       for (let i = 0; i < 11; i++) {
         this.cp(de, 0xc20d + (i + 1) * 16); // x#SPRITESTATEDATA2_PICTUREID
@@ -465,7 +467,10 @@ export class Machine {
         if (s < 11 && s >= b) b = s;
       }
       let slot = b + 1;
-      if (pic >= this.firstStillSprite) slot = fourTile + 11;
+      if (pic >= this.firstStillSprite) {
+        slot = fourTile + 11;
+        if (!fourTile) this.beat("sprite-sheets-4");
+      }
       this.set(slotAddr, slot, "VRAM slot", [this.prov[slotAddr]]);
       this.set(S("hVRAMSlot"), slot, "VRAM slot");
       const tbl = S("SpriteSheetPointerTable") + (pic - 1) * 4;
