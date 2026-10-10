@@ -54,6 +54,17 @@ describe("decodeOverworldState", () => {
     expect(npc?.step).toEqual({ dx: 1, dy: 0, progress: 0.25 });
   });
 
+  it("reports an NPC's first step frame from the cell being left", () => {
+    const w = blank();
+    w.numSprites[0] = 1;
+    w.sprites1.set([0x05, 3], 0x10); // picture ID, moving
+    w.sprites1[0x10 + 3] = 0xff; // Y step vector: up
+    w.sprites2[0x10] = 16; // walk animation counter, as TryWalking leaves it
+    w.sprites2.set([4 + 6, 4 + 2], 0x10 + 4); // map Y, X (already the destination)
+    const [npc] = decodeOverworldState(w).npcs;
+    expect(npc).toMatchObject({ x: 2, y: 7, step: { dx: 0, dy: -1, progress: 0 } });
+  });
+
   it("hides toggled-off objects", () => {
     const w = blank();
     w.numSprites[0] = 1;
@@ -268,6 +279,18 @@ describe.skipIf(!hasRom)("decoding a walk from Red's room to Viridian City", () 
     const walking = drive.states.slice(-300).flatMap((s) => s.npcs.filter((n) => n.step));
     expect(walking.length).toBeGreaterThan(0);
     for (const n of walking) expect(n.step!.progress * 16).toSatisfy(Number.isInteger);
+    // Drawn positions only ever move a pixel a frame: no frame on the destination before the step.
+    const recent = drive.states.slice(-300);
+    for (let i = 1; i < recent.length; i++) {
+      for (const n of recent[i]!.npcs) {
+        const before = recent[i - 1]!.npcs.find((m) => m.slot === n.slot);
+        if (!before) continue;
+        const at = (a: typeof n) => [a.x + (a.step ? a.step.dx * a.step.progress : 0), a.y + (a.step ? a.step.dy * a.step.progress : 0)];
+        const [x0, y0] = at(before);
+        const [x1, y1] = at(n);
+        expect(Math.abs(x1! - x0!) + Math.abs(y1! - y0!)).toBeLessThanOrEqual(1 / 16);
+      }
+    }
 
     const beforeOak = gb.saveState();
     const recorded = drive.states.length;

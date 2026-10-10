@@ -46,7 +46,7 @@ const unit = (value: number) => Math.sign(signed(value)) as -1 | 0 | 1;
 const facing = (value: number): Facing => FACINGS[(value >> 2) & 3]!;
 
 function stepFrom(dx: -1 | 0 | 1, dy: -1 | 0 | 1, progress: number): Step | null {
-  return (dx !== 0 || dy !== 0) && progress > 0 && progress < 1 ? { dx, dy, progress } : null;
+  return (dx !== 0 || dy !== 0) && progress >= 0 && progress < 1 ? { dx, dy, progress } : null;
 }
 
 /**
@@ -82,7 +82,9 @@ function decodeNpc(watched: OverworldWatched, slot: number): Npc | null {
   const dy = unit(byte(watched.sprites1, s1 + YSTEPVECTOR));
   const counter = byte(watched.sprites2, s1 + WALKANIMATIONCOUNTER);
   const moving = (byte(watched.sprites1, s1 + MOVEMENTSTATUS) & 0x7f) === STATUS_MOVING && counter > 0;
-  // NPC map coordinates already point at the destination for the whole step.
+  // NPC map coordinates already point at the destination for the whole step, including the
+  // frame TryWalking starts it (counter 16, progress 0). That frame must count as a step too,
+  // or the NPC is drawn on the destination for a frame before walking there.
   const step = moving ? stepFrom(dx, dy, (NPC_STEP_FRAMES - counter) / NPC_STEP_FRAMES) : null;
   return {
     slot,
@@ -112,9 +114,9 @@ function mode(watched: OverworldWatched): OverworldMode {
 export function decodeOverworldState(watched: OverworldWatched): OverworldState {
   const counter = byte(watched.walkCounter, 0);
   // The player's coordinates change on the step's last frame, so mid-step they're the cell
-  // being left.
+  // being left, so a step that hasn't moved yet (counter 8) is just standing there.
   const step =
-    counter > 0
+    counter > 0 && counter < PLAYER_STEP_FRAMES
       ? stepFrom(
           unit(byte(watched.sprites1, XSTEPVECTOR)),
           unit(byte(watched.sprites1, YSTEPVECTOR)),
