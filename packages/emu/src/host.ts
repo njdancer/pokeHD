@@ -6,6 +6,7 @@ import type { ScriptMessage } from "./script-text.ts";
 import type { GiftEvent } from "./gifts/desk.ts";
 import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { DexOpened } from "./dex-guard.ts";
+import type { JournalEvent } from "./journal-hooks.ts";
 import type { LinkPortOptions } from "./link.ts";
 import type { FrameMessage, FromWorker, ToWorker, Watch } from "./protocol.ts";
 import type { ActionResult, GameAction } from "./game/actions.ts";
@@ -68,6 +69,8 @@ export interface EmulatorHostOptions {
   onTalk?: (map: number, npc: number) => void;
   /** The player beat a trainer on the map (with `onDexOpen`): the map and their index in its objects. */
   onBeat?: (map: number, npc: number) => void;
+  /** Passing this turns on the play journal's read-only hooks: battles, catches, items, badges. */
+  onJournal?: (event: JournalEvent) => void;
   /** Called for every emulated frame, in the order they were produced. */
   onFrame?: (frame: FrameMessage) => void;
   /** Called (at most about once a second) when the game has written its save. */
@@ -200,6 +203,9 @@ export class EmulatorHost {
         case "ask":
           options.onAsk?.(data.id, data.ask);
           break;
+        case "journal":
+          options.onJournal?.(data.event);
+          break;
         case "error":
           options.onError?.(data.message);
           break;
@@ -211,7 +217,8 @@ export class EmulatorHost {
     const askNames = !!options.onNameAsk;
     const guardDex = !!options.onDexOpen;
     const menu = !!options.onAsk;
-    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase, guardDex, askNames, menu });
+    const journal = !!options.onJournal;
+    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase, guardDex, askNames, menu, journal });
     if (options.autosave === false) this.setAutosave(false);
   }
 

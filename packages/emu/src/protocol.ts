@@ -5,6 +5,7 @@ import type { NameAsk } from "./controls.ts";
 import type { ScriptMessage } from "./script-text.ts";
 import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { DexOpened } from "./dex-guard.ts";
+import type { JournalEvent } from "./journal-hooks.ts";
 import type { LinkRole } from "./link.ts";
 import type { ActionResult, GameAction } from "./game/actions.ts";
 import type { AskAnswer, GameAsk } from "./game/asks.ts";
@@ -18,7 +19,8 @@ export type ToWorker =
   /** `askNames` has the page answer name questions (Controls) instead of the game's own screens. */
   /** `guardDex` turns on DexGuard: the page shows its own Pokédex over the game's. */
   /** `menu` turns on the Pokédex menu's game hooks: page actions, and the game's questions asked of the page. */
-  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean; menu?: boolean }
+  /** `journal` turns on JournalHooks (read-only): "journal" messages for the play journal. */
+  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean; menu?: boolean; journal?: boolean }
   /** Switches pacing to the audio clock; the port talks to the audio worklet. */
   | { type: "audio"; port: MessagePort }
   | { type: "buttons"; mask: number }
@@ -109,6 +111,8 @@ export type FromWorker =
   /** Someone on the map is speaking: the map and their index in its objects. */
   | { type: "talk"; map: number; npc: number }
   | { type: "beat"; map: number; npc: number }
+  /** Something for the play journal happened in the game (JournalHooks). */
+  | { type: "journal"; event: JournalEvent }
   /** An outbound link message for the friend. */
   | { type: "link-send"; message: LinkMessage }
   | { type: "read"; id: number; bytes: Uint8Array[] }
