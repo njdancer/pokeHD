@@ -582,3 +582,22 @@ message is on the page. Until the page has read that far, the CPU waits a frame 
 press and no click. A first try that replaced the whole printing routine for plain messages
 worked, but it left out 46 messages (sounds inside the text) and duplicated the printer's job, so
 we didn't keep it.
+
+## D37. Colour and relief come from a process run on the player's ROM; nothing baked ships
+
+**Status:** decided by Nick on 2026-10-08. Supersedes D11's "reviewed palette file".
+
+Big image models (Qwen-Image-Edit, depth and normal models) run offline on Nick's Mac as teachers
+only. Their outputs train a small model that ships and runs at runtime on the player's own ROM
+(WebGPU, phones included). No colourised sprites, height maps or palette tables are committed or
+served, ours included. Personal use, so weights trained on the game's art are fine.
+
+## D38. The relief editor's edits are training data only
+
+**Status:** decided by Nick on 2026-10-09.
+
+`/tools/relief` lets Nick paint which way each pixel faces (a normal per tile pixel, or per Pokémon
+picture pixel) and see the 3D shape it makes. The edits are saved to his browser and to his account
+(`/api/admin/relief`, in the private bucket), and can be exported for local processing. The game
+never reads them, and they aren't committed as game data: they're teaching material for the small
+runtime model (D37).
