@@ -6,5 +6,6 @@
     "types": ["vite/client"],
     "jsx": "react-jsx"
   },
-  "include": ["src/client"]
+  "include": ["src/client"],
+  "exclude": ["src/client/**/*.rom.test.ts"]
 }

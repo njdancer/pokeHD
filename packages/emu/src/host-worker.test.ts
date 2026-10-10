@@ -10,7 +10,7 @@ import { SYMBOLS } from "@pokehd/rom";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadResumePoint, sameTrainer, saveSummary } from "./autosave.ts";
 import { Button, GameBoy } from "./core.ts";
-import { fuzzSeeds, rng, type Rng } from "./fuzz.ts";
+import { fuzzSeeds, fuzzSteps, rng, type Rng } from "./fuzz.ts";
 import { saveGame } from "./gifts/gifts.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
 import { EmulatorHost } from "./host.ts";
@@ -271,7 +271,7 @@ describe.skipIf(!existsSync(ROM_PATH))("emulator host and worker", () => {
     const page = await open(resumed);
     let paused = false;
     let points = 0;
-    const steps = Number(process.env["FUZZ_STEPS"] ?? 30);
+    const steps = fuzzSteps(30);
     for (let step = 0; step < steps; step++) {
       const op = r.int(8);
       if (op === 0) {

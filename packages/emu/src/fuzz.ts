@@ -28,10 +28,15 @@ export function rng(seed: number): Rng {
   };
 }
 
+/** Environment variables, read without Node's types (the web app's tests use this too). */
+const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
+
 /** The seeds to run: FUZZ_SEED alone, or FUZZ_RUNS of them (default `runs`) from a fixed start. */
 export function fuzzSeeds(runs: number): number[] {
-  const env = typeof process === "undefined" ? {} : process.env;
   if (env["FUZZ_SEED"]) return [Number(env["FUZZ_SEED"])];
   const n = Number(env["FUZZ_RUNS"] ?? runs) || runs;
   return Array.from({ length: n }, (_, i) => 0x5eed + i * 7919);
 }
+
+/** Steps per fuzz run: FUZZ_STEPS, or `steps`. */
+export const fuzzSteps = (steps: number): number => Number(env["FUZZ_STEPS"] ?? steps) || steps;
