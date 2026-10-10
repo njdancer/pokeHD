@@ -8,6 +8,8 @@ import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { DexOpened } from "./dex-guard.ts";
 import type { LinkPortOptions } from "./link.ts";
 import type { FrameMessage, FromWorker, ToWorker, Watch } from "./protocol.ts";
+import type { ActionResult, GameAction } from "./game/actions.ts";
+import type { AskAnswer, GameAsk } from "./game/asks.ts";
 
 /** The main thread's end of a LinkPort running in the worker. */
 export interface HostLink {
@@ -73,6 +75,12 @@ export interface EmulatorHostOptions {
   onError?: (message: string) => void;
   /** Received gifts landing, waiting and reaching a save (D20). */
   onGift?: (event: GiftEvent) => void;
+  /**
+   * The game asks the player something (the Pokédex menu's sheets): a list, the party, a
+   * quantity, yes or no. Passing this turns on the menu's game hooks; the game waits until
+   * `answerAsk()` is called, and `act()` works.
+   */
+  onAsk?: (id: number, ask: GameAsk) => void;
 }
 
 /** A taken gift and, on success, the save the game wrote straight after (store it first). */
@@ -105,6 +113,7 @@ export class EmulatorHost {
   readonly #reads = new Map<number, (bytes: Uint8Array[]) => void>();
   readonly #takes = new Map<number, (taken: TakenGift) => void>();
   readonly #resumePoints = new Map<number, (state: Uint8Array | null) => void>();
+  readonly #actions = new Map<number, (result: ActionResult) => void>();
   #linkSend: ((message: LinkMessage) => void) | undefined;
 
   constructor(options: EmulatorHostOptions) {
@@ -184,6 +193,13 @@ export class EmulatorHost {
         case "beat":
           options.onBeat?.(data.map, data.npc);
           break;
+        case "action-done":
+          this.#actions.get(data.id)?.(data.result);
+          this.#actions.delete(data.id);
+          break;
+        case "ask":
+          options.onAsk?.(data.id, data.ask);
+          break;
         case "error":
           options.onError?.(data.message);
           break;
@@ -194,7 +210,8 @@ export class EmulatorHost {
     const guardErase = !!options.onErasePrompt;
     const askNames = !!options.onNameAsk;
     const guardDex = !!options.onDexOpen;
-    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase, guardDex, askNames });
+    const menu = !!options.onAsk;
+    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase, guardDex, askNames, menu });
     if (options.autosave === false) this.setAutosave(false);
   }
 
@@ -397,6 +414,23 @@ export class EmulatorHost {
       this.#takes.set(id, resolve);
       this.#post({ type: "gift-take", id, spec });
     });
+  }
+
+  /**
+   * Runs a Pokédex menu action with the game's own routine at its next overworld idle point
+   * (needs `onAsk`). Resolves with what the game said, or why it didn't happen.
+   */
+  act(action: GameAction): Promise<ActionResult> {
+    const id = this.#nextId++;
+    return new Promise((resolve) => {
+      this.#actions.set(id, resolve);
+      this.#post({ type: "action", id, action });
+    });
+  }
+
+  /** Answers the game's question `id` (see `onAsk`); null cancels, as B would. */
+  answerAsk(id: number, answer: AskAnswer): void {
+    this.#post({ type: "ask-answer", id, answer });
   }
 
   dispose(): void {

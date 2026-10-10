@@ -9,6 +9,8 @@ import { Controls } from "./controls.ts";
 import { FRAME_RATE, GameBoy } from "./core.ts";
 import { DexGuard } from "./dex-guard.ts";
 import { EraseGuard } from "./erase-guard.ts";
+import { GameActions } from "./game/actions.ts";
+import { GameAsks } from "./game/asks.ts";
 import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
 import { LinkPort } from "./link.ts";
@@ -38,6 +40,8 @@ let guard: EraseGuard | undefined;
 let controls: Controls | undefined;
 let dex: DexGuard | undefined;
 let rom: Uint8Array | undefined;
+let actions: GameActions | undefined;
+let asks: GameAsks | undefined;
 let scriptText = false;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
@@ -152,6 +156,10 @@ async function handle(data: ToWorker) {
             press: () => post({ type: "script-press" }),
           },
         });
+        if (data.menu) {
+          const act = (actions = new GameActions(gb, { rom: data.rom }));
+          asks = new GameAsks(gb, { rom: data.rom, busy: () => act.pending > 0 && SafePoint.of(g).calling, onAsk: (id, ask) => post({ type: "ask", id, ask }) });
+        }
         rom = data.rom;
         if (scriptText) controls.setScriptText(rom);
         samplesPerFrame = data.sampleRate / FRAME_RATE;
@@ -228,7 +236,7 @@ async function handle(data: ToWorker) {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.
         // Signed-in players always have a port open (RoomLink keeps one ready), so it's the
         // session that counts, not the port.
-        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !dex?.open && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !dex?.open && !asks?.asking && !actions?.pending && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
         // Hand over any newer save first, so the stored save matches the one in the state.
         if (g?.sramDirty) flushSram();
         post({ type: "resume-point", id: data.id, state: g ? g.saveState() : null });
@@ -257,6 +265,15 @@ async function handle(data: ToWorker) {
           const g = gb;
           post({ type: "read", id: data.id, bytes: data.ranges.map(([address, length]) => g.readBytes(address, length)) });
         }
+        break;
+      case "action": {
+        const { id } = data;
+        if (!actions) post({ type: "action-done", id, result: { ok: false, reason: "menu hooks are off", messages: [] } });
+        else actions.run(data.action, (result) => post({ type: "action-done", id, result }));
+        break;
+      }
+      case "ask-answer":
+        asks?.answer(data.id, data.answer);
         break;
       case "gift-give":
         desk?.give(data.id, data.gift);

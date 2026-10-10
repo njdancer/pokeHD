@@ -623,3 +623,24 @@ belong to a save; an intro with Resume). The storage choices below were made whi
   on their way out (they'd be sent twice) or earlier saves (they stay with the original).
 
 Until Nick picks the intro, the live game plays the main slot as before.
+
+## D40. The Pokédex menu works the game through its routines, never its menus
+
+**Status:** Nick's rule, 2026-10-10 ("inject code to interact with the fundamental routines of
+the mechanism", not orchestrate the existing UI). Mechanism chosen by Claude.
+
+- **Actions** (`GameActions`) run at the overworld idle point (SafePoint, D20) as calls of the
+  game's own routine for the job: `UseItem` with wCurItem and the item's place in the bag, inside
+  the frame any person's message gets (`DisplayTextIDInit` … `CloseTextDisplay`); toss is
+  `RemoveItemFromInventory`; team order is the party menu's data swap
+  (`SwitchPartyMon_InitVarOrSwapData`) without its drawing. With no routine of the game's own
+  (moves and bag order outside battle, options), the data is changed directly, the same change the
+  game's in-battle or menu code makes.
+- **Stand-ins** (`ffi.ts`): where a routine would draw a menu and wait for buttons
+  (`DisplayPartyMenu`, `DisplayListMenuID`, `DisplayChooseQuantityMenu`, a yes/no), a hook at its
+  first instruction writes the outputs its callers read and returns, or idles the CPU through
+  `DelayFrame` until the page answers. During our own actions the answers come from the action;
+  otherwise (`GameAsks`) the page is asked, so the battle bag, the Poké Mart and Bill's PC become
+  sheets while the game's rules decide what happens. Lists the page doesn't ask are left to the game.
+- **Opt-in.** Only a page that passes `onAsk` to `EmulatorHost` turns them on; the live game is
+  unchanged until Nick picks the menu.

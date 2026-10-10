@@ -18,3 +18,6 @@ export * from "./state/text-decode.ts";
 export * from "./gifts/desk.ts";
 export * from "./gifts/gifts.ts";
 export { busyReason, SafePoint, type Job, type Step } from "./gifts/safepoint.ts";
+export * from "./game/actions.ts";
+export * from "./game/asks.ts";
+export * from "./game/snapshot.ts";

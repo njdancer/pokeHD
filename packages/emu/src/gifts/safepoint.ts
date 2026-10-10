@@ -15,6 +15,11 @@ export interface Step {
   registers?: (gb: GameBoy) => Partial<Registers>;
   /** Writes made just before the call, e.g. the routine's WRAM inputs. */
   before?: (gb: GameBoy) => void;
+  /**
+   * Words pushed after the return address, for a routine that pops what its caller pushed
+   * (`CloseTextDisplay` pops the ROM bank `DisplayTextID` pushed).
+   */
+  push?: (gb: GameBoy) => number[];
   /** Reads the routine's result. Returning false abandons the job's remaining steps. */
   after?: (gb: GameBoy, out: Registers) => boolean | void;
 }
@@ -150,9 +155,14 @@ export class SafePoint {
     const step = run.job.steps[run.index]!;
     step.before?.(gb);
     const loop = addr("OverworldLoop");
-    const sp = (run.saved.sp - 2) & 0xffff;
+    let sp = (run.saved.sp - 2) & 0xffff;
     gb.write(sp, loop & 0xff);
     gb.write(sp + 1, loop >> 8);
+    for (const word of step.push?.(gb) ?? []) {
+      sp = (sp - 2) & 0xffff;
+      gb.write(sp, word & 0xff);
+      gb.write(sp + 1, (word >> 8) & 0xff);
+    }
     gb.setRegisters({ ...step.registers?.(gb), sp, pc: addr(step.routine) });
   }
 
