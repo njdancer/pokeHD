@@ -27,3 +27,11 @@
 .saves-card.binned { display: flex; align-items: center; opacity: .8; }
 .saves-card.binned .start-button { width: auto; white-space: nowrap; margin-right: calc(var(--tile) * .5); font-size: .7em; min-height: 44px; }
 .saves-list .start-button:disabled { opacity: .5; }
+.saves-name-input {
+  width: 100%; box-sizing: border-box; margin: calc(var(--tile) * -.15) calc(var(--tile) * -.3); padding: calc(var(--tile) * .15) calc(var(--tile) * .3);
+  font: inherit; font-size: max(16px, 1em); color: inherit; background: #fff; border: 0; border-radius: calc(var(--tile) * .35);
+  box-shadow: inset 0 0 0 calc(var(--tile) * .08) #f2c48a; outline: none;
+}
+.saves-name-input:focus { box-shadow: inset 0 0 0 calc(var(--tile) * .1) var(--hd-accent); }
+.saves-name-input::placeholder { color: inherit; opacity: .45; }
+.saves-screen { z-index: 30; }

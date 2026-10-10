@@ -176,10 +176,21 @@ interface Props {
   romKey: string;
   header: RomHeader;
   onForget(): void;
+  /**
+   * Set by a menu in front of the game (the intro, /dev/saves): while true the game loads and
+   * draws its world behind the menu, paused, with none of its own buttons. Once false the player
+   * plays on from where the save left off; with no resume point the game's start screen is
+   * passed by itself (Continue, or a new game for an empty slot). Left out, the game shows its
+   * own start screen as before.
+   */
+  held?: boolean;
 }
 
-export function Game({ rom, romKey, header, onForget }: Props) {
+export function Game({ rom, romKey, header, onForget, held }: Props) {
   const holder = useRef<HTMLDivElement>(null);
+  const heldRef = useRef(held ?? false);
+  /** The emulator has run its first frame, so pausing it now won't hold up the loading screen. */
+  const emuRanRef = useRef(false);
   const screenRef = useRef<HTMLCanvasElement>(null);
   const hostRef = useRef<EmulatorHost>(null);
   const [pip, setPip] = useState(loadPip);
@@ -326,6 +337,8 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     let lastMask = 0;
     const joypad = new JoypadInput({
       onChange: (mask, source) => {
+        // Behind a menu, the player's buttons are the menu's.
+        if (heldRef.current) return;
         // B closes the HD Pokédex (the game's is held while it's up).
         if (mask & ~lastMask & Button.B) dexBRef.current();
         lastMask = mask;
@@ -427,7 +440,11 @@ export function Game({ rom, romKey, header, onForget }: Props) {
         onScriptPress: () => readOnScript(),
         onFrame: ({ pixels, watched, count }) => {
           image.data.set(new Uint8Array(pixels));
-          if (++emuFrames === 1) setStartup((s) => ({ ...s, emu: true }));
+          if (++emuFrames === 1) {
+            setStartup((s) => ({ ...s, emu: true }));
+            emuRanRef.current = true;
+            if (heldRef.current) host?.setPaused(true);
+          }
           const bytes = watched as OverworldWatched;
           const state = decoder.decode(bytes);
           const inWorld = trackInWorld(bytes);
@@ -745,6 +762,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       setLayout("full");
       setNoHd(false);
       setStartup({ emu: false, world: false });
+      emuRanRef.current = false;
       setRoom(null);
       setLink(null);
       setGifts(null);
@@ -851,6 +869,15 @@ export function Game({ rom, romKey, header, onForget }: Props) {
     setOnboarding({ phase: "starting", choice });
   };
 
+  // A menu in front pauses the game and lets it go. Let go on the start screen, the game
+  // passes it by itself: the menu was the choice.
+  useEffect(() => {
+    if (held === undefined) return;
+    heldRef.current = held;
+    if (emuRanRef.current) hostRef.current?.setPaused(held);
+    if (!held && onboarding?.phase === "choose") start(startSave ? "continue" : "new");
+  }, [held, onboarding, startSave]);
+
   /** The page's answer to the game's name question; null hands the game's own screen back. */
   const answerName = (name: string | null) => {
     const ask = nameAsk;
@@ -878,7 +905,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
 
   const s = stats?.state;
   return (
-    <div className={touch ? "game with-touch-pad" : "game"} ref={holder}>
+    <div className={`game${touch ? " with-touch-pad" : ""}${held ? " held" : ""}`} ref={holder}>
       <canvas
         ref={screenRef}
         className={`gb-screen ${noHd ? "full" : layout}`}
@@ -993,7 +1020,7 @@ export function Game({ rom, romKey, header, onForget }: Props) {
       {/* The pad hides while Settings is open so it can't cover the panel's forms (and unmounting releases any held button). */}
       {/* The pad is for the world: anything with buttons of its own (HD menus, messages, the start and names) hides it. */}
       {input && touch && !settings && !(hdText && !noHd) && !nameAsk && !onboarding && !dex && <TouchPad onChange={onTouch} />}
-      {ready && (onboarding?.phase === "choose" || onboarding?.phase === "starting") && (
+      {ready && held === undefined && (onboarding?.phase === "choose" || onboarding?.phase === "starting") && (
         <StartScreen
           save={startSave}
           accountName={account?.player.name ?? null}
