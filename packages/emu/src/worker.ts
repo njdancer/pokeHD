@@ -93,7 +93,8 @@ function tick() {
       nextFrameAt += 1000 / FRAME_RATE;
     }
   }
-  setTimeout(tick, Math.max(0, nextFrameAt - performance.now()));
+  // Paused, there's no frame due: look again a frame from now rather than spin.
+  setTimeout(tick, paused || !gb ? 1000 / FRAME_RATE : Math.max(0, nextFrameAt - performance.now()));
 }
 
 // "start" awaits the core. Messages that need the Game Boy (a friend's gift, a read) wait for

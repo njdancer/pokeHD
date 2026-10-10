@@ -30,12 +30,25 @@ describe("Starter", () => {
     expect(s.done).toBe(true);
   });
 
-  it("picks NEW GAME, also when there's no save to continue", () => {
+  it("never starts a new game in place of CONTINUE", () => {
     const { calls, press } = recorder();
     const s = new Starter("continue", press);
-    s.frame(screen([box(["NEW GAME", "OPTION"])], ["NEW GAME", "OPTION"]), false, 0);
+    const noSave = screen([box(["NEW GAME", "OPTION"])], ["NEW GAME", "OPTION"]);
+    for (let f = 0; f < 100; f++) s.frame(noSave, false, f);
+    expect(calls).toEqual([]);
+    expect(s.done).toBe(false);
+    // CONTINUE appears after all (the menu was still drawing): it's picked.
+    s.frame(screen([box(["CONTINUE", "NEW GAME", "OPTION"])], ["CONTINUE", "NEW GAME", "OPTION"]), false, 100);
     expect(calls).toEqual(["select 0 true"]);
-    expect(s.done).toBe(true);
+    // It never does: the game's own menu is left to the player, nothing pressed.
+    const gone = recorder();
+    const g = new Starter("continue", gone.press);
+    for (let f = 0; f < 400; f++) g.frame(noSave, false, f);
+    expect(gone.calls).toEqual([]);
+    expect(g.done).toBe(true);
+  });
+
+  it("picks NEW GAME", () => {
     const n = recorder();
     const fresh = new Starter("new", n.press);
     fresh.frame(screen([box(["CONTINUE", "NEW GAME", "OPTION"])], ["CONTINUE", "NEW GAME", "OPTION"]), false, 0);

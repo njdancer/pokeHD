@@ -84,7 +84,7 @@ const classic = new URLSearchParams(location.search).has("classic");
 declare global {
   interface Window {
     /** Set with ?stats, for scripted play-throughs. */
-    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly slow: SlowFrame[] };
+    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly frames: number; readonly slow: SlowFrame[] };
   }
 }
 /** A display frame over 50 ms, with what the page was doing (for ?stats perf checks). */
@@ -184,9 +184,11 @@ interface Props {
    * own start screen as before.
    */
   held?: boolean;
+  /** Called once the world has drawn behind a menu (or there won't be one), so it can show. */
+  onReady?(): void;
 }
 
-export function Game({ rom, romKey, header, onForget, held }: Props) {
+export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
   const holder = useRef<HTMLDivElement>(null);
   const heldRef = useRef(held ?? false);
   /** The emulator has run its first frame, so pausing it now won't hold up the loading screen. */
@@ -656,6 +658,9 @@ export function Game({ rom, romKey, header, onForget, held }: Props) {
           get inWorld() {
             return sceneRef.current.inWorld;
           },
+          get frames() {
+            return emuFrames;
+          },
           slow,
         };
         // Display frame times, and emulated frames per second, for perf checks.
@@ -778,7 +783,8 @@ export function Game({ rom, romKey, header, onForget, held }: Props) {
   }, [rom, romKey, boot, glyphs]);
 
   // The loading screen: up until the world is drawn, or the Game Boy screen is all there is to see.
-  const loaded = startup.emu && (startup.world || layout === "full");
+  // Behind a menu the Game Boy screen is hidden, so only the world will do.
+  const loaded = startup.emu && (startup.world || (layout === "full" && held === undefined));
   useEffect(() => {
     if (loaded) return;
     const timer = setTimeout(() => {
@@ -794,6 +800,10 @@ export function Game({ rom, romKey, header, onForget, held }: Props) {
     return () => clearTimeout(timer);
   }, [ready, boot]);
   const loaderGone = ready && loaderGoneFor === boot;
+  // The menu in front shows its own loading screen, and fades it out once this says it's ready.
+  useEffect(() => {
+    if (ready) onReady?.();
+  }, [ready, onReady]);
 
   const onTouch = useMemo(() => (mask: number) => input?.setTouchMask(mask), [input]);
   // Without an emulator (it's restarting) the panel just stays on "Reading your game…".
@@ -1047,7 +1057,7 @@ export function Game({ rom, romKey, header, onForget, held }: Props) {
       )}
       {savedAt > 0 && <SavedToast shownAt={savedAt} />}
       {erasing && <EraseConfirm old={erasing.old} onAnswer={answerErase} />}
-      {!loaderGone && <LoadingScreen leaving={ready} />}
+      {!loaderGone && !held && <LoadingScreen leaving={ready} />}
     </div>
   );
 }

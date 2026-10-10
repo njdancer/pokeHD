@@ -127,4 +127,4 @@
 .battle-hp { margin-top: .25rem; text-align: right; font-size: .85rem; font-variant-numeric: tabular-nums; }
 
 /* Behind a menu (the intro): only the world and the loading screen show. */
-.game.held > :not(.scene):not(.boot) { visibility: hidden; pointer-events: none; }
+.game.held > :not(.scene) { visibility: hidden; pointer-events: none; }
