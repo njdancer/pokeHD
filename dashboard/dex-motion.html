@@ -91,10 +91,19 @@ select.btn { padding-right: 6px; }
 .timeline { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 16px 12px; }
 .tl-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; color: var(--muted); font-size: .8rem; }
 .tl-head .time { font: 600 .85rem var(--font-num); color: var(--ink); font-variant-numeric: tabular-nums; min-width: 9ch; }
-.tl-grid { display: grid; grid-template-columns: 74px minmax(0, 1fr); row-gap: 3px; position: relative; }
+.tl-grid { display: grid; grid-template-columns: 128px minmax(0, 1fr); row-gap: 3px; position: relative; }
 .tl-label { font-weight: 800; font-size: .8rem; display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 3px 0; border-radius: 6px; }
 .tl-label::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
 .tl-label[aria-selected="true"] { color: var(--c); }
+.tl-label .name { flex: 1; min-width: 0; }
+.ms { width: 22px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--raised); color: var(--muted);
+  font: 900 .68rem/1 var(--font-ui); }
+.ms[aria-pressed="true"].m { background: #6b5f52; color: var(--ink); border-color: #6b5f52; }
+.ms[aria-pressed="true"].s { background: #e6b450; color: #1b0f06; border-color: #e6b450; }
+.tl-label.off .name { opacity: .45; text-decoration: line-through; }
+.bar.off { opacity: .28; }
+.hold { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
+.hold .btn { padding: 2px 8px; font-size: .75rem; }
 .lane { position: relative; height: 24px; background: #1c1916; border-radius: 6px; }
 .lane.ruler { height: 18px; background: none; cursor: ew-resize; font: 400 10px var(--font-num); color: var(--muted); }
 .tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); padding-left: 3px; line-height: 18px; }
@@ -195,7 +204,11 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
     <div class="timeline">
       <div class="tl-head">
         <span class="time" id="time">0 ms</span>
-        <span id="tl-note">Drag a bar to move it, its ends to stretch it. Drag the ruler to scrub.</span>
+        <span id="tl-note">Drag a bar to move it, its ends to stretch it. Drag the ruler to scrub. M mutes a layer, S solos it.</span>
+        <span class="hold">Off layers sit at
+          <button class="btn" id="hold-start" type="button" aria-pressed="true">Start</button>
+          <button class="btn" id="hold-end" type="button" aria-pressed="false">End</button>
+        </span>
       </div>
       <div class="tl-grid" id="tl"></div>
     </div>
@@ -317,7 +330,18 @@ function merge(base, over) {
   return base;
 }
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(V)); } catch {} ; writeJson(); };
-const total = () => Math.max(...TRACKS.map((t) => V.tracks[t.id].delay + V.tracks[t.id].duration));
+// Layer switches (not part of the values): muted layers, soloed layers, and whether a layer that's
+// off sits at its start or its end.
+const LAYERS = "dex-motion-layers";
+const layers = { muted: new Set(), solo: new Set(), holdEnd: false };
+try { const l = JSON.parse(localStorage.getItem(LAYERS) || "null"); if (l) { layers.muted = new Set(l.muted); layers.solo = new Set(l.solo); layers.holdEnd = !!l.holdEnd; } } catch {}
+const saveLayers = () => { try { localStorage.setItem(LAYERS, JSON.stringify({ muted: [...layers.muted], solo: [...layers.solo], holdEnd: layers.holdEnd })); } catch {} };
+const active = (id) => (layers.solo.size ? layers.solo.has(id) : !layers.muted.has(id));
+const ends = (ids) => Math.max(0, ...ids.map((id) => V.tracks[id].delay + V.tracks[id].duration));
+/** How long playback runs: to the end of the last layer that's on. */
+const total = () => ends(TRACKS.map((t) => t.id).filter(active));
+/** The timeline's length, every layer included. */
+const allTotal = () => ends(TRACKS.map((t) => t.id));
 
 // ---------- Curves ----------
 function bezier([x1, y1, x2, y2]) {
@@ -344,6 +368,7 @@ function bezier([x1, y1, x2, y2]) {
 }
 /** The track's raw 0–1 progress at time `ms`, and its eased value. */
 function at(id, ms) {
+  if (!active(id)) { const v = layers.holdEnd ? 1 : 0; return { u: v, e: v }; }
   const tr = V.tracks[id];
   const u = tr.duration <= 0 ? (ms >= tr.delay ? 1 : 0) : Math.min(1, Math.max(0, (ms - tr.delay) / tr.duration));
   return { u, e: bezier(tr.curve)(u) };
@@ -694,7 +719,7 @@ let span = 1000;
 const laneW = () => tl.querySelector(".lane.ruler")?.clientWidth || 600;
 const msToX = (ms) => (ms / span) * laneW();
 function buildTimeline() {
-  span = Math.max(1000, Math.ceil((total() + 150) / 250) * 250);
+  span = Math.max(1000, Math.ceil((allTotal() + 150) / 250) * 250);
   tl.innerHTML = "";
   tl.append(Object.assign(document.createElement("div")), Object.assign(document.createElement("div"), { className: "lane ruler", id: "ruler" }));
   const ruler = $("ruler");
@@ -707,8 +732,21 @@ function buildTimeline() {
   scrubber(ruler);
   for (const tr of TRACKS) {
     const label = document.createElement("div");
-    label.className = "tl-label"; label.textContent = tr.label; label.style.setProperty("--c", `var(--t-${tr.id})`);
+    label.className = "tl-label"; label.dataset.id = tr.id; label.style.setProperty("--c", `var(--t-${tr.id})`);
     label.setAttribute("aria-selected", String(tr.id === selected)); label.tabIndex = 0;
+    const name = document.createElement("span"); name.className = "name"; name.textContent = tr.label;
+    label.append(name);
+    for (const [kind, set, title] of [["m", layers.muted, "Mute"], ["s", layers.solo, "Solo"]]) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "ms " + kind; b.textContent = kind.toUpperCase();
+      b.title = `${title} ${tr.label}`; b.setAttribute("aria-label", b.title); b.setAttribute("aria-pressed", String(set.has(tr.id)));
+      b.onclick = (e) => {
+        e.stopPropagation();
+        if (set.has(tr.id)) set.delete(tr.id); else set.add(tr.id);
+        b.setAttribute("aria-pressed", String(set.has(tr.id)));
+        saveLayers(); markLayers();
+      };
+      label.append(b);
+    }
     label.onclick = () => select(tr.id);
     const lane = document.createElement("div"); lane.className = "lane";
     const bar = document.createElement("div"); bar.className = "bar"; bar.dataset.id = tr.id;
@@ -719,7 +757,16 @@ function buildTimeline() {
     dragBar(bar, tr.id);
   }
   placeBars();
+  markLayers();
 }
+function markLayers() {
+  for (const el of tl.querySelectorAll(".tl-label, .bar")) el.classList.toggle("off", !active(el.dataset.id));
+  $("hold-start").setAttribute("aria-pressed", String(!layers.holdEnd));
+  $("hold-end").setAttribute("aria-pressed", String(layers.holdEnd));
+  t = Math.min(t, total());
+}
+$("hold-start").onclick = () => { layers.holdEnd = false; saveLayers(); markLayers(); };
+$("hold-end").onclick = () => { layers.holdEnd = true; saveLayers(); markLayers(); };
 function placeBars() {
   for (const bar of tl.querySelectorAll(".bar")) {
     const tr = V.tracks[bar.dataset.id];
@@ -762,13 +809,13 @@ function dragBar(bar, id) {
       else { const nd = Math.min(d0 + w0, snap(d0 + dms)); tr.duration = d0 + w0 - nd; tr.delay = nd; }
       placeBars(); fillTrackFields(); writeJson();
     };
-    bar.onpointerup = () => { bar.onpointermove = null; save(); if (Math.ceil((total() + 150) / 250) * 250 !== span) buildTimeline(); };
+    bar.onpointerup = () => { bar.onpointermove = null; save(); if (Math.max(1000, Math.ceil((allTotal() + 150) / 250) * 250) !== span) buildTimeline(); };
   });
 }
 function select(id) {
   selected = id;
   tl.querySelectorAll(".tl-label, .bar").forEach((el) => {
-    const isSel = el.classList.contains("bar") ? el.dataset.id === id : el.textContent === TRACKS.find((x) => x.id === id).label;
+    const isSel = el.dataset.id === id;
     el.setAttribute("aria-selected", String(isSel));
   });
   buildCurve();
