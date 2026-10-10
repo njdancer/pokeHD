@@ -53,7 +53,7 @@ import {
   storeResumePoint,
   uploadResumePoint,
 } from "../saves/resume-store.ts";
-import { me, setMyName, type Account } from "../room/account.ts";
+import { listPlayers, me, setMyName, type Account } from "../room/account.ts";
 import { Friends } from "../room/Friends.tsx";
 import { RoomClient, type Friend, type RoomStatus } from "../room/client.ts";
 import { RoomLink } from "../room/link.ts";
@@ -289,6 +289,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const look = useMemo(() => uiLook(), []);
   /** The signed-in player (their name is the one Oak checks, and kept the same as theirs). */
   const [account, setAccount] = useState<Account | null>(null);
+  /** Everyone on the server, for the Pokédex menu (the room only knows who's online). */
+  const [players, setPlayers] = useState<{ id: string; name: string }[]>([]);
   /** The game is asking for a name: the page asks instead (tap-first UI). */
   const [nameAsk, setNameAsk] = useState<NameAsk | null>(null);
   const [onboarding, setOnboardingState] = useState<Onboarding>(null);
@@ -796,6 +798,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           if (!account) return setRoom({ status: "signed-out", friends: [] });
           setAccount(account);
           setAdmin(account.admin);
+          // The Pokédex menu lists every friend, not only the ones online now.
+          if (menuRef.current) void listPlayers().then((all) => !disposed && setPlayers(all));
           const client = new RoomClient();
           roomClient = client;
           // Before connecting, so the first welcome resends anything still in the outbox.
@@ -1140,6 +1144,12 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     }),
     [],
   );
+  const menuFriends = useMemo(() => {
+    const online = new Map((room?.friends ?? []).map((f) => [f.id, f]));
+    const all = players.map((p) => ({ ...(online.get(p.id) ?? { ...p, presence: null }), online: online.has(p.id) }));
+    for (const f of online.values()) if (!players.some((p) => p.id === f.id)) all.push({ ...f, online: true });
+    return all;
+  }, [room, players]);
   const bindLive = useMemo(() => (actions: LiveActions) => void (liveActionsRef.current = actions), []);
   const [readAloud, setReadAloud] = useState(false);
   const appOptions = useMemo<AppOptions>(() => ({ sound, readAloud, gameBoyScreen: pip }), [sound, readAloud, pip]);
@@ -1308,7 +1318,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           {...(menuOpen ? { start: menuOpen } : {})}
           onClose={closeMenu}
           journal={playJournal}
-          friends={room?.friends ?? []}
+          friends={menuFriends}
           savedAt={savedAt}
           app={appOptions}
           setApp={setApp}
