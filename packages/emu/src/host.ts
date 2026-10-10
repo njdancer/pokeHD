@@ -75,7 +75,8 @@ export interface EmulatorHostOptions {
   onFrame?: (frame: FrameMessage) => void;
   /** Called (at most about once a second) when the game has written its save. */
   onSram?: (sram: Uint8Array) => void;
-  onError?: (message: string) => void;
+  /** The emulator failed: an exception in its worker, or the worker itself crashing. */
+  onError?: (message: string, stack?: string) => void;
   /** Received gifts landing, waiting and reaching a save (D20). */
   onGift?: (event: GiftEvent) => void;
   /**
@@ -124,6 +125,8 @@ export class EmulatorHost {
     this.#worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module", name: "pokehd-emu" });
     let ready: (started: Started) => void = () => {};
     this.started = new Promise((resolve) => (ready = resolve));
+    // Errors the worker's own code didn't catch (a failed import, a throw outside its handler).
+    this.#worker.onerror = (event) => options.onError?.(`${event.message} (${event.filename}:${event.lineno})`);
     this.#worker.onmessage = ({ data }: MessageEvent<FromWorker>) => {
       switch (data.type) {
         case "ready":
@@ -207,7 +210,7 @@ export class EmulatorHost {
           options.onJournal?.(data.event);
           break;
         case "error":
-          options.onError?.(data.message);
+          options.onError?.(data.message, data.stack);
           break;
       }
     };

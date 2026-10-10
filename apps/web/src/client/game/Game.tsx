@@ -86,6 +86,7 @@ import { LiveMenu } from "../menu/LiveMenu.tsx";
 import type { AppOptions } from "../menu/model.ts";
 import { PlayJournal } from "../menu/journal.ts";
 import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
+import { noteRenderer, reportError } from "../errors.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
@@ -627,7 +628,10 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
             setLayout(screenLayout(state.mode, inWorld, pipRef.current, fits, battle, onboard));
           }
         },
-        onError: (text) => setMessage(`Emulator error: ${text}`),
+        onError: (text, stack) => {
+          reportError("emulator", Object.assign(new Error(text), { stack }));
+          setMessage(`Emulator error: ${text}`);
+        },
         onGift: (event) => courier?.onGiftEvent(event),
         onDexOpen: (opened) => {
           const h = host;
@@ -897,11 +901,13 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       } catch (e) {
         // Still playable on the Game Boy screen alone.
         console.error("[pokeHD] renderer failed", e);
+        reportError("error", e);
         setNoHd(true);
         setStartup((s) => ({ ...s, world: true }));
         return setMessage("The HD view couldn't start in this browser, so this is the Game Boy screen alone.");
       }
       if (disposed) return created.dispose();
+      noteRenderer(created.backend === "WebGPU" ? "webgpu" : "webgl");
       engine = created;
       // The loading screen lifts once the world has drawn a finished frame.
       void created.ready.then(() => !disposed && setStartup((s) => ({ ...s, world: true })));
