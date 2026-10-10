@@ -34,8 +34,8 @@ export interface WorkerHarness {
   readonly ranAway: boolean;
   /** Lets the worker's queued promise work run (messages waiting on start). */
   settle(): Promise<void>;
-  /** Advances fake time by `ms` in small steps, settling in between. */
-  advance(ms: number): Promise<void>;
+  /** Advances fake time by `ms` in 10 ms steps, calling `each` after each and settling. */
+  advance(ms: number, each?: () => void): Promise<void>;
   /** Sends a fresh audio port, as `EmulatorHost.enableAudio` does. */
   audio(): FakePort;
   /** Asks for a reply and waits for it. */
@@ -47,7 +47,7 @@ export interface WorkerHarness {
  * workers (this does) so each gets its own module state, and mock ./core.ts to hand the core
  * its wasm (Node can't fetch it).
  */
-export async function loadWorker(options: { runaway?: number } = {}): Promise<WorkerHarness> {
+export async function loadWorker(options: { runaway?: number; onPost?: (message: FromWorker) => void } = {}): Promise<WorkerHarness> {
   const runaway = options.runaway ?? 2000;
   const out: FromWorker[] = [];
   let frames = 0;
@@ -57,6 +57,7 @@ export async function loadWorker(options: { runaway?: number } = {}): Promise<Wo
     onmessage: null as ((e: MessageEvent<ToWorker>) => void) | null,
     postMessage(message: FromWorker) {
       out.push(message);
+      options.onPost?.(message);
       if (message.type !== "frame") return;
       frames++;
       if (++sinceYield > runaway && !ranAway) {
@@ -77,7 +78,6 @@ export async function loadWorker(options: { runaway?: number } = {}): Promise<Wo
     for (let i = 0; i < 20; i++) await Promise.resolve();
     sinceYield = 0;
   };
-  let nextId = 1_000_000;
   const harness: WorkerHarness = {
     out,
     send: deliver,
@@ -88,10 +88,12 @@ export async function loadWorker(options: { runaway?: number } = {}): Promise<Wo
       return ranAway;
     },
     settle,
-    async advance(ms) {
+    async advance(ms, each) {
       for (let t = 0; t < ms; t += 10) {
         sinceYield = 0;
         await vi.advanceTimersByTimeAsync(Math.min(10, ms - t));
+        each?.();
+        await settle();
       }
       await settle();
     },
@@ -108,7 +110,7 @@ export async function loadWorker(options: { runaway?: number } = {}): Promise<Wo
         if (reply) return reply as Extract<FromWorker, { type: typeof type }>;
         await settle();
       }
-      throw new Error(`no ${type} reply (id ${message.id}, next ${nextId++})`);
+      throw new Error(`no ${type} reply (id ${message.id})`);
     },
   };
   return harness;
