@@ -2,8 +2,10 @@
 <!--
   The Pokédex open-animation tuner (a standalone page, not part of the game). The closed dex sits
   where the menu button is; tapping it opens the cover and flies it into place as separate,
-  overlapping tracks, each with its own delay, duration and cubic-bezier curve. The values copy
-  out as JSON for the game (packages/engine/src/dex/device.ts).
+  overlapping tracks, each with its own delay, duration and cubic-bezier curve. It also tries how
+  the closed dex shows news (its lights, and a toast that comes out of it). The values copy out as
+  JSON for the game (packages/engine/src/dex/device.ts), and save to the page's database
+  (tuning/values) so Claude can read them.
 
   The model comes in as base64 in the dex-glb script tag: build with `node dashboard/build-dex-motion.mjs`,
   which writes the publishable page next to it (gitignored output under dashboard/dist/).
@@ -12,7 +14,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: a motion tool. Left, the phone stage over a timeline; right, the inspector (curve,
-   poses, export). Stacks to one column on a phone. One warm-dark look, the game's orange as accent. */
+   poses, alerts, values). On a phone the stage is pinned to the top and everything else scrolls
+   under it. One warm-dark look, the game's orange as accent. */
 :root {
   color-scheme: dark;
   --ground: #181512;
@@ -28,15 +31,18 @@
   --brown: #3e2a1c;
   --font-ui: Nunito, ui-rounded, system-ui, sans-serif;
   --font-num: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --t-press: #c98bdb;
-  --t-move: #e0702a;
+  --t-pressIn: #c98bdb;
+  --t-pressOut: #a874c9;
+  --t-dim: #8d8173;
+  --t-moveX: #e0702a;
+  --t-moveY: #f09a5a;
   --t-scale: #e6b450;
   --t-turn: #59b8ad;
   --t-open: #e8574a;
   --t-page: #8fb4f0;
-  --t-dim: #8d8173;
+  --ph: 58vh;
 }
-html, body { height: 100%; }
+html, body { height: 100%; overflow-x: clip; }
 body { background: var(--ground); color: var(--ink); font: 600 14px/1.4 var(--font-ui); }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -47,11 +53,11 @@ button { cursor: pointer; }
 .app { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
 header {
   grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
-  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel);
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0;
 }
 header h1 { margin: 0; font: 900 1.05rem/1 var(--font-ui); letter-spacing: .01em; }
 header h1 small { font-weight: 700; color: var(--muted); margin-left: 6px; font-size: .8rem; }
-.transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; }
+.transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; min-width: 0; }
 .btn {
   border: 1px solid var(--line); background: var(--raised); border-radius: 8px; padding: 6px 11px;
   font-weight: 800; font-size: .85rem; white-space: nowrap;
@@ -62,17 +68,15 @@ header h1 small { font-weight: 700; color: var(--muted); margin-left: 6px; font-
 select.btn { padding-right: 6px; }
 
 .left { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
-.stage-wrap { position: relative; min-height: 0; overflow: hidden; display: grid; place-items: center; background:
+.stage-wrap { position: relative; min-height: 0; overflow: hidden; touch-action: none; background:
   repeating-conic-gradient(#1d1a16 0 25%, #1a1714 0 50%) 0 0 / 22px 22px; }
-.stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
 .stage.framed { border-radius: 44px; box-shadow: 0 0 0 10px #0d0b09, 0 0 0 11px #3b342d, 0 30px 80px #000a; }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-#dex { z-index: 2; }
-.page { z-index: 3; }
-.badge { z-index: 4; }
+#dex { z-index: 2; pointer-events: none; }
 .dim { position: absolute; inset: 0; background: #1a1006; opacity: 0; pointer-events: none; }
 .page {
-  position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; opacity: 0; overflow: hidden;
+  position: absolute; z-index: 3; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; opacity: 0; overflow: hidden;
   background: linear-gradient(#fffaf0, #f6ead2); color: var(--brown); border-radius: 4px;
   display: flex; flex-direction: column; padding: 7% 7%; gap: 4%;
 }
@@ -83,29 +87,35 @@ select.btn { padding-right: 6px; }
 .page .row:nth-child(1) i { background: #e8473b; } .page .row:nth-child(2) i { background: #59b8ad; }
 .page .row:nth-child(3) i { background: #e6b450; } .page .row:nth-child(4) i { background: #8fb4f0; }
 .page small { color: #8a6a4a; font-weight: 700; }
-.hint { position: absolute; left: 50%; bottom: 22px; translate: -50% 0; padding: 6px 12px; border-radius: 99px;
+.hint { position: absolute; z-index: 5; left: 50%; bottom: 22px; translate: -50% 0; padding: 6px 12px; border-radius: 99px;
   background: #0008; color: #fff; font-weight: 800; font-size: 13px; pointer-events: none; transition: opacity .3s; white-space: nowrap; }
 .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-weight: 800; }
 
+/* Zoom and the phone's drag handle */
+.zoom { position: absolute; z-index: 6; right: 10px; bottom: 10px; display: flex; gap: 4px; align-items: center; }
+.zoom .btn { padding: 4px 9px; background: #2c2722e6; }
+.zoom output { font: 600 .75rem var(--font-num); color: var(--muted); min-width: 4.5ch; text-align: center; }
+.handle { display: none; }
+
 /* Timeline */
-.timeline { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 16px 12px; }
-.tl-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; color: var(--muted); font-size: .8rem; }
-.tl-head .time { font: 600 .85rem var(--font-num); color: var(--ink); font-variant-numeric: tabular-nums; min-width: 9ch; }
-.tl-grid { display: grid; grid-template-columns: 128px minmax(0, 1fr); row-gap: 3px; position: relative; }
-.tl-label { font-weight: 800; font-size: .8rem; display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 3px 0; border-radius: 6px; }
-.tl-label::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+.timeline { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 16px 12px; min-width: 0; }
+.tl-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; color: var(--muted); font-size: .8rem; }
+.tl-head .time { font: 600 .85rem var(--font-num); color: var(--ink); font-variant-numeric: tabular-nums; min-width: 8ch; }
+.tl-grid { display: grid; grid-template-columns: 136px minmax(0, 1fr); row-gap: 3px; position: relative; }
+.tl-label { font-weight: 800; font-size: .8rem; display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 2px 0; border-radius: 6px; min-width: 0; }
+.tl-label::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); flex: none; }
 .tl-label[aria-selected="true"] { color: var(--c); }
-.tl-label .name { flex: 1; min-width: 0; }
-.ms { width: 22px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--raised); color: var(--muted);
-  font: 900 .68rem/1 var(--font-ui); }
-.ms[aria-pressed="true"].m { background: #6b5f52; color: var(--ink); border-color: #6b5f52; }
-.ms[aria-pressed="true"].s { background: #e6b450; color: #1b0f06; border-color: #e6b450; }
-.tl-label.off .name { opacity: .45; text-decoration: line-through; }
-.bar.off { opacity: .28; }
+.tl-label .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-btn { width: 24px; height: 22px; padding: 0; display: grid; place-items: center; flex: none; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--muted); }
+.icon-btn:hover { border-color: var(--line); color: var(--ink); }
+.icon-btn svg { width: 16px; height: 16px; }
+.tl-label.off .name { opacity: .4; }
+.tl-label.off .eye { color: #6b5f52; }
+.bar.off { opacity: .25; }
 .hold { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
 .hold .btn { padding: 2px 8px; font-size: .75rem; }
-.lane { position: relative; height: 24px; background: #1c1916; border-radius: 6px; }
-.lane.ruler { height: 18px; background: none; cursor: ew-resize; font: 400 10px var(--font-num); color: var(--muted); }
+.lane { position: relative; height: 24px; background: #1c1916; border-radius: 6px; min-width: 0; }
+.lane.ruler { height: 18px; background: none; cursor: ew-resize; font: 400 10px var(--font-num); color: var(--muted); overflow: hidden; touch-action: none; }
 .tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); padding-left: 3px; line-height: 18px; }
 .bar { position: absolute; top: 2px; bottom: 2px; border-radius: 5px; background: color-mix(in srgb, var(--c) 32%, transparent); border: 1.5px solid var(--c); cursor: grab; touch-action: none; overflow: hidden; }
 .bar[aria-selected="true"] { background: color-mix(in srgb, var(--c) 55%, transparent); }
@@ -116,8 +126,8 @@ select.btn { padding-right: 6px; }
 .playhead::before { content: ""; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top-color: var(--ink); }
 
 /* Inspector */
-.inspector { grid-row: 2; grid-column: 2; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 14px 16px 40px; display: grid; gap: 18px; align-content: start; }
-.inspector section { display: grid; gap: 10px; }
+.inspector { grid-row: 2; grid-column: 2; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 14px 16px 40px; display: grid; gap: 18px; align-content: start; min-width: 0; }
+.inspector section { display: grid; gap: 10px; min-width: 0; }
 .inspector h3 { margin: 0; font: 900 .78rem/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .inspector h3 b { color: var(--c, var(--ink)); letter-spacing: .02em; text-transform: none; font-size: .95rem; }
 .curve { width: 100%; max-width: 330px; aspect-ratio: 1; background: #1c1916; border-radius: 10px; border: 1px solid var(--line); touch-action: none; display: block; }
@@ -125,37 +135,51 @@ select.btn { padding-right: 6px; }
 .chip { border: 1px solid var(--line); background: var(--raised); border-radius: 99px; padding: 3px 9px; font-size: .78rem; font-weight: 800; }
 .chip:hover { border-color: var(--muted); }
 .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 10px; }
-.field { display: grid; grid-template-columns: minmax(0, 1fr) 64px; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) 64px; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); min-width: 0; }
 .field input { width: 100%; background: #1c1916; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: 400 .82rem var(--font-num); text-align: right; font-variant-numeric: tabular-nums; }
-.field.wide { grid-column: 1 / -1; grid-template-columns: 110px minmax(0, 1fr) 64px; }
-.field.wide input[type="range"] { padding: 0; border: 0; background: none; accent-color: var(--accent); }
+.field.wide { grid-column: 1 / -1; grid-template-columns: 104px minmax(0, 1fr) 64px; }
+.field.wide input[type="range"] { padding: 0; border: 0; background: none; accent-color: var(--accent); min-width: 0; }
 .note { color: var(--muted); font-size: .8rem; margin: 0; }
 textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: 400 .74rem/1.45 var(--font-num); resize: vertical; }
 .row-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.toast { color: var(--accent); font-weight: 800; font-size: .8rem; }
-
-.stage-wrap.full { position: fixed; inset: 0; z-index: 10; }
-.exit-full { position: fixed; z-index: 11; left: 12px; top: calc(12px + env(safe-area-inset-top, 0px)); }
-/* Alerts on the closed dex */
-.badge { position: absolute; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; display: grid; place-items: center;
-  background: #e8473b; color: #fff; font: 900 13px/1 var(--font-ui); border: 2px solid #fffaf0; box-shadow: 0 2px 6px #4a2a0a66;
-  translate: -50% -50%; pointer-events: none; transition: scale .25s cubic-bezier(.3,1.6,.5,1), opacity .2s; }
-.badge.off { scale: 0; opacity: 0; }
-.pin { position: absolute; z-index: 1; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 30px 0 12px; border-radius: 14px 6px 6px 14px;
-  background: #fffaf0; color: var(--brown); border: 2px solid var(--sand); box-shadow: 0 3px 10px #4a2a0a55; font: 800 14px/1 var(--font-ui);
-  white-space: nowrap; transition: translate .45s cubic-bezier(.2,1.2,.3,1), opacity .25s; cursor: pointer; }
-/* It slides out from behind the dex. */
-.pin.off { translate: 40% 0; opacity: 0; pointer-events: none; }
-.pin i { width: 22px; height: 22px; border-radius: 7px; flex: none; }
+.status { color: var(--accent); font-weight: 800; font-size: .8rem; }
+.saved { color: var(--muted); font-size: .78rem; }
 .toggles { display: flex; flex-wrap: wrap; gap: 6px; }
 .toggles .btn { font-size: .8rem; padding: 5px 10px; }
+
+.stage-wrap.full { position: fixed; inset: 0; z-index: 30; }
+.exit-full { position: fixed; z-index: 31; left: 12px; top: calc(12px + env(safe-area-inset-top, 0px)); }
+
+/* News on the closed dex: lights drawn over the model (no re-render), and toasts that come out
+   of it. */
+.led-glow { position: absolute; z-index: 4; width: var(--g, 12px); height: var(--g, 12px); translate: -50% -50%; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, #fff 0 18%, var(--c) 30%, color-mix(in srgb, var(--c) 40%, transparent) 50%, transparent 70%);
+  mix-blend-mode: screen; animation: blink var(--blink, 1000ms) steps(1, end) infinite; }
+@keyframes blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0; } }
+.toasts { position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.pin { position: absolute; display: flex; align-items: center; gap: 8px; pointer-events: auto; cursor: pointer; touch-action: none;
+  background: #fffaf0; color: var(--brown); border: 2px solid var(--sand); box-shadow: 0 3px 10px #4a2a0a55;
+  white-space: nowrap; font-weight: 800; font-family: var(--font-ui); }
+.pin i { border-radius: 30%; flex: none; }
+.pin.behind { pointer-events: none; filter: brightness(.94); box-shadow: 0 2px 6px #4a2a0a33; }
+.pin .x { margin-left: 2px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: #e9dcc4; color: var(--brown); font: 900 14px/1 var(--font-ui);
+  display: grid; place-items: center; opacity: 0; transition: opacity .15s; padding: 0; }
+.pin:hover .x, .pin .x:focus-visible { opacity: 1; }
+@media (hover: none) { .pin .x { display: none; } }
+
 @media (max-width: 820px) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; height: auto; }
-  .left { grid-template-rows: 62vh auto; }
-  .inspector { grid-column: 1; grid-row: auto; border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .app { display: block; height: auto; padding-top: calc(var(--ph) + 18px); }
+  .stage-wrap { position: fixed; z-index: 20; left: 0; right: 0; top: 0; height: var(--ph); border-bottom: 1px solid var(--line); }
+  .handle { display: grid; place-items: center; position: fixed; z-index: 21; left: 0; right: 0; top: var(--ph); height: 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line); cursor: ns-resize; touch-action: none; }
+  .handle::before { content: ""; width: 44px; height: 4px; border-radius: 2px; background: var(--muted); }
+  .left { display: block; }
+  .inspector { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
   .transport { margin-left: 0; }
+  .tl-grid { grid-template-columns: 116px minmax(0, 1fr); }
+  .hold { margin-left: 0; }
 }
-@media (prefers-reduced-motion: reduce) { .hint { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .hint { transition: none; } .led-glow { animation: none; } }
 </style>
 
 <div class="app">
@@ -181,8 +205,10 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
     <div class="stage-wrap" id="stage-wrap">
       <div class="stage framed" id="stage">
         <canvas id="world"></canvas>
+        <div class="toasts" id="toasts"></div>
         <div class="dim" id="dim"></div>
         <canvas id="dex"></canvas>
+        <div id="glows"></div>
         <div class="page" id="page">
           <h2>Menu</h2>
           <div class="rowlist">
@@ -193,19 +219,24 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
           </div>
           <small>A stand-in page, to judge the settle.</small>
         </div>
-        <div class="badge off" id="badge">0</div>
-        <div class="pin off" id="pin"><i id="pin-icon"></i><span id="pin-text"></span></div>
         <div class="hint" id="hint">Tap the dex</div>
         <div class="loading" id="loading">Loading the model…</div>
       </div>
+      <div class="zoom">
+        <button class="btn" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+        <output id="zoom-level">100%</output>
+        <button class="btn" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        <button class="btn" id="zoom-fit" type="button">Fit</button>
+      </div>
       <button class="btn exit-full" id="exit-full" type="button" hidden>Done</button>
     </div>
+    <div class="handle" id="handle" role="separator" aria-label="Drag to resize the preview"></div>
 
     <div class="timeline">
       <div class="tl-head">
         <span class="time" id="time">0 ms</span>
-        <span id="tl-note">Drag a bar to move it, its ends to stretch it. Drag the ruler to scrub. M mutes a layer, S solos it.</span>
-        <span class="hold">Off layers sit at
+        <span id="tl-note">Drag a bar to move it, its ends to stretch it. Drag the ruler to scrub.</span>
+        <span class="hold">Hidden layers sit at
           <button class="btn" id="hold-start" type="button" aria-pressed="true">Start</button>
           <button class="btn" id="hold-end" type="button" aria-pressed="false">End</button>
         </span>
@@ -234,8 +265,8 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
     </section>
 
     <section>
-      <h3>Alerts on the closed dex</h3>
-      <p class="note">Send some news, then mix the ways the closed dex can show it. Any combination works.</p>
+      <h3>News on the closed dex</h3>
+      <p class="note">Send some news. The lid lifts a little and a toast slides out of it; more news stacks behind. Swipe a toast into the dex to dismiss it (or use its × on hover); tap it to open the dex.</p>
       <div class="toggles" id="alert-events">
         <button class="btn" type="button" data-ev="gift">+ Gift arrives</button>
         <button class="btn" type="button" data-ev="friend">+ Friend comes online</button>
@@ -244,7 +275,7 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
       </div>
       <div class="toggles" id="alert-styles"></div>
       <div class="fields" id="alert-fields"></div>
-      <p class="note">Lights: red is a gift, green a friend, yellow a save. The badge counts everything. The toast shows the newest and opens the dex when tapped.</p>
+      <p class="note">Lights: red is a gift, green a friend, yellow a save. They're drawn over the model, so the dex itself doesn't redraw while they blink.</p>
     </section>
 
     <section>
@@ -255,10 +286,11 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
 
     <section>
       <h3>Values</h3>
+      <p class="saved" id="saved">Saved on this device.</p>
       <textarea id="json" readonly aria-label="Values as JSON"></textarea>
       <div class="row-btns">
         <button class="btn primary" id="copy" type="button">Copy JSON</button>
-        <span class="toast" id="toast"></span>
+        <span class="status" id="status"></span>
       </div>
       <textarea id="import" placeholder="Paste values here to load them" aria-label="Paste values"></textarea>
       <div class="row-btns"><button class="btn" id="apply" type="button">Load pasted values</button></div>
@@ -280,20 +312,24 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 
 // ---------- Values ----------
 const TRACKS = [
-  { id: "press", label: "Press", note: "The tap: the closed dex dips in size, then springs back. Depth is how far it dips." },
+  { id: "pressIn", label: "Press in", note: "The tap: the closed dex shrinks by Depth along this curve." },
+  { id: "pressOut", label: "Press out", note: "…and springs back along this one. Overshoot (y above 1) makes it bounce past full size." },
   { id: "dim", label: "Dim", note: "The world behind darkens. Amount is how dark at the end." },
-  { id: "move", label: "Move", note: "Its centre travels from the button to the middle. Arc bends the path (minus bends the other way)." },
-  { id: "scale", label: "Scale", note: "Grows from button size to screen size (interpolated in log space, so it feels even)." },
+  { id: "moveX", label: "Move x", note: "Across, from the button to the middle. Give x and y different curves or timing to bend the path." },
+  { id: "moveY", label: "Move y", note: "Down, from the button to the middle." },
+  { id: "scale", label: "Scale", note: "Grows from button size to screen size (in log space, so it feels even). The point it grows around slides from the body's centre to the screen's with it." },
   { id: "turn", label: "Turn", note: "Untilts from the button's tilt to square-on. Swing adds an extra turn that peaks halfway." },
   { id: "open", label: "Open", note: "The cover swings open. Starts fully shut." },
   { id: "page", label: "Page", note: "The page fades in on the screen. It stays hidden until the cover is past 60% open, as in the game." },
 ];
 const DEFAULTS = {
-  version: 1,
+  version: 2,
   tracks: {
-    press: { delay: 0, duration: 140, curve: [0.3, 0, 0.4, 1], depth: 0.1 },
+    pressIn: { delay: 0, duration: 70, curve: [0.3, 0, 0.6, 1], depth: 0.1 },
+    pressOut: { delay: 70, duration: 160, curve: [0.3, 0, 0.3, 1] },
     dim: { delay: 0, duration: 420, curve: [0.4, 0, 0.2, 1], amount: 0.45 },
-    move: { delay: 30, duration: 640, curve: [0.2, 0.9, 0.25, 1], arc: 0.12 },
+    moveX: { delay: 30, duration: 640, curve: [0.2, 0.9, 0.25, 1] },
+    moveY: { delay: 30, duration: 640, curve: [0.2, 0.9, 0.25, 1] },
     scale: { delay: 30, duration: 640, curve: [0.3, 0.6, 0.2, 1] },
     turn: { delay: 30, duration: 600, curve: [0.25, 1.1, 0.4, 1], swing: 12 },
     open: { delay: 60, duration: 420, curve: [0.45, 0, 0.2, 1] },
@@ -302,8 +338,13 @@ const DEFAULTS = {
   closed: { width: 58, top: 12, right: 12, tiltX: -12, tiltY: -22, tiltZ: 4 },
   open: { fill: 0.94, offsetY: 0 },
   close: { speed: 1.4 },
-  // 1 on, 0 off. period: one pulse or blink (ms); peek: how far the lid lifts, every peekEvery ms.
-  alerts: { lens: 1, lights: 1, peek: 0, badge: 1, toast: 0, period: 1400, glow: 2.5, peekAmount: 0.22, peekMs: 700, peekEvery: 3200 },
+  // lights/toast: 1 on, 0 off. lid: how far it lifts while a toast is out, over lidMs.
+  alerts: {
+    lights: 1, toast: 1, blinkMs: 1000, glow: 12,
+    lid: 0.18, lidMs: 220, lidCurve: [0.3, 0, 0.2, 1],
+    toastMs: 380, toastCurve: [0.2, 1.1, 0.3, 1],
+    height: 40, font: 14, padX: 12, icon: 22, radius: 14, tuck: 22, offsetY: 0, stack: 6,
+  },
 };
 const PRESETS = {
   linear: [0, 0, 1, 1],
@@ -316,9 +357,6 @@ const PRESETS = {
   "settle": [0.2, 1.15, 0.35, 1],
 };
 const clone = (o) => JSON.parse(JSON.stringify(o));
-const STORE = "dex-motion-v1";
-let V = clone(DEFAULTS);
-try { const saved = JSON.parse(localStorage.getItem(STORE) || "null"); if (saved && saved.version === 1) V = merge(clone(DEFAULTS), saved); } catch {}
 function merge(base, over) {
   for (const k of Object.keys(base)) {
     if (over && over[k] !== undefined) {
@@ -329,16 +367,55 @@ function merge(base, over) {
   }
   return base;
 }
-const save = () => { try { localStorage.setItem(STORE, JSON.stringify(V)); } catch {} ; writeJson(); };
-// Layer switches (not part of the values): muted layers, soloed layers, and whether a layer that's
-// off sits at its start or its end.
-const LAYERS = "dex-motion-layers";
-const layers = { muted: new Set(), solo: new Set(), holdEnd: false };
-try { const l = JSON.parse(localStorage.getItem(LAYERS) || "null"); if (l) { layers.muted = new Set(l.muted); layers.solo = new Set(l.solo); layers.holdEnd = !!l.holdEnd; } } catch {}
-const saveLayers = () => { try { localStorage.setItem(LAYERS, JSON.stringify({ muted: [...layers.muted], solo: [...layers.solo], holdEnd: layers.holdEnd })); } catch {} };
-const active = (id) => (layers.solo.size ? layers.solo.has(id) : !layers.muted.has(id));
+/** Values from any version: version 1's one move track becomes x and y, its press becomes in and out. */
+function load(raw) {
+  if (!raw || typeof raw !== "object") return clone(DEFAULTS);
+  const r = clone(raw);
+  if (r.tracks?.move) { r.tracks.moveX ??= clone(r.tracks.move); r.tracks.moveY ??= clone(r.tracks.move); }
+  if (r.tracks?.press) {
+    const p = r.tracks.press, half = Math.round(p.duration / 2);
+    r.tracks.pressIn ??= { delay: p.delay, duration: half, curve: p.curve, depth: p.depth };
+    r.tracks.pressOut ??= { delay: p.delay + half, duration: p.duration - half, curve: p.curve };
+  }
+  return merge(clone(DEFAULTS), r);
+}
+const STORE = "dex-motion-v1";
+let V = clone(DEFAULTS);
+try { V = load(JSON.parse(localStorage.getItem(STORE) || "null")); } catch {}
+
+// The page's database, where Claude can read the values (tuning/values). Absent outside the viewer.
+let db = null, dbTimer = 0;
+const savedNote = (s) => ($("saved").textContent = s);
+function save() {
+  try { localStorage.setItem(STORE, JSON.stringify(V)); } catch {}
+  writeJson();
+  if (!db) return;
+  clearTimeout(dbTimer);
+  savedNote("Saving…");
+  dbTimer = setTimeout(async () => {
+    try { await db.doc("tuning/values").set({ values: JSON.stringify(V), at: new Date().toISOString() }); savedNote("Saved on this device and for Claude."); }
+    catch (e) { savedNote("Saved on this device only (" + (e?.code || "couldn't reach the database") + ")."); }
+  }, 700);
+}
+(async () => {
+  db = await window.claude?.use?.("db").catch(() => null) ?? null;
+  if (!db) return savedNote("Saved on this device only.");
+  try {
+    const snap = await db.doc("tuning/values").get();
+    if (snap.exists) { V = load(JSON.parse(snap.data().values)); try { localStorage.setItem(STORE, JSON.stringify(V)); } catch {} buildAll(); }
+    savedNote("Saved on this device and for Claude.");
+  } catch { savedNote("Saved on this device only."); }
+})();
+
+// Layer visibility (not part of the values): hidden layers, and whether a hidden layer sits at its
+// start or its end.
+const LAYERS = "dex-motion-layers-v2";
+const layers = { hidden: new Set(), holdEnd: false };
+try { const l = JSON.parse(localStorage.getItem(LAYERS) || "null"); if (l) { layers.hidden = new Set(l.hidden); layers.holdEnd = !!l.holdEnd; } } catch {}
+const saveLayers = () => { try { localStorage.setItem(LAYERS, JSON.stringify({ hidden: [...layers.hidden], holdEnd: layers.holdEnd })); } catch {} };
+const active = (id) => !layers.hidden.has(id);
 const ends = (ids) => Math.max(0, ...ids.map((id) => V.tracks[id].delay + V.tracks[id].duration));
-/** How long playback runs: to the end of the last layer that's on. */
+/** How long playback runs: to the end of the last visible layer. */
 const total = () => ends(TRACKS.map((t) => t.id).filter(active));
 /** The timeline's length, every layer included. */
 const allTotal = () => ends(TRACKS.map((t) => t.id));
@@ -378,24 +455,35 @@ function at(id, ms) {
 const $ = (id) => document.getElementById(id);
 const stageWrap = $("stage-wrap"), stage = $("stage"), dexCanvas = $("dex"), worldCanvas = $("world"), pageEl = $("page"), dimEl = $("dim"), hint = $("hint");
 let framed = true;
-let SW = 390, SH = 844, stageScale = 1;
+let SW = 390, SH = 844, stageScale = 1, zoom = 1, panX = 0, panY = 0;
 function layoutStage() {
   const r = stageWrap.getBoundingClientRect();
-  if (framed) { SW = 390; SH = 844; stageScale = Math.min((r.width - 40) / SW, (r.height - 40) / SH); }
-  else { SW = Math.round(r.width); SH = Math.round(r.height); stageScale = 1; }
-  stageScale = Math.max(0.2, stageScale);
+  if (!r.width || !r.height) return;
+  let fit;
+  if (framed) { SW = 390; SH = 844; fit = Math.min((r.width - 40) / SW, (r.height - 40) / SH); }
+  else { SW = Math.round(r.width); SH = Math.round(r.height); fit = 1; }
+  stageScale = Math.max(0.1, fit * zoom);
+  if (zoom <= 1) { panX = 0; panY = 0; }
   stage.style.width = SW + "px"; stage.style.height = SH + "px";
-  stage.style.left = Math.round((r.width - SW * stageScale) / 2) + "px";
-  stage.style.top = Math.round((r.height - SH * stageScale) / 2) + "px";
+  stage.style.left = Math.round((r.width - SW * stageScale) / 2 + panX) + "px";
+  stage.style.top = Math.round((r.height - SH * stageScale) / 2 + panY) + "px";
   stage.style.transform = `scale(${stageScale})`;
   stage.classList.toggle("framed", framed);
-  paintWorld();
+  $("zoom-level").textContent = Math.round(zoom * 100) + "%";
+  if (worldW !== SW || worldH !== SH) paintWorld();
   if (renderer) { renderer.setSize(SW, SH, false); camera.aspect = SW / SH; camera.updateProjectionMatrix(); pageSized = false; }
 }
 new ResizeObserver(layoutStage).observe(stageWrap);
+const setZoom = (z) => { zoom = Math.min(6, Math.max(0.5, z)); layoutStage(); };
+$("zoom-in").onclick = () => setZoom(zoom * 1.25);
+$("zoom-out").onclick = () => setZoom(zoom / 1.25);
+$("zoom-fit").onclick = () => { panX = panY = 0; setZoom(1); };
+stageWrap.addEventListener("wheel", (e) => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
 
 /** A stand-in for the game behind: a soft, tilt-shifted town at morning. No game art. */
+let worldW = 0, worldH = 0;
 function paintWorld() {
+  worldW = SW; worldH = SH;
   const dpr = Math.min(devicePixelRatio, 2);
   worldCanvas.width = SW * dpr; worldCanvas.height = SH * dpr;
   const g = worldCanvas.getContext("2d");
@@ -404,7 +492,6 @@ function paintWorld() {
   sky.addColorStop(0, "#9fd0e8"); sky.addColorStop(0.32, "#d7ead0"); sky.addColorStop(0.33, "#8cc46e"); sky.addColorStop(1, "#5d9a4c");
   g.fillStyle = sky; g.fillRect(0, 0, SW, SH);
   let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  // A path, roofs and trees, blurrier towards the top and bottom.
   g.fillStyle = "#e3cf9a"; g.beginPath(); g.moveTo(SW * 0.42, SH * 0.33); g.lineTo(SW * 0.58, SH * 0.33); g.lineTo(SW * 0.8, SH); g.lineTo(SW * 0.2, SH); g.fill();
   for (let i = 0; i < 40; i++) {
     const y = SH * (0.3 + rnd() * 0.7), x = rnd() * SW, s = 14 + (y / SH) * 46;
@@ -420,14 +507,27 @@ function paintWorld() {
     }
   }
   g.filter = "none";
-  // The touch pad's place, faintly.
   g.fillStyle = "#ffffff22"; g.beginPath(); g.arc(80, SH - 120, 52, 0, Math.PI * 2); g.fill();
   g.beginPath(); g.arc(SW - 60, SH - 140, 30, 0, Math.PI * 2); g.fill();
   g.beginPath(); g.arc(SW - 120, SH - 100, 30, 0, Math.PI * 2); g.fill();
 }
 
+// The phone's drag handle sets the preview's height.
+const PH = "dex-motion-ph";
+try { const h = +localStorage.getItem(PH); if (h > 100) document.documentElement.style.setProperty("--ph", h + "px"); } catch {}
+$("handle").addEventListener("pointerdown", (e) => {
+  const h = $("handle"); h.setPointerCapture(e.pointerId);
+  h.onpointermove = (ev) => {
+    const px = Math.round(Math.min(innerHeight * 0.88, Math.max(160, ev.clientY)));
+    document.documentElement.style.setProperty("--ph", px + "px");
+    try { localStorage.setItem(PH, String(px)); } catch {}
+  };
+  h.onpointerup = () => (h.onpointermove = null);
+});
+
 // ---------- Three ----------
-let ready = false, renderer, camera, scene, device, wrap, mixer, clip, screenMesh, shutBox, openBox, screenCorners = [], screenCentre = new THREE.Vector3(), shutCentre = new THREE.Vector3(), screenW = 1, screenH = 1, shutW = 1, shutH = 1;
+let ready = false, renderer, camera, scene, device, wrap, mixer, clip, screenMesh, screenCorners = [], screenCentre = new THREE.Vector3(), shutCentre = new THREE.Vector3(), screenW = 1, screenH = 1, shutW = 1, shutH = 1;
+const ledMeshes = {};
 const FOV = 24, DIST = 200;
 const tanHalf = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
 
@@ -460,11 +560,14 @@ async function initThree() {
   mixer = new THREE.AnimationMixer(gltf.scene);
   mixer.clipAction(clip).play();
   screenMesh = gltf.scene.getObjectByName("Screen");
-  setupAlerts(gltf.scene);
+  for (const [kind, k] of Object.entries(KIND)) {
+    const m = gltf.scene.getObjectByName(k.led);
+    if (m) { m.geometry.computeBoundingSphere(); ledMeshes[kind] = m; }
+  }
 
   device.updateMatrixWorld(true);
-  setOpen(0); shutBox = new THREE.Box3().setFromObject(gltf.scene);
-  setOpen(1); openBox = new THREE.Box3().setFromObject(gltf.scene);
+  setOpen(0);
+  const shutBox = new THREE.Box3().setFromObject(gltf.scene);
   shutBox.getCenter(shutCentre);
   shutW = shutBox.max.x - shutBox.min.x; shutH = shutBox.max.y - shutBox.min.y;
   // The screen's corners by their UVs ((0, 0) top left), in the device's own space.
@@ -474,12 +577,10 @@ async function initThree() {
     for (let i = 0; i < pos.count; i++) { const d = (uv.getX(i) - u) ** 2 + (uv.getY(i) - v) ** 2; if (d < bestD) { best = i; bestD = d; } }
     return new THREE.Vector3().fromBufferAttribute(pos, best).setZ(pos.getZ(best) + 0.0002);
   };
-  const local = [corner(0, 0), corner(1, 0), corner(1, 1), corner(0, 1)];
-  screenCorners = local;
-  const inDevice = local.map((c) => c.clone().applyMatrix4(screenMesh.matrixWorld));
+  screenCorners = [corner(0, 0), corner(1, 0), corner(1, 1), corner(0, 1)];
+  const inDevice = screenCorners.map((c) => c.clone().applyMatrix4(screenMesh.matrixWorld));
   screenCentre.set(0, 0, 0); inDevice.forEach((c) => screenCentre.add(c)); screenCentre.multiplyScalar(0.25);
   screenW = inDevice[0].distanceTo(inDevice[1]); screenH = inDevice[0].distanceTo(inDevice[3]);
-  setOpen(0);
   renderer.setSize(SW, SH, false);
   camera.aspect = SW / SH; camera.updateProjectionMatrix();
   $("loading").hidden = true;
@@ -490,53 +591,46 @@ function setOpen(o) { mixer.setTime(Math.min(Math.max(o, 0), 0.9999) * clip.dura
 // ---------- Poses ----------
 /** World units per CSS pixel on the z = 0 plane. */
 const wpp = () => (2 * DIST * tanHalf) / SH;
-const toWorld = (px, py) => new THREE.Vector3((px - SW / 2) * wpp(), (SH / 2 - py) * wpp(), 0);
 function buttonRect() {
   const c = V.closed, w = c.width, h = w * (shutH / shutW);
   return { x: SW - c.right - w, y: c.top, w, h };
 }
 const deg = THREE.MathUtils.degToRad;
 const lerp = THREE.MathUtils.lerp;
-const tmp = new THREE.Vector3(), anchor = new THREE.Vector3();
+const tmp = new THREE.Vector3();
+let shut = 1;
 function pose(ms) {
-  const b = buttonRect();
-  const p0 = toWorld(b.x + b.w / 2, b.y + b.h / 2);
-  const p1 = toWorld(SW / 2, SH / 2 + V.open.offsetY);
-  const s0 = (b.w * wpp()) / shutW;
-  const viewH = SH * wpp(), viewW = SW * wpp();
-  const s1 = V.open.fill * Math.min(viewW / screenW, viewH / screenH);
+  const b = buttonRect(), k = wpp();
+  const x0 = (b.x + b.w / 2 - SW / 2) * k, y0 = (SH / 2 - b.y - b.h / 2) * k;
+  const x1 = 0, y1 = -V.open.offsetY * k;
+  const s0 = (b.w * k) / shutW;
+  const s1 = V.open.fill * Math.min((SW * k) / screenW, (SH * k) / screenH);
 
-  const press = at("press", ms), move = at("move", ms), scale = at("scale", ms), turn = at("turn", ms), open = at("open", ms), page = at("page", ms), dim = at("dim", ms);
+  const pressIn = at("pressIn", ms), pressOut = at("pressOut", ms), mx = at("moveX", ms), my = at("moveY", ms), scale = at("scale", ms), turn = at("turn", ms), open = at("open", ms), page = at("page", ms), dim = at("dim", ms);
   // The point of the device pinned to the path: the closed body's centre, sliding to the screen's.
-  anchor.lerpVectors(shutCentre, screenCentre, move.e);
-  wrap.position.copy(anchor).negate();
-  const p = new THREE.Vector3().lerpVectors(p0, p1, move.e);
-  const dir = tmp.subVectors(p1, p0);
-  const len = dir.length();
-  if (len > 0) { const n = new THREE.Vector3(-dir.y, dir.x, 0).normalize(); p.addScaledVector(n, V.tracks.move.arc * len * Math.sin(Math.PI * move.u)); }
-  device.position.copy(p);
-  const squash = 1 - V.tracks.press.depth * Math.sin(Math.PI * press.e);
+  wrap.position.lerpVectors(shutCentre, screenCentre, Math.min(1, Math.max(0, scale.e))).negate();
+  device.position.set(lerp(x0, x1, mx.e), lerp(y0, y1, my.e), 0);
+  const squash = 1 - V.tracks.pressIn.depth * (pressIn.e - pressOut.e);
   device.scale.setScalar(s0 * Math.pow(s1 / s0, scale.e) * squash);
   const r = 1 - turn.e;
   device.rotation.set(deg(V.closed.tiltX) * r, deg(V.closed.tiltY) * r + deg(V.tracks.turn.swing) * Math.sin(Math.PI * turn.u), deg(V.closed.tiltZ) * r);
-  // Alerts show while it's shut and fade as it starts to move.
-  const shut = Math.max(0, 1 - move.e * 4);
-  const now = alertPhase === null ? performance.now() : news.since + alertPhase;
-  setOpen(Math.max(open.e, peekAt(now) * shut));
+  // News shows while it's shut and goes as soon as it starts to move.
+  shut = Math.max(0, 1 - Math.max(mx.e, my.e, scale.e) * 4);
+  setOpen(Math.max(open.e, V.alerts.lid * lidV * shut));
   device.updateMatrixWorld(true);
-  showAlerts(now, shut, b);
   dimEl.style.opacity = String(V.tracks.dim.amount * Math.min(1, Math.max(0, dim.e)));
+  placeNews(b);
 
   // The page over the screen.
-  const quad = screenCorners.map((c) => {
-    tmp.copy(c).applyMatrix4(screenMesh.matrixWorld).project(camera);
-    return [((tmp.x + 1) / 2) * SW, ((1 - tmp.y) / 2) * SH];
-  });
   const gate = Math.min(1, Math.max(0, (open.e - 0.6) / 0.3));
   const op = Math.min(1, Math.max(0, page.e)) * gate;
   pageEl.style.opacity = String(op);
   if (op > 0) {
     if (!pageSized) sizePage();
+    const quad = screenCorners.map((c) => {
+      tmp.copy(c).applyMatrix4(screenMesh.matrixWorld).project(camera);
+      return [((tmp.x + 1) / 2) * SW, ((1 - tmp.y) / 2) * SH];
+    });
     pageEl.style.transform = quadTransform(pageW, pageH, quad);
   }
 }
@@ -561,108 +655,183 @@ function quadTransform(width, height, quad) {
   return `matrix3d(${m.map((n) => +n.toFixed(8)).join(",")})`;
 }
 
-// ---------- Alerts ----------
-const news = { gift: 0, friend: 0, save: 0, newest: null, since: 0 };
-/** Pins the alerts' clock this many ms after the first news (for screenshots); null runs it. */
-let alertPhase = null;
+// ---------- News ----------
 const KIND = {
-  gift: { led: "LedRed", colour: "#e8473b", text: () => "A gift from Sam!" },
-  friend: { led: "LedGreen", colour: "#3fb24f", text: () => "Mia is playing" },
-  save: { led: "LedYellow", colour: "#e6b450", text: () => "A newer save is ready" },
+  gift: { led: "LedRed", colour: "#e8473b", text: "A gift from Sam!" },
+  friend: { led: "LedGreen", colour: "#3fb24f", text: "Mia is playing" },
+  save: { led: "LedYellow", colour: "#e6b450", text: "A newer save is ready" },
 };
-let lensMat, lensHalo, leds = {};
-function haloTexture() {
-  const c = document.createElement("canvas"); c.width = c.height = 64;
-  const g = c.getContext("2d");
-  const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  r.addColorStop(0, "#ffffffff"); r.addColorStop(0.25, "#ffffff99"); r.addColorStop(1, "#ffffff00");
-  g.fillStyle = r; g.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(c);
+/** Waiting news, oldest first; `shown` is the one out of the dex. */
+const queue = [];
+let shown = null, dismissWanted = false, busy = false;
+/** The lid's lift (0 shut … 1 at V.alerts.lid) and the shown toast's way out (0 inside … 1 out). */
+let lidV = 0, toastV = 0, dragging = false;
+const tweens = {};
+function tween(name, to, ms, curve) {
+  return new Promise((resolve) => {
+    const from = name === "lid" ? lidV : toastV;
+    tweens[name] = { from, to, start: performance.now(), ms: Math.max(1, ms), ease: bezier(curve), resolve };
+  });
 }
-function halo(mesh, colour, size) {
-  mesh.geometry.computeBoundingSphere();
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloMap, color: colour, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false, opacity: 0 }));
-  sp.position.copy(mesh.geometry.boundingSphere.center);
-  sp.scale.setScalar(mesh.geometry.boundingSphere.radius * size);
-  sp.renderOrder = 10;
-  mesh.add(sp);
-  return sp;
-}
-let haloMap;
-function setupAlerts(root) {
-  haloMap = haloTexture();
-  const lens = root.getObjectByName("Lens");
-  if (lens) {
-    lensMat = lens.material;
-    lensMat.emissive = new THREE.Color(0x3fb6ff);
-    lensMat.emissiveIntensity = 0;
-    lensHalo = halo(lens, 0x6cc8ff, 5);
-  }
-  for (const [kind, k] of Object.entries(KIND)) {
-    const m = root.getObjectByName(k.led);
-    if (!m) continue;
-    leds[kind] = { mat: m.material, base: m.material.emissiveIntensity, halo: halo(m, new THREE.Color(k.colour), 16) };
+function stepTweens(now) {
+  for (const [name, tw] of Object.entries(tweens)) {
+    const u = Math.min(1, (now - tw.start) / tw.ms);
+    const v = lerp(tw.from, tw.to, tw.ease(u));
+    if (name === "lid") lidV = v; else toastV = v;
+    if (u >= 1) { delete tweens[name]; tw.resolve(); }
   }
 }
-const pending = () => news.gift + news.friend + news.save;
-/** How far the lid is lifted for a peek right now (0 shut). */
-function peekAt(now) {
+/** Runs the news: lid up, toast out; on dismiss, toast in, the next out or the lid down. */
+async function pump() {
+  if (busy) return;
+  busy = true;
   const A = V.alerts;
-  if (!A.peek || !pending()) return 0;
-  const phase = (now - news.since) % Math.max(A.peekEvery, A.peekMs + 100);
-  if (phase > A.peekMs) return 0;
-  return A.peekAmount * Math.sin(Math.PI * (phase / A.peekMs)) ** 2;
+  try {
+    for (;;) {
+      if (!A.toast) { shown = null; toastV = 0; if (lidV > 0) await tween("lid", 0, A.lidMs, A.lidCurve); break; }
+      if (!shown && queue.length) {
+        if (lidV < 1) await tween("lid", 1, A.lidMs, A.lidCurve);
+        shown = queue[0]; drawToasts();
+        await tween("toast", 1, A.toastMs, A.toastCurve);
+        continue;
+      }
+      if (shown && dismissWanted) {
+        dismissWanted = false;
+        await tween("toast", 0, A.toastMs * 0.7, [0.5, 0, 0.8, 0.6]);
+        queue.shift(); shown = null; drawToasts();
+        if (!queue.length) await tween("lid", 0, A.lidMs, A.lidCurve);
+        continue;
+      }
+      break;
+    }
+  } finally { busy = false; }
 }
-function showAlerts(now, shut, b) {
-  const A = V.alerts, any = pending() > 0;
-  const wave = 0.5 - 0.5 * Math.cos((2 * Math.PI * (now - news.since)) / A.period);
-  if (lensMat) {
-    const on = A.lens && any ? wave * shut : 0;
-    lensMat.emissiveIntensity = on * A.glow;
-    lensHalo.material.opacity = on * 0.9;
+function toastEl(item, behind) {
+  const A = V.alerts;
+  const el = document.createElement("div");
+  el.className = "pin" + (behind ? " behind" : "");
+  Object.assign(el.style, { height: A.height + "px", padding: `0 ${A.padX + A.tuck}px 0 ${A.padX}px`, fontSize: A.font + "px", borderRadius: `${A.radius}px 6px 6px ${A.radius}px`, gap: Math.round(A.padX * 0.7) + "px" });
+  const icon = document.createElement("i");
+  Object.assign(icon.style, { width: A.icon + "px", height: A.icon + "px", background: KIND[item].colour });
+  const text = document.createElement("span"); text.textContent = KIND[item].text;
+  el.append(icon, text);
+  if (!behind) {
+    const x = document.createElement("button"); x.type = "button"; x.className = "x"; x.textContent = "×"; x.setAttribute("aria-label", "Dismiss");
+    x.addEventListener("pointerdown", (e) => e.stopPropagation());
+    x.onclick = (e) => { e.stopPropagation(); dismiss(); };
+    el.append(x);
+    swipe(el);
   }
-  for (const [kind, l] of Object.entries(leds)) {
-    // With Lights on, the LEDs rest dim and the ones with news blink.
-    const blink = (Math.sin((2 * Math.PI * (now - news.since)) / A.period) > -0.2) ? 1 : 0.1;
-    const lit = A.lights ? (news[kind] ? blink : 0.08) : 1;
-    l.mat.emissiveIntensity = l.base * (A.lights ? lerp(1, lit, shut) : 1);
-    l.halo.material.opacity = A.lights && news[kind] ? blink * shut * 0.9 : 0;
+  return el;
+}
+function drawToasts() {
+  const host = $("toasts"); host.innerHTML = "";
+  if (!shown) return;
+  if (queue.length > 1) host.append(toastEl(queue[1], true));
+  host.append(toastEl(shown, false));
+}
+const dismiss = () => { dismissWanted = true; pump(); };
+/** Swipe right to push it back into the dex; a tap opens the dex. */
+function swipe(el) {
+  el.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    el.setPointerCapture(e.pointerId);
+    const x0 = e.clientX, w = el.getBoundingClientRect().width || 200, v0 = toastV;
+    let moved = false;
+    dragging = true;
+    el.onpointermove = (ev) => {
+      const dx = ev.clientX - x0;
+      if (Math.abs(dx) > 6) moved = true;
+      toastV = Math.min(1, Math.max(0, v0 - Math.max(0, dx) / w));
+    };
+    el.onpointerup = () => {
+      el.onpointermove = null; dragging = false;
+      if (!moved) { toastV = v0; return playOpen(); }
+      if (toastV < 0.7) dismiss(); else tween("toast", 1, 160, [0.2, 0, 0.2, 1]);
+    };
+  });
+}
+/** Lays the toasts and the lights over the closed dex. Nothing here redraws the model. */
+const ledPos = new THREE.Vector3();
+function placeNews(b) {
+  const A = V.alerts, host = $("toasts");
+  const pins = host.querySelectorAll(".pin");
+  const front = pins[pins.length - 1], back = pins.length > 1 ? pins[0] : null;
+  const top = b.y + b.h / 2 - A.height / 2 + A.offsetY;
+  const visible = shut > 0.5 ? 1 : 0;
+  for (const el of pins) { el.style.right = SW - b.x - A.tuck + "px"; el.style.top = top + "px"; }
+  if (front) {
+    const w = front.offsetWidth || 200;
+    front.style.translate = `${(1 - toastV) * (w - A.tuck)}px 0`;
+    front.style.opacity = String(visible * Math.min(1, toastV * 4));
   }
-  const badge = $("badge");
-  badge.classList.toggle("off", !(A.badge && any && shut > 0.5));
-  badge.textContent = String(pending());
-  badge.style.left = b.x + 4 + "px"; badge.style.top = b.y + b.h - 4 + "px";
-  const pin = $("pin");
-  pin.classList.toggle("off", !(A.toast && news.newest && shut > 0.5));
-  pin.style.right = SW - b.x - 22 + "px"; pin.style.top = b.y + b.h / 2 - 20 + "px";
+  if (back) {
+    back.style.translate = `0 ${-A.stack}px`; back.style.scale = "0.94";
+    back.style.transformOrigin = "100% 50%";
+    back.style.opacity = String(visible * Math.min(1, toastV * 4) * 0.95);
+  }
+  // Lights: a glow over each LED with news waiting, blinking in CSS.
+  const glows = $("glows");
+  const kinds = A.lights && shut > 0.5 ? [...new Set(queue)] : [];
+  if (glows.dataset.k !== kinds.join() + A.glow + A.blinkMs) {
+    glows.dataset.k = kinds.join() + A.glow + A.blinkMs;
+    glows.innerHTML = "";
+    for (const kind of kinds) {
+      const g = document.createElement("i"); g.className = "led-glow"; g.dataset.kind = kind;
+      g.style.setProperty("--c", KIND[kind].colour); g.style.setProperty("--g", A.glow + "px"); g.style.setProperty("--blink", A.blinkMs + "ms");
+      glows.append(g);
+    }
+  }
+  for (const g of glows.children) {
+    const m = ledMeshes[g.dataset.kind];
+    if (!m) continue;
+    ledPos.copy(m.geometry.boundingSphere.center).applyMatrix4(m.matrixWorld).project(camera);
+    g.style.left = ((ledPos.x + 1) / 2) * SW + "px"; g.style.top = ((1 - ledPos.y) / 2) * SH + "px";
+  }
 }
 for (const btn of document.querySelectorAll("#alert-events .btn")) {
   btn.onclick = () => {
     const ev = btn.dataset.ev;
-    if (ev === "clear") { news.gift = news.friend = news.save = 0; news.newest = null; return; }
+    if (ev === "clear") { queue.length = 0; shown = null; dismissWanted = false; for (const k in tweens) delete tweens[k]; lidV = toastV = 0; busy = false; drawToasts(); return; }
     if (t > 0) { t = 0; dir = 0; }
-    if (!pending()) news.since = performance.now();
-    news[ev] = ev === "save" ? 1 : news[ev] + 1;
-    news.newest = ev;
-    $("pin-text").textContent = KIND[ev].text();
-    $("pin-icon").style.background = KIND[ev].colour;
+    queue.push(ev);
+    drawToasts();
+    pump();
   };
 }
-const STYLES = [["lens", "Lens glow"], ["lights", "Lights"], ["peek", "Lid peek"], ["badge", "Number badge"], ["toast", "Toast"]];
 function buildAlertStyles() {
   const host = $("alert-styles"); host.innerHTML = "";
-  for (const [k, label] of STYLES) {
+  for (const [k, label] of [["lights", "Lights"], ["toast", "Toast"]]) {
     const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = label;
     b.setAttribute("aria-pressed", String(!!V.alerts[k]));
-    b.onclick = () => { V.alerts[k] = V.alerts[k] ? 0 : 1; b.setAttribute("aria-pressed", String(!!V.alerts[k])); save(); };
+    b.onclick = () => { V.alerts[k] = V.alerts[k] ? 0 : 1; b.setAttribute("aria-pressed", String(!!V.alerts[k])); save(); pump(); };
     host.append(b);
   }
   const f = $("alert-fields"); f.innerHTML = "";
-  field(f, "Pulse ms", () => V.alerts.period, (v) => (V.alerts.period = Math.max(200, v)), { step: 50, wide: true, range: [400, 3000] });
-  field(f, "Lens glow", () => V.alerts.glow, (v) => (V.alerts.glow = Math.max(0, v)), { step: 0.1, wide: true, range: [0, 6] });
-  field(f, "Peek amount", () => V.alerts.peekAmount, (v) => (V.alerts.peekAmount = Math.min(1, Math.max(0, v))), { step: 0.01, wide: true, range: [0, 0.4] });
-  field(f, "Peek ms", () => V.alerts.peekMs, (v) => (V.alerts.peekMs = Math.max(100, v)), { step: 50, wide: true, range: [200, 2000] });
-  field(f, "Peek every ms", () => V.alerts.peekEvery, (v) => (V.alerts.peekEvery = Math.max(300, v)), { step: 100, wide: true, range: [800, 8000] });
+  const A = () => V.alerts;
+  const num = (label, key, range, step = 1) => field(f, label, () => A()[key], (v) => { A()[key] = v; drawToasts(); }, { step, wide: true, range });
+  num("Blink ms", "blinkMs", [300, 2400], 50);
+  num("Glow px", "glow", [4, 30]);
+  num("Lid lift", "lid", [0, 0.5], 0.01);
+  num("Lid ms", "lidMs", [60, 800], 10);
+  num("Toast ms", "toastMs", [80, 1200], 10);
+  num("Height", "height", [24, 64]);
+  num("Text px", "font", [10, 22]);
+  num("Padding", "padX", [4, 28]);
+  num("Icon", "icon", [0, 40]);
+  num("Corner", "radius", [0, 32]);
+  num("Tuck under", "tuck", [0, 60]);
+  num("Offset y", "offsetY", [-40, 80]);
+  num("Stack", "stack", [0, 16]);
+  for (const [label, key] of [["Lid curve", "lidCurve"], ["Toast curve", "toastCurve"]]) {
+    const row = document.createElement("label"); row.className = "field wide"; row.htmlFor = "f-" + key;
+    row.append(label);
+    const inp = document.createElement("input"); inp.id = "f-" + key; inp.type = "text"; inp.style.gridColumn = "2 / -1"; inp.style.textAlign = "left";
+    inp.value = V.alerts[key].join(", ");
+    inp.onchange = () => { const n = inp.value.split(/[ ,]+/).map(Number); if (n.length === 4 && n.every(Number.isFinite)) { V.alerts[key] = n; save(); } else inp.value = V.alerts[key].join(", "); };
+    row.append(inp);
+    f.append(row);
+  }
 }
 
 // ---------- Playback ----------
@@ -682,6 +851,7 @@ function frame(now) {
     if (loopWait <= 0) dir = t > 0 ? -1 : 1;
   }
   t = Math.min(t, total());
+  stepTweens(now);
   if (ready) { pose(t); renderer.render(scene, camera); }
   drawPlayhead();
   requestAnimationFrame(frame);
@@ -692,36 +862,73 @@ $("play-open").onclick = playOpen;
 $("play-close").onclick = playClose;
 $("loop").onclick = (e) => { loop = !loop; e.currentTarget.setAttribute("aria-pressed", String(loop)); if (loop && dir === 0) loopWait = 1; };
 $("speed").onchange = (e) => (speed = +e.target.value);
-$("framed").onclick = (e) => { framed = !framed; e.currentTarget.setAttribute("aria-pressed", String(framed)); layoutStage(); };
+$("framed").onclick = (e) => { framed = !framed; e.currentTarget.setAttribute("aria-pressed", String(framed)); panX = panY = 0; layoutStage(); };
 // Full screen: the stage fills the window at real size, for feeling it on a phone.
 const setFull = (on) => {
   stageWrap.classList.toggle("full", on); $("exit-full").hidden = !on;
   framed = on ? false : $("framed").getAttribute("aria-pressed") === "true";
+  zoom = 1; panX = panY = 0;
   t = 0; dir = 0; hint.style.opacity = "1"; layoutStage();
 };
 $("full").onclick = () => setFull(true);
 $("exit-full").onclick = () => setFull(false);
 $("reset").onclick = () => { V = clone(DEFAULTS); save(); buildAll(); };
-stage.addEventListener("pointerdown", (e) => {
+
+// The stage: a tap opens or closes the dex; a drag pans (once zoomed in); two fingers zoom.
+const touches = new Map();
+let gesture = null;
+stageWrap.addEventListener("pointerdown", (e) => {
+  if (e.target.closest("button, .pin")) return;
+  stageWrap.setPointerCapture(e.pointerId);
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size === 1) gesture = { kind: "tap", x: e.clientX, y: e.clientY, panX, panY };
+  else if (touches.size === 2) {
+    const [a, b] = [...touches.values()];
+    gesture = { kind: "pinch", d: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+  }
+});
+stageWrap.addEventListener("pointermove", (e) => {
+  if (!touches.has(e.pointerId) || !gesture) return;
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (gesture.kind === "pinch" && touches.size === 2) {
+    const [a, b] = [...touches.values()];
+    setZoom(gesture.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / gesture.d));
+    return;
+  }
+  const dx = e.clientX - gesture.x, dy = e.clientY - gesture.y;
+  if (gesture.kind === "tap" && Math.hypot(dx, dy) > 6) gesture.kind = "pan";
+  if (gesture.kind === "pan" && zoom > 1) { panX = gesture.panX + dx; panY = gesture.panY + dy; layoutStage(); }
+});
+const endTouch = (e) => {
+  if (!touches.has(e.pointerId)) return;
+  touches.delete(e.pointerId);
+  if (gesture?.kind === "tap" && e.type === "pointerup") tapStage(e.clientX, e.clientY);
+  if (!touches.size) gesture = null;
+  else if (gesture?.kind === "pinch") gesture = null;
+};
+stageWrap.addEventListener("pointerup", endTouch);
+stageWrap.addEventListener("pointercancel", endTouch);
+function tapStage(cx, cy) {
   const r = stage.getBoundingClientRect();
-  const x = (e.clientX - r.left) / stageScale, y = (e.clientY - r.top) / stageScale;
-  const b = buttonRect();
-  const pad = 10;
-  if (t === 0 && e.target.closest(".pin")) return playOpen();
+  const x = (cx - r.left) / stageScale, y = (cy - r.top) / stageScale;
+  const b = buttonRect(), pad = 10;
   if (t === 0 && x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad) playOpen();
   else if (t > 0 && dir >= 0) playClose();
-});
+}
 
 // ---------- Timeline ----------
 const tl = $("tl");
-let selected = "move";
+let selected = "moveX";
 let span = 1000;
 const laneW = () => tl.querySelector(".lane.ruler")?.clientWidth || 600;
-const msToX = (ms) => (ms / span) * laneW();
+const EYE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const EYE_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4"/><path d="M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>`;
+// Solo, After Effects style: a filled dot in a ring.
+const SOLO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg>`;
 function buildTimeline() {
   span = Math.max(1000, Math.ceil((allTotal() + 150) / 250) * 250);
   tl.innerHTML = "";
-  tl.append(Object.assign(document.createElement("div")), Object.assign(document.createElement("div"), { className: "lane ruler", id: "ruler" }));
+  tl.append(document.createElement("div"), Object.assign(document.createElement("div"), { className: "lane ruler", id: "ruler" }));
   const ruler = $("ruler");
   for (let ms = 0; ms <= span; ms += span > 1600 ? 250 : 100) {
     const tick = document.createElement("div"); tick.className = "tick"; tick.style.left = (ms / span) * 100 + "%";
@@ -734,19 +941,21 @@ function buildTimeline() {
     const label = document.createElement("div");
     label.className = "tl-label"; label.dataset.id = tr.id; label.style.setProperty("--c", `var(--t-${tr.id})`);
     label.setAttribute("aria-selected", String(tr.id === selected)); label.tabIndex = 0;
+    const eye = document.createElement("button"); eye.type = "button"; eye.className = "icon-btn eye";
+    eye.onclick = (e) => { e.stopPropagation(); if (layers.hidden.has(tr.id)) layers.hidden.delete(tr.id); else layers.hidden.add(tr.id); saveLayers(); markLayers(); };
     const name = document.createElement("span"); name.className = "name"; name.textContent = tr.label;
-    label.append(name);
-    for (const [kind, set, title] of [["m", layers.muted, "Mute"], ["s", layers.solo, "Solo"]]) {
-      const b = document.createElement("button"); b.type = "button"; b.className = "ms " + kind; b.textContent = kind.toUpperCase();
-      b.title = `${title} ${tr.label}`; b.setAttribute("aria-label", b.title); b.setAttribute("aria-pressed", String(set.has(tr.id)));
-      b.onclick = (e) => {
-        e.stopPropagation();
-        if (set.has(tr.id)) set.delete(tr.id); else set.add(tr.id);
-        b.setAttribute("aria-pressed", String(set.has(tr.id)));
-        saveLayers(); markLayers();
-      };
-      label.append(b);
-    }
+    const solo = document.createElement("button"); solo.type = "button"; solo.className = "icon-btn solo"; solo.innerHTML = SOLO;
+    solo.title = `Show only ${tr.label} (again to show all)`; solo.setAttribute("aria-label", solo.title);
+    // Solo is a shortcut, not a state: it hides every other layer, or, if this is already the only
+    // one showing, shows them all again.
+    solo.onclick = (e) => {
+      e.stopPropagation();
+      const others = TRACKS.map((x) => x.id).filter((id) => id !== tr.id);
+      const alone = active(tr.id) && others.every((id) => !active(id));
+      layers.hidden = alone ? new Set() : new Set(others);
+      saveLayers(); markLayers();
+    };
+    label.append(eye, name, solo);
     label.onclick = () => select(tr.id);
     const lane = document.createElement("div"); lane.className = "lane";
     const bar = document.createElement("div"); bar.className = "bar"; bar.dataset.id = tr.id;
@@ -761,6 +970,12 @@ function buildTimeline() {
 }
 function markLayers() {
   for (const el of tl.querySelectorAll(".tl-label, .bar")) el.classList.toggle("off", !active(el.dataset.id));
+  for (const label of tl.querySelectorAll(".tl-label")) {
+    const on = active(label.dataset.id), eye = label.querySelector(".eye");
+    eye.innerHTML = on ? EYE : EYE_OFF;
+    eye.title = `${on ? "Hide" : "Show"} ${TRACKS.find((x) => x.id === label.dataset.id).label}`;
+    eye.setAttribute("aria-label", eye.title); eye.setAttribute("aria-pressed", String(!on));
+  }
   $("hold-start").setAttribute("aria-pressed", String(!layers.holdEnd));
   $("hold-end").setAttribute("aria-pressed", String(layers.holdEnd));
   t = Math.min(t, total());
@@ -814,10 +1029,7 @@ function dragBar(bar, id) {
 }
 function select(id) {
   selected = id;
-  tl.querySelectorAll(".tl-label, .bar").forEach((el) => {
-    const isSel = el.dataset.id === id;
-    el.setAttribute("aria-selected", String(isSel));
-  });
+  tl.querySelectorAll(".tl-label, .bar").forEach((el) => el.setAttribute("aria-selected", String(el.dataset.id === id)));
   buildCurve();
 }
 
@@ -842,39 +1054,37 @@ function buildCurve() {
   svg.append(el("rect", { x: cx(0), y: cy(1), width: cx(1) - cx(0), height: cy(0) - cy(1), fill: "#ffffff08", stroke: "#3b342d" }));
   for (const y of [0, 0.5, 1]) svg.append(el("line", { x1: cx(0), x2: cx(1), y1: cy(y), y2: cy(y), stroke: "#3b342d", "stroke-dasharray": y === 0.5 ? "3 4" : "" }));
   for (const [y, s] of [[0, "0"], [1, "1"]]) { const tx = el("text", { x: 4, y: cy(y) + 4, fill: "#a59784", "font-size": 10, "font-family": "JetBrains Mono, monospace" }); tx.textContent = s; svg.append(tx); }
-  const [x1, y1, x2, y2] = tr.curve;
-  svg.append(el("line", { id: "arm1", x1: cx(0), y1: cy(0), x2: cx(x1), y2: cy(y1), stroke: "#a59784", "stroke-width": 1.5 }));
-  svg.append(el("line", { id: "arm2", x1: cx(1), y1: cy(1), x2: cx(x2), y2: cy(y2), stroke: "#a59784", "stroke-width": 1.5 }));
-  svg.append(el("path", { id: "cpath", fill: "none", stroke: colour, "stroke-width": 3, d: `M${cx(0)},${cy(0)} C${cx(x1)},${cy(y1)} ${cx(x2)},${cy(y2)} ${cx(1)},${cy(1)}` }));
+  svg.append(el("line", { id: "arm1", x1: cx(0), y1: cy(0), stroke: "#a59784", "stroke-width": 1.5 }));
+  svg.append(el("line", { id: "arm2", x1: cx(1), y1: cy(1), stroke: "#a59784", "stroke-width": 1.5 }));
+  svg.append(el("path", { id: "cpath", fill: "none", stroke: colour, "stroke-width": 3 }));
   svg.append(el("circle", { id: "cdot", r: 5, fill: "#f2e9dc", cx: cx(0), cy: cy(0) }));
-  for (const [i, x, y] of [[0, x1, y1], [1, x2, y2]]) {
-    const h = el("circle", { r: 9, cx: cx(x), cy: cy(y), fill: "#181512", stroke: colour, "stroke-width": 3, tabindex: 0, style: "cursor:grab" });
+  for (const i of [0, 1]) {
+    const h = el("circle", { r: 9, fill: "#181512", stroke: colour, "stroke-width": 3, tabindex: 0, style: "cursor:grab" });
     h.addEventListener("pointerdown", (e) => {
       e.preventDefault(); h.setPointerCapture(e.pointerId);
       h.onpointermove = (ev) => {
         const r = svg.getBoundingClientRect();
         const px = ((ev.clientX - r.left) / r.width) * 300, py = ((ev.clientY - r.top) / r.height) * 300;
-        const nx = Math.min(1, Math.max(0, fx(px))), ny = Math.min(Y1, Math.max(Y0, fy(py)));
-        tr.curve[i * 2] = +nx.toFixed(3); tr.curve[i * 2 + 1] = +ny.toFixed(3);
-        updateCurve(); writeJson();
+        tr.curve[i * 2] = +Math.min(1, Math.max(0, fx(px))).toFixed(3); tr.curve[i * 2 + 1] = +Math.min(Y1, Math.max(Y0, fy(py))).toFixed(3);
+        drawCurve(); placeBars(); fillTrackFields(); writeJson();
       };
       h.onpointerup = () => { h.onpointermove = null; save(); };
     });
     h.dataset.i = i;
     svg.append(h);
   }
+  drawCurve();
   fillTrackFields();
 }
-function updateCurve() {
-  const tr = V.tracks[selected];
-  const [x1, y1, x2, y2] = tr.curve;
+function drawCurve() {
+  if (!$("cpath")) return;
+  const [x1, y1, x2, y2] = V.tracks[selected].curve;
   $("arm1").setAttribute("x2", cx(x1)); $("arm1").setAttribute("y2", cy(y1));
   $("arm2").setAttribute("x2", cx(x2)); $("arm2").setAttribute("y2", cy(y2));
   $("cpath").setAttribute("d", `M${cx(0)},${cy(0)} C${cx(x1)},${cy(y1)} ${cx(x2)},${cy(y2)} ${cx(1)},${cy(1)}`);
   const hs = svg.querySelectorAll("circle[data-i]");
   hs[0].setAttribute("cx", cx(x1)); hs[0].setAttribute("cy", cy(y1));
   hs[1].setAttribute("cx", cx(x2)); hs[1].setAttribute("cy", cy(y2));
-  placeBars(); fillTrackFields();
 }
 function drawCurveDot() {
   const d = $("cdot"); if (!d) return;
@@ -905,21 +1115,17 @@ function field(host, label, get, set, { step = 1, min, max, wide = false, range 
   wrapEl.append(num);
   host.append(wrapEl);
 }
-function after() { placeBars(); updateCurveIfOpen(); pageSized = false; save(); }
-function updateCurveIfOpen() { if ($("cpath")) { const tr = V.tracks[selected]; const [x1, y1, x2, y2] = tr.curve; $("cpath").setAttribute("d", `M${cx(0)},${cy(0)} C${cx(x1)},${cy(y1)} ${cx(x2)},${cy(y2)} ${cx(1)},${cy(1)}`); const hs = svg.querySelectorAll("circle[data-i]"); hs[0].setAttribute("cx", cx(x1)); hs[0].setAttribute("cy", cy(y1)); hs[1].setAttribute("cx", cx(x2)); hs[1].setAttribute("cy", cy(y2)); $("arm1").setAttribute("x2", cx(x1)); $("arm1").setAttribute("y2", cy(y1)); $("arm2").setAttribute("x2", cx(x2)); $("arm2").setAttribute("y2", cy(y2)); } }
+function after() { placeBars(); drawCurve(); pageSized = false; save(); }
 function fillTrackFields() {
   const host = $("track-fields");
-  if (host.contains(document.activeElement)) { // don't rebuild under the cursor; just refresh values
-    return;
-  }
+  if (host.contains(document.activeElement)) return; // don't rebuild under the cursor
   host.innerHTML = "";
   const tr = V.tracks[selected];
   field(host, "Delay ms", () => tr.delay, (v) => (tr.delay = Math.max(0, v)), { step: 10, min: 0 });
   field(host, "Duration ms", () => tr.duration, (v) => (tr.duration = Math.max(0, v)), { step: 10, min: 0 });
   ["x1", "y1", "x2", "y2"].forEach((n, i) => field(host, n, () => tr.curve[i], (v) => (tr.curve[i] = n[0] === "x" ? Math.min(1, Math.max(0, v)) : v), { step: 0.01 }));
-  if (selected === "move") field(host, "Arc", () => tr.arc, (v) => (tr.arc = v), { step: 0.01, wide: true, range: [-0.5, 0.5] });
   if (selected === "turn") field(host, "Swing °", () => tr.swing, (v) => (tr.swing = v), { step: 1, wide: true, range: [-45, 45] });
-  if (selected === "press") field(host, "Depth", () => tr.depth, (v) => (tr.depth = v), { step: 0.01, wide: true, range: [0, 0.4] });
+  if (selected === "pressIn" || selected === "pressOut") field(host, "Depth", () => V.tracks.pressIn.depth, (v) => (V.tracks.pressIn.depth = v), { step: 0.01, wide: true, range: [0, 0.4] });
   if (selected === "dim") field(host, "Amount", () => tr.amount, (v) => (tr.amount = v), { step: 0.01, wide: true, range: [0, 1] });
 }
 function buildFields() {
@@ -939,24 +1145,23 @@ function buildFields() {
 
 // ---------- JSON ----------
 function writeJson() { $("json").value = JSON.stringify(V, null, 1).replace(/\[\s+([^\]]*?)\s+\]/g, (_, s) => `[${s.replace(/\s+/g, " ")}]`); }
-const toast = (s) => { $("toast").textContent = s; clearTimeout(toast.t); toast.t = setTimeout(() => ($("toast").textContent = ""), 2200); };
+const status = (s) => { $("status").textContent = s; clearTimeout(status.t); status.t = setTimeout(() => ($("status").textContent = ""), 2200); };
 $("copy").onclick = () => {
   const text = $("json").value;
-  navigator.clipboard?.writeText(text).then(() => toast("Copied"), () => { $("json").select(); toast("Selected: copy it with your keyboard"); }) ?? ($("json").select(), toast("Selected: copy it with your keyboard"));
+  const fallback = () => { $("json").select(); status("Selected: copy it with your keyboard"); };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => status("Copied"), fallback); else fallback();
 };
 $("apply").onclick = () => {
-  try {
-    const parsed = JSON.parse($("import").value);
-    V = merge(clone(DEFAULTS), parsed); save(); buildAll(); toast("Loaded"); $("import").value = "";
-  } catch { toast("That isn't valid JSON. Paste the whole block from Copy JSON."); }
+  try { V = load(JSON.parse($("import").value)); save(); buildAll(); status("Loaded"); $("import").value = ""; }
+  catch { status("That isn't valid JSON. Paste the whole block from Copy JSON."); }
 };
 
-function buildAll() { buildTimeline(); buildCurve(); buildFields(); buildAlertStyles(); writeJson(); pageSized = false; }
+function buildAll() { buildTimeline(); buildCurve(); buildFields(); buildAlertStyles(); writeJson(); drawToasts(); pageSized = false; }
 
 layoutStage();
 buildAll();
 new ResizeObserver(() => placeBars()).observe(tl);
 requestAnimationFrame(frame);
 initThree().catch((e) => { $("loading").textContent = "The model didn't load: " + e.message; console.error(e); });
-window.__dexMotion = { get t() { return t; }, set t(v) { t = v; dir = 0; }, V: () => V, ready: () => ready, alertsAt: (ms) => (alertPhase = ms) };
+window.__dexMotion = { get t() { return t; }, set t(v) { t = v; dir = 0; }, V: () => V, ready: () => ready, queue };
 </script>
