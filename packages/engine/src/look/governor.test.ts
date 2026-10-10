@@ -102,6 +102,31 @@ describe("createGovernor", () => {
     expect(g.rung).toBeLessThanOrEqual(4);
   });
 
+  it("doesn't mistake a device that's slow all the time for stalls (an old iPad at 6 fps)", () => {
+    const g = createGovernor();
+    // 160 ms a frame at full size: every frame is over the stall threshold.
+    run(g, 40, gpu(160));
+    expect(g.rung).toBe(RUNGS.length - 1); // 160 × 0.25 × 0.65 = 26 ms: as fast as it goes
+  });
+
+  it("lowers resolution on a GPU-bound page even when the CPU is busy too", () => {
+    const g = createGovernor();
+    let now = 0;
+    while (now < 40) {
+      const ms = Math.max(30, gpu(160)(g.rung)); // 30 ms of main-thread work a frame
+      const interval = Math.ceil(ms / VSYNC - 1e-9) * VSYNC;
+      now += interval / 1000;
+      g.sample(interval, now, 30);
+    }
+    expect(g.rung).toBe(RUNGS.length - 1);
+  });
+
+  it("undoes a jump to the bottom that buys nothing on a slow device", () => {
+    const g = createGovernor();
+    run(g, 20, () => 160); // slow, and resolution doesn't matter
+    expect(g.rung).toBe(0);
+  });
+
   it("doesn't blur a CPU-bound page: a smaller image wouldn't help", () => {
     const g = createGovernor();
     let now = 0;

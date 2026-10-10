@@ -138,8 +138,13 @@ engine CPU 4.6 → 3.0 ms a frame, and the same picture. `?shadowcache=0` turns 
 Two layers keep a phone near 60 fps without costing a fast machine anything.
 
 **Mobile tier.** `QUALITY_PATCHES.mobile` (`packages/engine/src/look/quality.ts`) lays a patch
-over every look on touch-only devices (`?quality=full|mobile` overrides): AO at quarter
-resolution and FXAA instead of SMAA. Neither shows on a small, dense screen.
+over every look on touch devices (`?quality=full|mobile` overrides): AO at quarter resolution,
+FXAA instead of SMAA, and at most 1.5 rendered pixels per CSS pixel. Neither of the first two
+shows on a small, dense screen. The pixel cap leaves a 3× iPhone at 1.5 and renders a 2× iPad at
+1× (each pixel 2×2 on screen): a 12.9" iPad at 2× was 2048×2732, four times the iPhone's buffer.
+Touch devices are a coarse pointer without hover, or an iPad with a trackpad, which hovers and
+reports a Mac user agent (Macs report no touch points). The tier never looks at the user agent
+alone, so an iPad's Mac user agent didn't put it on the full tier.
 
 **Dynamic resolution.** A governor (`packages/engine/src/look/governor.ts`) watches the time
 between display frames and steps down a ladder when more than a fifth of frames in half a second
@@ -149,7 +154,12 @@ as long next time (up to a minute), so a device on the edge of a rung settles be
 hides how close a frame came, so it can't judge a single step; instead, a whole descent that
 leaves frames no faster (iOS Low Power Mode's 30 fps cap, or a CPU-bound page) is undone and held
 off for 30 s, then 60, 120 and so on. Stalls over 100 ms (map builds, a hidden tab) are ignored,
-and a half second with many of them (startup, shader compiles) is thrown away whole.
+and a half second with many of them (startup, shader compiles) is thrown away whole. A device
+that is slow all the time is not stalling, though: an old iPad at 5-10 fps has every frame over
+100 ms, which used to leave the governor with nothing to judge, at full resolution for good. Six
+seconds of nothing but such frames now sends it straight to the bottom rung, and the usual rules
+take over (step back up, or undo it if it bought nothing). A window only counts as CPU-bound when
+the main thread's work, rounded up to whole frames, explains its frame time.
 `?dynres=0` turns it off; `?stats` and `/dev/live` show the current scale.
 
 | Rung (M1 Max, 1440p-class) | Frame | iPhone estimate |
