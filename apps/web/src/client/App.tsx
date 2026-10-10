@@ -6,6 +6,7 @@ import { fetchDevRom } from "./dev-rom.ts";
 import { forgetRom, loadStoredRom, storedRomIsShared, storeRom } from "./rom-store.ts";
 import { me, type Account } from "./room/account.ts";
 import { romKey } from "./saves/save-store.ts";
+import { MAIN_SLOT, markPlayed } from "./saves/slots.ts";
 
 // The game and the renderer (three.js, the emulator) are most of the app, so they load as their
 // own chunks. The game starts downloading at once, while the ROM and account are checked.
@@ -67,6 +68,13 @@ export function App() {
     await forgetRom();
     setState({ kind: "needs-rom" });
   };
+
+  // The game plays the main slot (the save everyone already had) until the slot picker ships;
+  // noting it played lists it among the player's slots, here and in the cloud.
+  const readyKey = state.kind === "ready" ? state.romKey : null;
+  useEffect(() => {
+    if (readyKey) void markPlayed(readyKey, MAIN_SLOT).catch((err) => console.warn("[pokeHD] couldn't update the save slots", err));
+  }, [readyKey]);
 
   if (state.kind === "ready") {
     return (

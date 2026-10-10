@@ -117,4 +117,34 @@ describe("saves API", () => {
     expect((await call(`/${ROM}/history?reason=Bad!&at=${at(0)}`, { method: "POST", body: sram(1), as: "sam" })).status).toBe(400);
     expect(await (await call(`/${ROM}/history`, { as: "alex" })).json()).toEqual({ saves: [] });
   });
+
+  it("keeps each slot's save on its own key", async () => {
+    const { call, objects } = setup();
+    const other = `${ROM}-ab12cd34`;
+    await call(`/${ROM}`, { method: "PUT", body: sram(1), as: "sam" });
+    await call(`/${other}`, { method: "PUT", body: sram(2), as: "sam" });
+    expect(new Uint8Array(await (await call(`/${other}`, { as: "sam" })).arrayBuffer())).toEqual(sram(2));
+    expect(new Uint8Array(await (await call(`/${ROM}`, { as: "sam" })).arrayBuffer())).toEqual(sram(1));
+    expect(objects.has(saveKey("sam", other))).toBe(true);
+    expect((await call(`/${ROM}-main`, { as: "sam" })).status).toBe(400);
+    expect((await call(`/${ROM}-AB12CD34`, { as: "sam" })).status).toBe(400);
+  });
+
+  it("merges slot lists instead of replacing them", async () => {
+    const { call } = setup();
+    const meta = (id: string, createdAt: number) => ({ id, createdAt, updatedAt: createdAt, playedAt: createdAt });
+    const put = (slots: unknown[], as = "sam") =>
+      call(`/${ROM}/slots`, { method: "PUT", body: JSON.stringify({ slots }), as, headers: { "content-type": "application/json" } });
+    expect(await (await call(`/${ROM}/slots`, { as: "sam" })).json()).toEqual({ slots: [] });
+    await put([meta("main", 0), meta("aaaaaaaa", 5)]);
+    // A device that never saw "aaaaaaaa" can't drop it.
+    const merged = (await (await put([meta("main", 0), meta("bbbbbbbb", 7)])).json()) as { slots: { id: string }[] };
+    expect(merged.slots.map((s) => s.id)).toEqual(["main", "aaaaaaaa", "bbbbbbbb"]);
+    expect(((await (await call(`/${ROM}/slots`, { as: "sam" })).json()) as { slots: unknown[] }).slots).toHaveLength(3);
+    expect(await (await call(`/${ROM}/slots`, { as: "alex" })).json()).toEqual({ slots: [] });
+    expect((await put([{ id: "../../x", createdAt: 1, updatedAt: 1, playedAt: 1 }])).status).toBe(400);
+    expect((await call(`/${ROM}/slots`, { method: "PUT", body: "{", as: "sam" })).status).toBe(400);
+    expect((await call(`/${ROM}-ab12cd34/slots`, { as: "sam" })).status).toBe(400);
+    expect((await call(`/${ROM}/slots`)).status).toBe(401);
+  });
 });
