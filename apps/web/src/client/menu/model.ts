@@ -124,6 +124,27 @@ export interface Trainer {
   badges: boolean[];
 }
 
+/** What the Map tab's layers show, from the journal: where things happened, in steps on a map. */
+export interface MapLayers {
+  encounters: { dex: number; map: string; x: number; y: number; how: "caught" | "seen" | "battled"; text: string; today?: boolean }[];
+  finds: { item: string; map: string; x: number; y: number; text: string; today?: boolean }[];
+  checkpoints: { place: string; map: string; x: number; y: number; when: string; today?: boolean }[];
+  /** Friends playing now, by friend ID: their map's name and step. */
+  friendsAt: Record<string, [map: string, x: number, y: number]>;
+  /** Outdoor maps walked, in the order first visited; from `todayFrom` on, today. */
+  trail: string[];
+  todayFrom: number;
+  /** Places (town map names) only partly explored. */
+  partly: ReadonlySet<string>;
+}
+
+/** How a Pokémon grows: moves by level (0 = knows it from the start) and its evolution line. */
+export interface Learns {
+  moves: [name: string, level: number][];
+  /** Pokédex numbers with how each step happens between them: [7, "Level 16", 8, …]. */
+  grows: (number | string)[];
+}
+
 /** Everything the menu shows. */
 export interface MenuModel {
   trainer: Trainer;
@@ -151,6 +172,10 @@ export interface MenuModel {
   /** Steps of Repel left. */
   repel: number;
   biking: boolean;
+  layers: MapLayers;
+  learns(dex: number): Learns | undefined;
+  /** Whether this Pokémon can learn the TM or HM (the ROM's flags in the real game). */
+  canLearn(dex: number, item: number): boolean;
 }
 
 /**

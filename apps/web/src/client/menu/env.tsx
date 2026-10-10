@@ -1,6 +1,6 @@
 // What every screen of the Pokédex menu reads: the ROM (for pictures and names), the model, the
 // game's moment and the actions, plus pictures drawn from the ROM.
-import { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { SGB_PAL, type TrainerClass, type WorldData } from "@pokehd/rom";
 import type { Catalogue } from "../dex/catalogue.ts";
 import { monPicture, personPicture, trainerPicture } from "../dex/pictures.ts";
@@ -17,6 +17,8 @@ export interface MenuEnv {
   actions: MenuActions;
   /** A short line over the menu ("Saved"). */
   toast(text: string): void;
+  /** The page's own grown-up controls (saves, device), in place of the sample ones. */
+  grownUps?: ReactNode;
 }
 
 export const Env = createContext<MenuEnv | null>(null);

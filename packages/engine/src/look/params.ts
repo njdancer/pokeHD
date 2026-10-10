@@ -14,7 +14,7 @@ export interface LookParams {
     cycleSeconds: number;
     /**
      * 0 = the phase's own light, 1 = full dusk: no sun, low warm light. The clock raises it after
-     * the evening and lowers it again into the next morning (D40).
+     * the evening and lowers it again into the next morning (D42).
      */
     dusk: number;
     /** Seconds from evening into full dusk. */

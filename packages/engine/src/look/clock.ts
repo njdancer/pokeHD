@@ -4,7 +4,7 @@ import type { LookParams } from "./params.ts";
 // low in the west (phase 1), so shadows never swing back (D16). Then the light settles into dusk
 // (`time.dusk` 0 → 1): the sun fades out, so there are no direct shadows, and the colours go low
 // and warm. Dusk holds a while; with the sun gone the clock can jump back to morning unseen, and
-// the light brightens out of dusk into a new day (D40). Nothing ever fades to black.
+// the light brightens out of dusk into a new day (D42). Nothing ever fades to black.
 
 export interface DayClock {
   /** Seconds left in the dusk hold. */

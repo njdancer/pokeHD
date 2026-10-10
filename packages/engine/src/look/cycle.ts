@@ -1,7 +1,7 @@
 import { LOOK_SCHEMA, STRUCTURAL, type LookParams } from "./params.ts";
 
 // A day cycle blends three looks across the time of day: morning (phase 0), midday (0.5) and
-// evening (1), then leans the result toward a fourth, dusk, by `time.dusk` (D40). Continuous
+// evening (1), then leans the result toward a fourth, dusk, by `time.dusk` (D42). Continuous
 // values (numbers, colours) interpolate every frame. Switches, tone mapping and anything else
 // that rebuilds the pipeline can't blend, so they come from the midday look. Time, camera and
 // render settings stay live: time drives the blend, and the camera and render settings aren't

@@ -95,31 +95,32 @@ export const BUILT_IN_PRESETS: Record<string, LookParams> = {
   }),
 };
 
-// Dusk (D40): the sun has gone, so there are no direct shadows; the sky light carries the scene
-// in low, warm tones. Morning and evening colours match, so the clock can jump the sun back to
+// Dusk (D42): a sunset without the sun. The sun itself has gone, so there are no direct
+// shadows, but a warm, glowing sky light keeps the scene about as bright as golden hour, so it
+// never reads as night. Morning and evening colours match, so the clock can jump the sun back to
 // the east under it unseen.
-const DUSK_SKY = { zenith: "#4c5a96", horizon: "#f0a070" };
+const DUSK_SKY = { zenith: "#d99a86", horizon: "#ffbb6e" };
 BUILT_IN_PRESETS["Dusk"] = preset({
   time: { phase: 1, drift: false },
-  sun: { intensity: 0, morningColor: "#ff9a62", middayColor: "#ff9a62", eveningColor: "#ff9a62" },
+  sun: { intensity: 0, morningColor: "#ffa864", middayColor: "#ffa864", eveningColor: "#ffa864" },
   sky: {
     zenithMorning: DUSK_SKY.zenith, zenithEvening: DUSK_SKY.zenith,
     horizonMorning: DUSK_SKY.horizon, horizonEvening: DUSK_SKY.horizon,
-    skyLight: 2.4, groundColor: "#94634a", sunDiscIntensity: 0,
+    skyLight: 3.4, groundColor: "#b07a52", sunDiscIntensity: 0,
   },
   shadows: { softness: 3.5 },
-  fog: { color: "#b98a7c", skyTint: 0.2, near: 30, far: 120 },
+  fog: { color: "#f2b383", skyTint: 0.5, near: 28, far: 120 },
   dof: { focalLength: 7, bokehScale: 3 },
   tiltShift: { width: 0.1, blur: 5 },
-  bloom: { strength: 0.45, radius: 0.7, threshold: 0.75 },
+  bloom: { strength: 0.6, radius: 0.7, threshold: 0.7 },
   grade: {
-    exposure: 1.15, contrast: 1.08, saturation: 1.15, temperature: 0.14, tint: 0, lift: 0.01,
-    shadowTint: "#3c3a7a", highlightTint: "#ffb98a", splitToneAmount: 0.35,
+    exposure: 1.35, contrast: 1.03, saturation: 1.15, temperature: 0.2, tint: 0, lift: 0.01,
+    shadowTint: "#6a4a7a", highlightTint: "#ffc58a", splitToneAmount: 0.3,
   },
-  vignette: { intensity: 0.45 },
+  vignette: { intensity: 0.4 },
 });
 
-// Indoors and caves have no day cycle (D40). Rooms take the midday look; caves are darker and
+// Indoors and caves have no day cycle (D42). Rooms take the midday look; caves are darker and
 // cooler, lit by a dim cold light from overhead, with the dark closing in at the edges.
 BUILT_IN_PRESETS["Cave"] = preset({
   time: { phase: 0.5, drift: false },
@@ -148,5 +149,5 @@ export const DEFAULT_CYCLE: DayCycle = {
   dusk: BUILT_IN_PRESETS[DEFAULT_CYCLE_NAMES.dusk]!,
 };
 
-/** The fixed look for caves (D40). */
+/** The fixed look for caves (D42). */
 export const CAVE_LOOK: LookParams = BUILT_IN_PRESETS["Cave"]!;

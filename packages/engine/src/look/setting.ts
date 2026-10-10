@@ -1,4 +1,4 @@
-// Where the player is, as far as the light goes (D40). The game keeps no "indoors" flag, but every
+// Where the player is, as far as the light goes (D42). The game keeps no "indoors" flag, but every
 // map names a tileset, and the game itself treats OVERWORLD and PLATEAU as the outside (its
 // CheckIfInOutsideMap). FOREST (Viridian Forest, the Safari Zone) is open sky too, so it keeps the
 // day. CAVERN is every cave: Mt Moon, Rock Tunnel, Diglett's Cave, Seafoam Islands, Victory Road

@@ -32,7 +32,7 @@ export interface LookController {
   changed(path?: string): void;
   /**
    * Blends the day's looks (morning, midday, evening, dusk), overwriting `params` every frame
-   * except time, camera and render. Indoors and in caves the light holds still instead (D40).
+   * except time, camera and render. Indoors and in caves the light holds still instead (D42).
    * Null returns to editing `params` directly.
    */
   setCycle(cycle: DayCycle | null): void;
