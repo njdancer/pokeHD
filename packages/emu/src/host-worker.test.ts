@@ -253,7 +253,7 @@ describe.skipIf(!existsSync(ROM_PATH))("emulator host and worker", () => {
   // iOS: sound was on, the menu paused the game (suspending the context), and the unpause's own
   // resume() isn't in a gesture, so it waits. The game, paced by that context, stands still
   // until the next tap. EmulatorHost.setPaused is changing to leave the context running.
-  it.fails("runs after an unpause on iOS with no tap, when sound was already on", async () => {
+  it("runs after an unpause on iOS with no tap, when sound was already on", async () => {
     const page = await open();
     await page.gesture();
     await page.advance(200);

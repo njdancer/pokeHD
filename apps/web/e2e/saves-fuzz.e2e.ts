@@ -135,8 +135,34 @@ test("the intro and save slots survive a child", async ({ page }) => {
     await expect(page.getByTestId("intro-resume")).toBeVisible({ timeout: 30_000 });
   };
 
+  /** What the game and page were doing, for a failure's report. */
+  const diagnose = async () => {
+    const at: [string, number][] = [
+      ...(["wJoyIgnore", "wStatusFlags3", "wStatusFlags4", "wStatusFlags5", "wStatusFlags6", "wIsInBattle", "wPlayerMovingDirection", "hWY"] as const).map((n) => [n, SYMBOLS[n].address] as [string, number]),
+      ["hJoyPressed", 0xffb3],
+      ["hJoyHeld", 0xffb4],
+    ];
+    const read = await page.evaluate(async (addresses: number[]) => {
+      const h = (window as unknown as { __pokehd?: { read(a: number, n: number): Promise<number[]>; page: object } }).__pokehd;
+      if (!h) return null;
+      return { page: h.page, bytes: await Promise.all(addresses.map((a) => h.read(a, 1).then((b) => b[0]))) };
+    }, at.map(([, a]) => a));
+    log.push(`  page: ${JSON.stringify(read?.page)}`);
+    at.forEach(([n], i) => log.push(`  ${n} = ${read?.bytes[i]?.toString(16)}`));
+    log.push(`  state: ${JSON.stringify((await hooked(page))?.state)?.slice(0, 600)}`);
+    await page.screenshot({ path: test.info().outputPath("stuck.png"), timeout: 90_000 }).catch(() => {});
+  };
+
   /** Playing: frames advance, the player is in the world, and turning turns them. */
   const responsive = async (what: string) => {
+    try {
+      await answers(what);
+    } catch (e) {
+      await diagnose();
+      throw new Error(`${(e as Error).message.split("\n")[0]}\n${log.join("\n")}`);
+    }
+  };
+  const answers = async (what: string) => {
     await expect.poll(async () => (await hooked(page))?.inWorld ?? false, { timeout: 60_000, message: `${what}: never reached the world\n${log.join("\n")}` }).toBe(true);
     const before = (await hooked(page))!.frames;
     await sleep(1000);

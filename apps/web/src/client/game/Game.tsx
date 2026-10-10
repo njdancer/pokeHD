@@ -84,7 +84,7 @@ const classic = new URLSearchParams(location.search).has("classic");
 declare global {
   interface Window {
     /** Set with ?stats, for scripted play-throughs. */
-    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly frames: number; readonly slow: SlowFrame[] };
+    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly frames: number; read(address: number, length: number): Promise<number[]>; readonly page: object; readonly slow: SlowFrame[] };
   }
 }
 /** A display frame over 50 ms, with what the page was doing (for ?stats perf checks). */
@@ -191,6 +191,8 @@ interface Props {
 export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
   const holder = useRef<HTMLDivElement>(null);
   const heldRef = useRef(held ?? false);
+  /** The game sits behind a page's menu (held is given), rather than starting on its own. */
+  const behindMenu = useRef(held !== undefined);
   /** The emulator has run its first frame, so pausing it now won't hold up the loading screen. */
   const emuRanRef = useRef(false);
   const screenRef = useRef<HTMLCanvasElement>(null);
@@ -333,6 +335,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
     let courier: GiftCourier | null = null;
     let raf = 0;
     let stopResumePoints = () => {};
+    /** Before the game goes (another slot, the page leaving it): its save and a last resume point. */
+    let finish = async () => {};
     let stopJournal = () => {};
     /** Takes a resume point once a save has finished, so the newest point always holds it. */
     let pointAfterSave = () => {};
@@ -341,6 +345,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
       onChange: (mask, source) => {
         // Behind a menu, the player's buttons are the menu's.
         if (heldRef.current) return;
+        // While the page presses the game's buttons for the player's start, the player's own are
+        // let go: a stray press there could pick NEW GAME.
+        if (onboardingRef.current?.phase === "starting") mask = 0;
         // B closes the HD Pokédex (the game's is held while it's up).
         if (mask & ~lastMask & Button.B) dexBRef.current();
         lastMask = mask;
@@ -364,9 +371,12 @@ export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
       // A device with no save (a new phone, or storage the browser cleared) gets the cloud's
       // back before the game starts, for signed-in players.
       let restored = false;
+      /** Whether this slot is known to have no save anywhere (here, or a cloud that answered). */
+      let noSave = false;
       if (!(await loadSave(romKey).catch(() => null))) {
         const backup = cloudBackup(romKey);
         const status = await within(backup.status(), CLOUD_WAIT_MS, null);
+        noSave = status?.kind === "none" || status?.kind === "signed-out";
         if (status?.kind === "newer" && !(await loadSave(romKey))) {
           await backup.restore(status.cloud);
           restored = true;
@@ -385,7 +395,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
       if (disposed) return;
       // The page's own start screen, unless the game's own screens are wanted.
       const custom = !recorded && !classic;
-      if (custom && !resume) setOnboarding({ phase: "choose" });
+      // Behind a menu, a slot with no save here that the cloud didn't answer for (offline, or slow)
+      // may still have one: the game's own title screen then, so a new game is the player's
+      // choice, never one the menu's Resume makes for them.
+      const unknown = behindMenu.current && !slot.sram && !noSave;
+      if (custom && !resume && !unknown) setOnboarding({ phase: "choose" });
       setStartSave(slot.sram ? saveSummary(slot.sram) : null);
       if (!restored) void cloudBackup(romKey).status().then((s) => !disposed && setCloudNewer(s.kind === "newer"), () => {});
 
@@ -441,6 +455,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
         },
         onScriptPress: () => readOnScript(),
         onFrame: ({ pixels, watched, count }) => {
+          if (disposed) return; // the game is going: only its save is still wanted
           image.data.set(new Uint8Array(pixels));
           if (++emuFrames === 1) {
             setStartup((s) => ({ ...s, emu: true }));
@@ -598,6 +613,14 @@ export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
         });
       };
       const resumeTimer = setInterval(takeResumePoint, RESUME_POINT_MS);
+      finish = async () => {
+        if (!sceneRef.current.inWorld) return;
+        const state = await h.resumePoint(); // hands over any newer save first
+        const save = slot.latest;
+        if (!state) return;
+        await storeResumePoint(romKey, state, save);
+        if (upload && save) await uploadResumePoint(romKey, state, save, true).catch(() => {});
+      };
       // A save makes every earlier point stale (it no longer holds the stored save), so take a
       // new one straight after; the delay lets the save routine finish its last writes.
       let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -660,6 +683,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
           },
           get frames() {
             return emuFrames;
+          },
+          /** For a stuck test's report: game memory, and what the page holds back. */
+          read: (address: number, length: number) => h.read([[address, length]]).then(([bytes]) => Array.from(bytes!)),
+          get page() {
+            return { held: heldRef.current, onboarding: onboardingRef.current?.phase ?? null, starter: !!starterRef.current, script: scriptRef.current?.id ?? null };
           },
           slow,
         };
@@ -754,7 +782,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
       roomLink?.dispose();
       courier?.dispose();
       roomClient?.close();
-      host?.dispose();
+      // The game stops where it is; it goes once its save and a resume point are kept, or after
+      // a while if the emulator doesn't answer.
+      const h = host;
+      h?.setPaused(true);
+      void Promise.race([finish().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]).then(() => h?.dispose());
       hostRef.current = null;
       engine?.dispose();
       live?.dispose();
@@ -885,6 +917,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady }: Props) {
     if (held === undefined) return;
     heldRef.current = held;
     if (emuRanRef.current) hostRef.current?.setPaused(held);
+    // A new game only for a slot known to have no save: one that may be in the cloud, unreached,
+    // gets the game's own title screen instead, so a new game is the player's choice there.
     if (!held && onboarding?.phase === "choose") start(startSave ? "continue" : "new");
   }, [held, onboarding, startSave]);
 
