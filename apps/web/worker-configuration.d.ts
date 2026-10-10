@@ -9,7 +9,6 @@ interface __BaseEnv_Env {
 	ADMIN_EMAIL: "nick@dncr.me";
 	ADMIN_NAME: "Nick";
 	EMAIL_FROM: "pokehd@hearth.dncr.me";
-	ADMIN_TOKEN: string;
 	DIRECTORY: DurableObjectNamespace<import("./src/worker/index").Directory>;
 	ROOM: DurableObjectNamespace<import("./src/worker/index").Room>;
 	LOCKS: DurableObjectNamespace<import("./src/worker/index").SaveLocks>;
@@ -27,7 +26,7 @@ type StringifyValues<EnvType extends Record<string, unknown>> = {
 	[Binding in keyof EnvType]: EnvType[Binding] extends string ? EnvType[Binding] : string;
 };
 declare namespace NodeJS {
-	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "DEV_ROM_KEY" | "ADMIN_EMAIL" | "ADMIN_NAME" | "EMAIL_FROM" | "ADMIN_TOKEN">> {}
+	interface ProcessEnv extends StringifyValues<Pick<Cloudflare.Env, "DEV_ROM_KEY" | "ADMIN_EMAIL" | "ADMIN_NAME" | "EMAIL_FROM">> {}
 }
 declare module "*.txt" {
 	const value: string;

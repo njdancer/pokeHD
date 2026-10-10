@@ -128,9 +128,37 @@ export interface LiveInput {
   catalogue: Catalogue;
   game: GameSnapshot;
   journal: PlayJournal | null;
-  friends: readonly RoomFriend[];
+  /** Every friend; `online` while they're connected to the room (presence once they're playing). */
+  friends: readonly LiveFriend[];
   savedAt: number;
   app: AppOptions;
+}
+
+export type LiveFriend = RoomFriend & { online: boolean };
+
+/**
+ * Where a place indoors sits on the outdoor map: the door that leads into it, through any floors
+ * or rooms in between (interiors leave by "the last map", so only the way in names them).
+ */
+export function outdoorSpot(world: WorldData, map: number): { map: number; x: number; y: number } | null {
+  const seen = new Set([map]);
+  let frontier = [map];
+  while (frontier.length) {
+    const next: number[] = [];
+    for (const inner of frontier) {
+      for (const outer of world.maps) {
+        const door = outer?.warps.find((w) => w.to === inner);
+        if (!outer || !door) continue;
+        if (outer.id < FIRST_INDOOR) return { map: outer.id, x: door.x, y: door.y };
+        if (!seen.has(outer.id)) {
+          seen.add(outer.id);
+          next.push(outer.id);
+        }
+      }
+    }
+    frontier = next;
+  }
+  return null;
 }
 
 /** Per ROM: how each Pokémon grows (it takes a scan of every species). */
@@ -196,7 +224,10 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
   }
   people.reverse();
   const visited = new Set((journal?.places() ?? []).map((p) => placeOf(p.map)).filter(Boolean));
-  const here = { place: placeOf(game.map), map: game.map, x: game.x, y: game.y };
+  // Indoors, "you" stand at the building's door on the map (the map only draws outdoors).
+  const lastOutdoor = (journal?.places() ?? []).findLast((p) => p.map < FIRST_INDOOR)?.map ?? 0;
+  const spot = game.map < FIRST_INDOOR ? { map: game.map, x: game.x, y: game.y } : (outdoorSpot(world, game.map) ?? { map: lastOutdoor, x: world.maps[lastOutdoor]?.widthBlocks ?? 0, y: world.maps[lastOutdoor]?.heightBlocks ?? 0 });
+  const here = { place: placeOf(game.map), ...spot };
   visited.add(here.place);
   const s = journal?.stats();
   const badges = Array.from({ length: 8 }, (_, i) => ((game.badges >> i) & 1) === 1);
@@ -262,8 +293,8 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
     friends: friends.map((fr, i) => ({
       id: fr.id,
       name: fr.name,
-      online: !!fr.presence,
-      where: fr.presence ? (catalogue.placeOf(fr.presence.mapId)?.name ?? "Playing") : "Here, not playing yet",
+      online: fr.online,
+      where: fr.presence ? (catalogue.placeOf(fr.presence.mapId)?.name ?? "Playing") : fr.online ? "Here, not playing yet" : "Not playing now",
       colour: FRIEND_COLOURS[i % FRIEND_COLOURS.length]!,
     })),
     visited,

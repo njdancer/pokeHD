@@ -4,7 +4,9 @@
 // Maps use the Game Boy's three-quarter view: moving one pixel up the screen means moving up, or
 // back, or a mix of both (dh + dz = 1), so the original pixels always line up when seen from the
 // game's camera. Each column is walked from the bottom. A pixel's normal decides its mix:
-// facing the viewer goes up, facing the sky goes back, a slope goes some of each. Pixels that lean
+// facing the viewer goes up, facing the sky goes back, a slope goes some of each. Ground pixels stay
+// where they'd be on a flat map, so a tall object leaves a hidden gap behind it rather than dragging
+// everything behind it forwards. Pixels that lean
 // sideways (hips) take their height from the column next to them, working outwards.
 //
 // Pictures (Pokémon, trainers) are seen straight on, so instead a height is solved for every pixel
@@ -72,6 +74,9 @@ export function mapRelief(r: MapRegion, opts: MapOptions): Mesh {
       if (r.ground(x, y)) {
         if (run.length) closeRun();
         if (h > 0) { segs.push({ x, z0: z, z1: z, hl0: h, hl1: 0, hr0: h, hr1: 0, rgb, lean: 0 }); h = 0; } // back wall down to the ground
+        // Ground keeps its natural place: as far back as its row is up the screen. Whatever stood in
+        // front of it hides the gap between that object's back and here; it never pulls the ground forward.
+        z = Math.max(z, r.height - 1 - y);
       }
       const ny = Math.max(0, n[1]), nz = Math.max(0, n[2]), sum = ny + nz;
       const dh = sum < 1e-3 ? 1 : nz / sum, dz = sum < 1e-3 ? 0 : ny / sum;

@@ -94,6 +94,14 @@ test("the Pokédex menu shows the game and works it through its routines", async
   await page.goto("/dev/menu/live?stats&classic");
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   await intoTheWorld(page);
+  // Indoors, the map opens with you at the house's door.
+  await page.getByRole("button", { name: "Pokédex", exact: true }).click();
+  const indoors = page.getByRole("dialog", { name: "Pokédex" });
+  await indoors.getByRole("navigation").getByRole("button", { name: "Map" }).click();
+  await expect(indoors.getByRole("button", { name: "Find me" })).toBeVisible();
+  await page.screenshot({ path: "test-results/menu-map-indoors.png" });
+  await indoors.getByRole("button", { name: "Close the Pokédex" }).click();
+  await expect(indoors).toBeHidden();
   // Out into Pallet Town, so the map has a trail to show.
   const p = new Player(page, loadWorld());
   await p.walkTo(REDS_HOUSE_2F, [5, 1]);

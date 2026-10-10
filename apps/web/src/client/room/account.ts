@@ -47,6 +47,13 @@ export async function signOut(): Promise<void> {
   await fetch("/api/sign-out", { method: "POST" });
 }
 
+/** Everyone else on the server (friends-only, so all of them are friends); empty when signed out. */
+export async function listPlayers(): Promise<{ id: string; name: string }[]> {
+  const res = await fetch("/api/friends");
+  if (!res.ok) return [];
+  return ((await res.json()) as { friends: { id: string; name: string }[] }).friends;
+}
+
 // Admin (Nick's session).
 
 export interface FriendEntry {
