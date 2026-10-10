@@ -105,18 +105,18 @@ BUILT_IN_PRESETS["Dusk"] = preset({
   sky: {
     zenithMorning: DUSK_SKY.zenith, zenithEvening: DUSK_SKY.zenith,
     horizonMorning: DUSK_SKY.horizon, horizonEvening: DUSK_SKY.horizon,
-    skyLight: 2.3, groundColor: "#8c5f4a", sunDiscIntensity: 0,
+    skyLight: 2.6, groundColor: "#94634a", sunDiscIntensity: 0,
   },
   shadows: { softness: 3.5 },
-  fog: { color: "#c98f78", skyTint: 0.5, near: 28, far: 115 },
+  fog: { color: "#e0a582", skyTint: 0.35, near: 30, far: 120 },
   dof: { focalLength: 7, bokehScale: 3 },
   tiltShift: { width: 0.1, blur: 5 },
   bloom: { strength: 0.45, radius: 0.7, threshold: 0.75 },
   grade: {
-    exposure: 1.15, contrast: 1.02, saturation: 1.0, temperature: 0.2, tint: 0.03, lift: 0.015,
+    exposure: 1.25, contrast: 1.04, saturation: 1.12, temperature: 0.18, tint: 0.02, lift: 0.01,
     shadowTint: "#4a3f78", highlightTint: "#ffb98a", splitToneAmount: 0.3,
   },
-  vignette: { intensity: 0.5 },
+  vignette: { intensity: 0.45 },
 });
 
 // Indoors and caves have no day cycle (D40). Rooms take the midday look; caves are darker and
@@ -126,13 +126,13 @@ BUILT_IN_PRESETS["Cave"] = preset({
   sun: { intensity: 1.3, morningColor: "#a9b8d6", middayColor: "#a9b8d6", eveningColor: "#a9b8d6" },
   sky: {
     zenithMorning: "#10131b", zenithEvening: "#10131b", horizonMorning: "#1d1e26", horizonEvening: "#1d1e26",
-    skyLight: 1.0, groundColor: "#4a3c30", sunDiscIntensity: 0,
+    skyLight: 1.2, groundColor: "#4a3c30", sunDiscIntensity: 0,
   },
   shadows: { softness: 4 },
   fog: { color: "#15171e", skyTint: 0, near: 30, far: 75 },
   bloom: { strength: 0.3, threshold: 0.9 },
   grade: {
-    exposure: 1.0, contrast: 1.1, saturation: 0.88, temperature: -0.1, tint: 0, lift: 0,
+    exposure: 1.1, contrast: 1.1, saturation: 0.9, temperature: -0.1, tint: 0, lift: 0,
     shadowTint: "#1f2c50", highlightTint: "#e6d6b8", splitToneAmount: 0.3,
   },
   vignette: { intensity: 0.65, radius: 0.75, smoothness: 0.7 },
