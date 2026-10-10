@@ -74,8 +74,8 @@ export type JournalEvent =
   /** Each Pokémon the other side sends out (wild ones once, at the start). */
   | ({ type: "enemy-seen"; species: number; level: number; kind: BattleKind } & JournalPlace)
   | ({ type: "caught"; species: number; level: number; into: "party" | "box" } & JournalPlace)
-  /** `result` is the game's wBattleResult: 0 win, 1 loss, 2 draw (or ran). */
-  | ({ type: "battle-end"; kind: BattleKind; outcome: BattleEnding; result: number } & JournalPlace)
+  /** `result` is the game's wBattleResult: 0 win, 1 loss, 2 draw (or ran). `lead` is the species the player has out. */
+  | ({ type: "battle-end"; kind: BattleKind; outcome: BattleEnding; result: number; lead: number } & JournalPlace)
   | ({ type: "item-added"; item: number; quantity: number; inventory: "bag" | "box"; source: ItemSource } & JournalPlace)
   | ({ type: "item-removed"; item: number; quantity: number; inventory: "bag" | "box"; reason: ItemRemoval } & JournalPlace)
   | ({ type: "mon-added"; species: number; level: number; into: "party" | "box"; how: MonArrival } & JournalPlace)
@@ -227,7 +227,7 @@ export class JournalHooks {
       else if (result === 2 || r("wEscapedFromBattle") !== 0) outcome = "ran";
       else if (kind === "wild" && (r("wEnemyMonHP") | r("wEnemyMonHP", 1)) !== 0) outcome = "fled";
       else outcome = "won";
-      emit({ type: "battle-end", kind, outcome, result, ...where() });
+      emit({ type: "battle-end", kind, outcome, result, lead: r("wBattleMon"), ...where() });
       this.#battle = undefined;
       this.#capturing = false;
       this.#caught = false;

@@ -207,7 +207,7 @@ describe.skipIf(!hasRom)("JournalHooks on a new game", () => {
     const firstSeen = events.findIndex((e) => e.type === "enemy-seen");
     expect(events[firstSeen]).toMatchObject({ species: BULBASAUR, level: 5, kind: "trainer" });
     expect(firstSeen).toBeGreaterThan(events.indexOf(start));
-    expect(of("battle-end")[0]).toMatchObject({ kind: "trainer", outcome: expect.stringMatching(/^(won|lost)$/) });
+    expect(of("battle-end")[0]).toMatchObject({ kind: "trainer", outcome: expect.stringMatching(/^(won|lost)$/), lead: SQUIRTLE });
   });
 
   it("tags a friend's gift as the page's", () => {
