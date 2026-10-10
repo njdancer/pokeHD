@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { ERROR_REPORT_MAX_BYTES, parseErrorReport } from "@pokehd/protocol";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { sendSignIn, signInLink } from "./directory/mail.ts";
 import { cleanEmail, type CodeKind, type Player } from "./directory/store.ts";
@@ -9,6 +10,7 @@ import { savesApi } from "./saves/saves.ts";
 export { Directory } from "./directory/do.ts";
 export { Room } from "./room/do.ts";
 export { SaveLocks } from "./locks/do.ts";
+export { Reports } from "./reports/do.ts";
 
 type Bindings = Env & { DEV_ROM_TOKEN?: string; ADMIN_TOKEN?: string };
 type Ctx = Context<{ Bindings: Bindings }>;
@@ -129,12 +131,39 @@ app.route("/saves", locksApi<Bindings>(currentPlayer, (c, id) => c.env.LOCKS.get
 /** Cloud backup of the player's battery saves, per ROM. */
 app.route("/saves", savesApi<Bindings>(currentPlayer));
 
+/**
+ * Crash reports from the game, signed in or not (a crash can come before sign-in). Read at
+ * /admin/errors. Sent with fetch keepalive or sendBeacon, so the body may be text/plain.
+ */
+app.post("/errors", async (c) => {
+  const origin = c.req.header("origin");
+  if (origin && new URL(origin).host !== new URL(c.req.url).host) return c.text("Forbidden", 403);
+  const text = await c.req.text();
+  if (text.length > ERROR_REPORT_MAX_BYTES) return c.json({ error: "too-big" }, 413);
+  let report;
+  try {
+    report = parseErrorReport(JSON.parse(text));
+  } catch {
+    report = null;
+  }
+  if (!report) return c.json({ error: "bad-report" }, 400);
+  const player = await currentPlayer(c).catch(() => null);
+  // Also in the Worker's logs (Workers Observability), next to whatever the server was doing.
+  console.warn("client error", report.kind, report.message, player?.name ?? "signed out");
+  const stored = await reports(c).add(report, player && { id: player.id, name: player.name });
+  return c.json({ ok: true, stored });
+});
+
 // Admin: Nick, signed in as ADMIN_EMAIL, from the game. ADMIN_TOKEN (a Worker secret) is for
 // scripts and tests: `pnpm invite` wraps these routes. The session cookie is SameSite=Strict, so
 // another site can't make Nick's browser call them.
 
 app.use("/admin/*", async (c, next) => {
-  const allowed = (await bearerMatches(c, c.env.ADMIN_TOKEN)) || isAdmin(c, await currentPlayer(c));
+  const allowed =
+    (await bearerMatches(c, c.env.ADMIN_TOKEN)) ||
+    isAdmin(c, await currentPlayer(c)) ||
+    // Claude's cloud sandboxes only have DEV_ROM_TOKEN; Nick let it read crash reports (`pnpm errors`).
+    (c.req.method === "GET" && c.req.path.startsWith("/api/admin/errors") && (await bearerMatches(c, c.env.DEV_ROM_TOKEN)));
   if (!allowed) return c.text("Not found", 404);
   await next();
 });
@@ -152,6 +181,18 @@ app.post("/admin/players", async (c) => {
   const added = await directory(c).addPlayer(email, name);
   if (!added.ok) return c.json({ error: added.error }, added.error.endsWith("-taken") ? 409 : 400);
   return c.json({ player: added.player, ...(await invite(c, added.player, body.send === true)) });
+});
+
+/** Crash reports grouped by problem, the most recently seen first. */
+app.get("/admin/errors", async (c) => c.json({ groups: await reports(c).groups() }));
+
+/** The newest reports of one problem (`?fp=`, a group's fingerprint). */
+app.get("/admin/errors/reports", async (c) => c.json({ reports: await reports(c).reports(c.req.query("fp") ?? "") }));
+
+/** Forgets one problem (`?fp=`), or every report. */
+app.delete("/admin/errors", async (c) => {
+  await reports(c).clear(c.req.query("fp") || undefined);
+  return c.json({ ok: true });
 });
 
 // The relief editor's painted normals (/tools/relief). Training material only: the game never reads
@@ -226,6 +267,10 @@ async function invite(c: Ctx, player: Player, send: boolean) {
 
 function directory(c: Ctx) {
   return c.env.DIRECTORY.getByName("friends");
+}
+
+function reports(c: Ctx) {
+  return c.env.REPORTS.getByName("errors");
 }
 
 function adminEmail(c: Ctx): string | null {

@@ -122,7 +122,7 @@ export type FromWorker =
   | { type: "action-done"; id: number; result: ActionResult }
   /** The game asks the player something (a list, the party, a quantity, yes or no): the page answers. */
   | { type: "ask"; id: number; ask: GameAsk }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; stack?: string };
 
 /** Worker → audio worklet: interleaved stereo float32. Worklet → worker: frames consumed. */
 export type ToWorklet = { samples: Float32Array };

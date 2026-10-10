@@ -340,6 +340,7 @@ async function handle(data: ToWorker) {
       }
     }
   } catch (err) {
-    post({ type: "error", message: err instanceof Error ? err.message : String(err) });
+    const stack = err instanceof Error ? err.stack : undefined;
+    post({ type: "error", message: err instanceof Error ? err.message : String(err), ...(stack ? { stack } : {}) });
   }
 }
