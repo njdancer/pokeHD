@@ -13,6 +13,7 @@ const Bench = lazy(() => import("./dev/Bench.tsx").then((m) => ({ default: m.Ben
 const Explorer = lazy(() => import("./explore/Explorer.tsx").then((m) => ({ default: m.Explorer })));
 // The Pokédex's looks, side by side while Nick picks (p2-dex).
 const DexDev = lazy(() => import("./dev/DexDev.tsx").then((m) => ({ default: m.DexDev })));
+const SavesDev = lazy(() => import("./dev/SavesDev.tsx").then((m) => ({ default: m.SavesDev })));
 const DialogDev = lazy(() => import("./dev/DialogDev.tsx").then((m) => ({ default: m.DialogDev })));
 // The relief editor: paint which way each pixel faces, for training data only (never used in play).
 const ReliefEditor = lazy(() => import("./tools/relief/ReliefEditor.tsx").then((m) => ({ default: m.ReliefEditor })));
@@ -41,6 +42,7 @@ export function Root() {
   if (path === "/dev/ui") return <Suspense><UiLooks /></Suspense>;
   if (path === "/dev/bench") return <Suspense><Bench /></Suspense>;
   if (path === "/dev/dex") return <Suspense><DexDev /></Suspense>;
+  if (path === "/dev/saves") return <Suspense><SavesDev /></Suspense>;
   if (path === "/dev/dialog") return <Suspense><DialogDev /></Suspense>;
   if (path === "/tools/relief") return <Suspense><ReliefEditor /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;
