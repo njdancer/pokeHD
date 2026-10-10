@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import type { PlayerInfo, Presence, ServerMessage } from "@pokehd/protocol";
-import { join, leave, receive, type GiftStore, type Peer, type StoredGift } from "./room.ts";
+import { CloseCode, ROOM_KEEPALIVE_MS, type PlayerInfo, type Presence, type ServerMessage } from "@pokehd/protocol";
+import { join, leave, quietPeers, receive, type GiftStore, type Peer, type StoredGift } from "./room.ts";
 
 /** Headers the Worker sets on the upgrade request it forwards, after checking the session. */
 export const PLAYER_ID_HEADER = "x-pokehd-player-id";
@@ -9,6 +9,9 @@ export const PLAYER_NAME_HEADER = "x-pokehd-player-name";
 interface Attachment {
   player: PlayerInfo;
   presence: Presence | null;
+  /** When it connected, and when it last sent a message (pings are counted by the runtime). */
+  joinedAt?: number;
+  heardAt?: number;
 }
 
 /**
@@ -34,13 +37,47 @@ export class Room extends DurableObject<Env> {
     }
     const { 0: client, 1: server } = new WebSocketPair();
     this.ctx.acceptWebSocket(server);
-    server.serializeAttachment({ player: { id, name: decodeURIComponent(name) }, presence: null } satisfies Attachment);
+    server.serializeAttachment({ player: { id, name: decodeURIComponent(name) }, presence: null, joinedAt: Date.now() } satisfies Attachment);
     join(this.#peers(), peer(server), this.#gifts);
+    await this.#watch();
     return new Response(null, { status: 101, webSocket: client });
   }
 
   override webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): void {
+    const attachment = ws.deserializeAttachment() as Attachment;
+    const now = Date.now();
+    // Noted at most once a heartbeat, not for every presence update.
+    if (now - (attachment.heardAt ?? 0) > ROOM_KEEPALIVE_MS) ws.serializeAttachment({ ...attachment, heardAt: now });
     receive(this.#peers(), peer(ws), message, this.#gifts);
+  }
+
+  /**
+   * The heartbeat check (D40): connections not heard from for ROOM_QUIET_MS are closed, so their
+   * ghosts leave. Runs every heartbeat while anyone is connected; an empty room sleeps.
+   */
+  override async alarm(): Promise<void> {
+    const now = Date.now();
+    const lastHeard = (ws: WebSocket) => {
+      const a = ws.deserializeAttachment() as Attachment;
+      return Math.max(a.joinedAt ?? now, a.heardAt ?? 0, this.ctx.getWebSocketAutoResponseTimestamp(ws)?.getTime() ?? 0);
+    };
+    const open = this.ctx.getWebSockets().filter((ws) => ws.readyState === WebSocket.READY_STATE_OPEN);
+    for (const ws of quietPeers(open, lastHeard, now)) {
+      const gone = peer(ws);
+      try {
+        ws.close(CloseCode.quiet, "Gone quiet");
+      } catch {
+        // Already closing.
+      }
+      leave(this.#peers(), gone);
+    }
+    await this.#watch();
+  }
+
+  /** Keeps the heartbeat check running while anyone is connected. */
+  async #watch(): Promise<void> {
+    if (this.#peers().length === 0) return;
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + ROOM_KEEPALIVE_MS);
   }
 
   override webSocketClose(ws: WebSocket, code: number): void {

@@ -5,6 +5,7 @@
 import {
   CloseCode,
   parseServerMessage,
+  ROOM_KEEPALIVE_MS,
   type ClientMessage,
   type PlayerInfo,
   type Presence,
@@ -58,7 +59,10 @@ export interface RoomClientOptions {
   maxBackoffMs?: number;
   /** Presence changes within one step (progress, animation frame) go out at most this often. */
   presenceIntervalMs?: number;
-  /** How often to ping; a connection silent for two intervals is treated as dropped. */
+  /**
+   * How often to ping (the room's heartbeat: it drops a ghost not heard from for three); a
+   * connection silent for two intervals is treated as dropped here.
+   */
   keepaliveMs?: number;
   random?: () => number;
 }
@@ -101,7 +105,7 @@ export class RoomClient {
     this.#backoffMs = options.backoffMs ?? 500;
     this.#maxBackoffMs = options.maxBackoffMs ?? 30_000;
     this.#presenceIntervalMs = options.presenceIntervalMs ?? 100;
-    this.#keepaliveMs = options.keepaliveMs ?? 25_000;
+    this.#keepaliveMs = options.keepaliveMs ?? ROOM_KEEPALIVE_MS;
     this.#random = options.random ?? Math.random;
     this.store = createStore<RoomState>(() => ({ status: "closed", you: null, friends: {} }));
   }
