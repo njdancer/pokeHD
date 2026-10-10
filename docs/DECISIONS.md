@@ -601,3 +601,25 @@ picture pixel) and see the 3D shape it makes. The edits are saved to his browser
 (`/api/admin/relief`, in the private bucket), and can be exported for local processing. The game
 never reads them, and they aren't committed as game data: they're teaching material for the small
 runtime model (D37).
+
+## D39. Save slots: any number of saves per ROM; the save everyone had becomes the main slot in place
+
+**Status:** asked for by Nick on 2026-10-10 (multiple saves with duplicate, delete and new; checkpoints
+belong to a save; an intro with Resume). The storage choices below were made while he was away.
+
+- **Keys, not moves.** Every slot's data sits under its own key, the way the one save did: battery
+  save, resume point, earlier saves, Pokédex journal and gift ledger, on the device and in R2. The
+  main slot's key is the ROM's SHA-1, so the save players already had is the main slot without a
+  byte moving; other slots are `<sha1>-<8 letters/digits>`. Nothing in the game had to learn about
+  slots: it's handed a slot's key.
+- **The list merges, never replaces.** The slot list is kept in IndexedDB and, signed in, in R2
+  (`saves/<player>/<rom>.slots.json`). A PUT merges into the stored list (per slot, the newer
+  rename or bin change wins and the latest play wins), so two devices that each changed it never
+  drop a slot. Resume plays the slot played last.
+- **Delete is a bin.** Deleting only marks a slot; its data stays, and it can be brought back
+  (D25: nothing a child taps loses a save). Emptying the bin for good is left for later, behind
+  the grown-ups check.
+- **Duplicate** copies the battery save, resume point, journal and gift ledger, but not gifts still
+  on their way out (they'd be sent twice) or earlier saves (they stay with the original).
+
+Until Nick picks the intro, the live game plays the main slot as before.

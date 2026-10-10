@@ -1,7 +1,11 @@
 // Cloud backup of battery saves (p1-saves-cloud): one SRAM image per player per ROM, in the
 // private SAVES bucket. A battery save is game data the player made, not Nintendo's data.
 // Last writer wins; the bucket's upload time is the version both devices compare.
+//
+// Each save slot (packages/protocol saves.ts) has its own key: the ROM's SHA-1 for the main slot,
+// with `-<slot id>` after it for the others. Routes below name it `:romSha1` either way.
 import { Hono, type Context } from "hono";
+import { mergeSlotIndex, parseSlotIndex, SLOT_KEY, type SlotIndex } from "@pokehd/protocol";
 
 /** The largest cartridge RAM we accept: Pokémon Blue's is exactly 32 KB. */
 export const MAX_SAVE_BYTES = 32 * 1024;
@@ -11,6 +15,8 @@ export const SAVED_AT_HEADER = "x-saved-at";
 export const SAVE_SHA1_HEADER = "x-save-sha1";
 export const STATE_SHA1_HEADER = "x-state-sha1";
 
+/** A slot list is a few KB at most. */
+export const MAX_SLOTS_BYTES = 64 * 1024;
 /** A resume point is a gzipped save state: a few KB, well under this. */
 export const MAX_RESUME_BYTES = 256 * 1024;
 /** Earlier saves kept per player per ROM (p1-kidproof): the oldest go first. */
@@ -38,6 +44,8 @@ export const saveKey = (playerId: string, romSha1: string) => `saves/${playerId}
 export const resumeKey = (playerId: string, romSha1: string) => `saves/${playerId}/${romSha1}.resume`;
 /** Earlier saves: `…/history/<savedAt>-<reason>.sav`, so keys sort oldest first. */
 const historyPrefix = (playerId: string, romSha1: string) => `saves/${playerId}/${romSha1}/history/`;
+/** The player's save slots for a ROM. */
+export const slotsKey = (playerId: string, romSha1: string) => `saves/${playerId}/${romSha1}.slots.json`;
 const SHA1 = /^[0-9a-f]{40}$/;
 const HISTORY_ID = /^\d{13}-[a-z-]{1,24}$/;
 
@@ -60,7 +68,7 @@ export function savesApi<B extends { SAVES: SaveBucket }>(
   const api = new Hono<Env<B>>();
 
   const checkRom = async (c: Context<Env<B>>, next: () => Promise<void>) => {
-    if (!SHA1.test(c.req.param("romSha1") ?? "")) return c.json({ error: "bad-rom" }, 400);
+    if (!SLOT_KEY.test(c.req.param("romSha1") ?? "")) return c.json({ error: "bad-rom" }, 400);
     await next();
   };
   api.use("/:romSha1", checkRom);
@@ -167,6 +175,49 @@ export function savesApi<B extends { SAVES: SaveBucket }>(
     const old = objects.map((o) => o.key).sort().slice(0, -HISTORY_KEEP);
     if (old.length > 0) await c.env.SAVES.delete(old);
     return c.json({ id });
+  });
+
+  // Save slots: the list is per ROM, so it takes the bare SHA-1. A PUT merges into what's
+  // stored (mergeSlotIndex) rather than replacing it, so a device with an old list can't drop a
+  // slot another device made; the merged list comes back.
+  const readSlots = async (bucket: SaveBucket, key: string): Promise<SlotIndex> => {
+    const stored = await bucket.get(key);
+    if (!stored) return { slots: [] };
+    try {
+      return parseSlotIndex(JSON.parse(new TextDecoder().decode(await stored.arrayBuffer()))) ?? { slots: [] };
+    } catch {
+      return { slots: [] };
+    }
+  };
+
+  api.get("/:romSha1/slots", async (c) => {
+    const player = await playerOf(c);
+    if (!player) return c.json({ error: "signed-out" }, 401);
+    if (!SHA1.test(c.req.param("romSha1"))) return c.json({ error: "bad-rom" }, 400);
+    c.header("cache-control", "private, no-store");
+    return c.json(await readSlots(c.env.SAVES, slotsKey(player.id, c.req.param("romSha1"))));
+  });
+
+  api.put("/:romSha1/slots", async (c) => {
+    const player = await playerOf(c);
+    if (!player) return c.json({ error: "signed-out" }, 401);
+    if (!SHA1.test(c.req.param("romSha1"))) return c.json({ error: "bad-rom" }, 400);
+    const body = await readBody(c, MAX_SLOTS_BYTES);
+    if (body instanceof Response) return body;
+    let json: unknown;
+    try {
+      json = JSON.parse(new TextDecoder().decode(body));
+    } catch {
+      return c.json({ error: "bad-slots" }, 400);
+    }
+    const incoming = parseSlotIndex(json);
+    if (!incoming) return c.json({ error: "bad-slots" }, 400);
+    const key = slotsKey(player.id, c.req.param("romSha1"));
+    const merged = mergeSlotIndex(await readSlots(c.env.SAVES, key), incoming);
+    const out = new TextEncoder().encode(JSON.stringify(merged));
+    await c.env.SAVES.put(key, out.buffer as ArrayBuffer);
+    c.header("cache-control", "private, no-store");
+    return c.json(merged);
   });
 
   return api;

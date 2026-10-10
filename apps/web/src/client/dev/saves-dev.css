@@ -1,0 +1,29 @@
+/* The intro and save manager prototype (SavesDev.tsx), built on the start screen's panel. */
+.saves-screen { align-items: center; }
+.saves-panel { max-height: calc(100dvh - 48px); overflow: auto; }
+.saves-when { margin: calc(var(--tile) * .5) 0 0; font-size: .7em; opacity: .7; }
+.saves-none { margin: 0 0 calc(var(--tile) * .8); font-size: .8em; opacity: .7; }
+.saves-intro-row { margin-top: calc(var(--tile) * 1); }
+.saves-head { display: flex; align-items: center; gap: calc(var(--tile) * .4); }
+.saves-head .start-title { margin: 0; }
+.saves-back { min-width: 44px; min-height: 44px; font: inherit; font-size: 1.6em; line-height: 1; color: var(--hd-ink); background: none; border: 0; cursor: pointer; }
+.saves-list ul { margin: calc(var(--tile) * .6) 0; padding: 0; list-style: none; display: grid; gap: calc(var(--tile) * .45); text-align: left; }
+.saves-card { background: #fff8ea; border: calc(var(--tile) * .08) solid #e9cb98; border-radius: calc(var(--tile) * .6); }
+.saves-card[data-open="true"] { border-color: var(--hd-accent); }
+.saves-card-main {
+  display: flex; flex-direction: column; gap: calc(var(--tile) * .15); width: 100%; min-height: 52px; box-sizing: border-box;
+  padding: calc(var(--tile) * .45) calc(var(--tile) * .7); font: inherit; color: inherit; text-align: left; background: none; border: 0; cursor: pointer;
+}
+.saves-name { font-size: 1em; }
+.saves-meta { font-size: .65em; opacity: .7; }
+.saves-actions, .saves-confirm, .saves-rename { display: grid; gap: calc(var(--tile) * .5); padding: 0 calc(var(--tile) * .6) calc(var(--tile) * .6); }
+.saves-actions .start-row .start-button, .saves-confirm .start-button { font-size: .75em; min-height: 44px; }
+.saves-confirm p { margin: 0; font-size: .75em; }
+.saves-rename { grid-template-columns: 1fr auto; }
+.saves-rename input { min-width: 0; min-height: 44px; padding: 0 calc(var(--tile) * .5); font: inherit; font-size: 16px; border: calc(var(--tile) * .08) solid #e2bd83; border-radius: calc(var(--tile) * .5); }
+.saves-rename .start-button { font-size: .75em; }
+.saves-new { font-size: .85em; }
+.saves-bin { margin-top: calc(var(--tile) * .4); }
+.saves-card.binned { display: flex; align-items: center; opacity: .8; }
+.saves-card.binned .start-button { width: auto; white-space: nowrap; margin-right: calc(var(--tile) * .5); font-size: .7em; min-height: 44px; }
+.saves-list .start-button:disabled { opacity: .5; }

@@ -47,7 +47,7 @@ export async function uploadCloudSave(key: string, sram: Uint8Array, f: Fetch = 
 const markerKey = (key: string) => `${key}:cloud`;
 export const readSynced = (key: string) =>
   run<{ savedAt: number } | undefined>("saves", "readonly", (s) => s.get(markerKey(key))).then((m) => m?.savedAt);
-const writeSynced = (key: string, savedAt: number) => run("saves", "readwrite", (s) => s.put({ savedAt }, markerKey(key)));
+export const writeSynced = (key: string, savedAt: number) => run("saves", "readwrite", (s) => s.put({ savedAt }, markerKey(key)));
 
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
 
