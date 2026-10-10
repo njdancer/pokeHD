@@ -98,23 +98,23 @@ export const BUILT_IN_PRESETS: Record<string, LookParams> = {
 // Dusk (D40): the sun has gone, so there are no direct shadows; the sky light carries the scene
 // in low, warm tones. Morning and evening colours match, so the clock can jump the sun back to
 // the east under it unseen.
-const DUSK_SKY = { zenith: "#5a6292", horizon: "#e9a07a" };
+const DUSK_SKY = { zenith: "#4c5a96", horizon: "#f0a070" };
 BUILT_IN_PRESETS["Dusk"] = preset({
   time: { phase: 1, drift: false },
   sun: { intensity: 0, morningColor: "#ff9a62", middayColor: "#ff9a62", eveningColor: "#ff9a62" },
   sky: {
     zenithMorning: DUSK_SKY.zenith, zenithEvening: DUSK_SKY.zenith,
     horizonMorning: DUSK_SKY.horizon, horizonEvening: DUSK_SKY.horizon,
-    skyLight: 2.6, groundColor: "#94634a", sunDiscIntensity: 0,
+    skyLight: 2.4, groundColor: "#94634a", sunDiscIntensity: 0,
   },
   shadows: { softness: 3.5 },
-  fog: { color: "#e0a582", skyTint: 0.35, near: 30, far: 120 },
+  fog: { color: "#b98a7c", skyTint: 0.2, near: 30, far: 120 },
   dof: { focalLength: 7, bokehScale: 3 },
   tiltShift: { width: 0.1, blur: 5 },
   bloom: { strength: 0.45, radius: 0.7, threshold: 0.75 },
   grade: {
-    exposure: 1.25, contrast: 1.04, saturation: 1.12, temperature: 0.18, tint: 0.02, lift: 0.01,
-    shadowTint: "#4a3f78", highlightTint: "#ffb98a", splitToneAmount: 0.3,
+    exposure: 1.15, contrast: 1.08, saturation: 1.15, temperature: 0.14, tint: 0, lift: 0.01,
+    shadowTint: "#3c3a7a", highlightTint: "#ffb98a", splitToneAmount: 0.35,
   },
   vignette: { intensity: 0.45 },
 });
@@ -132,7 +132,7 @@ BUILT_IN_PRESETS["Cave"] = preset({
   fog: { color: "#15171e", skyTint: 0, near: 30, far: 75 },
   bloom: { strength: 0.3, threshold: 0.9 },
   grade: {
-    exposure: 1.1, contrast: 1.1, saturation: 0.9, temperature: -0.1, tint: 0, lift: 0,
+    exposure: 1.1, contrast: 1.1, saturation: 1.0, temperature: -0.03, tint: 0, lift: 0,
     shadowTint: "#1f2c50", highlightTint: "#e6d6b8", splitToneAmount: 0.3,
   },
   vignette: { intensity: 0.65, radius: 0.75, smoothness: 0.7 },
