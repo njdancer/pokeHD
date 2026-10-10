@@ -77,8 +77,9 @@ export interface OverworldState {
   npcs: Npc[];
   /**
    * Screen fade from the palette registers: 0 normal, 1 fully black, -1 fully white, with the
-   * game's fade steps in between (thirds). Door and route warps fade to black (D16's
-   * `wrapToMorning` hides in there); some animations (Fly, Teleport) fade to white.
+   * game's fade steps in between (thirds). Door and route warps fade to black (the HD light
+   * switches between outdoors, indoors and caves in there); some animations (Fly, Teleport)
+   * fade to white.
    */
   fade: number;
   /** The raw palette registers, for anything finer than `fade`. */

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createDayClock, stepDay, wrapNow, WRAP_FADE_SECONDS } from "./clock.ts";
+import { createDayClock, stepDay, wrapNow } from "./clock.ts";
 import { blendCycle } from "./cycle.ts";
 import { bakeLut, gradeColor, LUT_SIZE, normTint } from "./grade.ts";
 import { LOOK_SCHEMA, mergeLook } from "./params.ts";
-import { BUILT_IN_PRESETS, DEFAULT_LOOK } from "./presets.ts";
+import { BUILT_IN_PRESETS, DEFAULT_CYCLE, DEFAULT_LOOK } from "./presets.ts";
 import { sunDirection } from "./rig.ts";
+import { settingOfTileset } from "./setting.ts";
 
 const neutral = {
   ...DEFAULT_LOOK.grade,
@@ -91,57 +92,89 @@ describe("presets", () => {
 });
 
 describe("day cycle", () => {
-  const cycle = { morning: BUILT_IN_PRESETS["Golden hour"]!, midday: BUILT_IN_PRESETS["Diorama"]!, evening: BUILT_IN_PRESETS["Storybook"]! };
+  const cycle = {
+    morning: BUILT_IN_PRESETS["Golden hour"]!, midday: BUILT_IN_PRESETS["Diorama"]!, evening: BUILT_IN_PRESETS["Storybook"]!,
+    dusk: BUILT_IN_PRESETS["Dusk"]!,
+  };
 
   it("hits each look exactly at its keyframe and keeps time and camera live", () => {
     const live = structuredClone(DEFAULT_LOOK);
     live.camera.yaw = 42;
-    expect(blendCycle(cycle, 0, live).grade.exposure).toBeCloseTo(cycle.morning.grade.exposure);
-    expect(blendCycle(cycle, 0.5, live).fog.color).toBe(cycle.midday.fog.color);
-    expect(blendCycle(cycle, 1, live).grade.lift).toBeCloseTo(cycle.evening.grade.lift);
+    expect(blendCycle(cycle, 0, 0, live).grade.exposure).toBeCloseTo(cycle.morning.grade.exposure);
+    expect(blendCycle(cycle, 0.5, 0, live).fog.color).toBe(cycle.midday.fog.color);
+    expect(blendCycle(cycle, 1, 0, live).grade.lift).toBeCloseTo(cycle.evening.grade.lift);
     expect(live.camera.yaw).toBe(42);
     expect(live.time).toEqual(DEFAULT_LOOK.time);
   });
 
   it("takes pipeline switches from midday and blends numbers in between", () => {
-    const out = blendCycle(cycle, 0.25, structuredClone(DEFAULT_LOOK));
+    const out = blendCycle(cycle, 0.25, 0, structuredClone(DEFAULT_LOOK));
     expect(out.tiltShift.blur).toBe(cycle.midday.tiltShift.blur);
     const [lo, hi] = [cycle.morning.grade.exposure, cycle.midday.grade.exposure].sort((x, y) => x - y);
     expect(out.grade.exposure).toBeGreaterThan(lo!);
     expect(out.grade.exposure).toBeLessThan(hi!);
   });
+
+  it("is the dusk look at full dusk whatever the phase, so the sun can jump back unseen", () => {
+    const evening = blendCycle(DEFAULT_CYCLE, 1, 1, structuredClone(DEFAULT_LOOK));
+    const morning = blendCycle(DEFAULT_CYCLE, 0, 1, structuredClone(DEFAULT_LOOK));
+    expect(evening.sun.intensity).toBe(0);
+    expect(morning).toEqual(evening);
+    expect(evening.grade.exposure).toBeCloseTo(DEFAULT_CYCLE.dusk.grade.exposure);
+    expect(evening.tiltShift.blur).toBe(DEFAULT_CYCLE.midday.tiltShift.blur);
+  });
+});
+
+describe("settings", () => {
+  it("keeps the day outside, in forests and on the plateau, and tells caves from buildings", () => {
+    for (const name of ["OVERWORLD", "PLATEAU", "FOREST", undefined]) expect(settingOfTileset(name)).toBe("outdoors");
+    expect(settingOfTileset("CAVERN")).toBe("cave");
+    for (const name of ["REDS_HOUSE_1", "POKECENTER", "GYM", "LAB", "CEMETERY", "UNDERGROUND"]) expect(settingOfTileset(name)).toBe("indoors");
+  });
 });
 
 describe("day clock", () => {
-  const time = () => ({ ...DEFAULT_LOOK.time, phase: 0, drift: true, cycleSeconds: 10, eveningHold: 2 });
 
-  it("only runs forwards, holds the evening, then wraps to morning behind a fade", () => {
+  const time = () => ({ ...DEFAULT_LOOK.time, phase: 0, dusk: 0, drift: true, cycleSeconds: 10, duskSeconds: 2, eveningHold: 2, dawnSeconds: 4 });
+  const run = (t: ReturnType<typeof time>, clock: ReturnType<typeof createDayClock>, seconds: number) => {
+    const out: { phase: number; dusk: number }[] = [];
+    for (let i = 0; i < Math.round(seconds * 10); i++) {
+      stepDay(t, clock, 0.1);
+      out.push({ phase: t.phase, dusk: t.dusk });
+    }
+    return out;
+  };
+
+  it("runs the day forwards, settles into dusk, holds it, then lifts into morning", () => {
     const t = time();
     const clock = createDayClock(t);
-    const phases: number[] = [];
-    for (let i = 0; i < 100; i++) {
-      stepDay(t, clock, 0.1);
-      phases.push(t.phase);
-    }
-    expect(phases[99]).toBe(1); // 10 s of day
-    for (let i = 1; i < phases.length; i++) expect(phases[i]!).toBeGreaterThanOrEqual(phases[i - 1]!);
-    for (let i = 0; i < 20; i++) stepDay(t, clock, 0.1); // evening hold
+    const day = run(t, clock, 10);
+    expect(t.phase).toBeCloseTo(1);
+    for (let i = 1; i < day.length; i++) expect(day[i]!.phase).toBeGreaterThanOrEqual(day[i - 1]!.phase);
+    expect(day.every((s) => s.dusk === 0)).toBe(true);
+    run(t, clock, 2.1); // into dusk
+    expect(t.dusk).toBe(1);
     expect(t.phase).toBe(1);
-    expect(clock.fading).toBe(1);
-    for (let s = 0; s < WRAP_FADE_SECONDS; s += 0.1) stepDay(t, clock, 0.1);
-    stepDay(t, clock, 0.1);
-    expect(t.phase).toBe(0); // wrapped while black
-    expect(clock.fade).toBeGreaterThan(0.5);
-    for (let s = 0; s < WRAP_FADE_SECONDS + 0.2; s += 0.1) stepDay(t, clock, 0.1);
-    expect(clock.fade).toBe(0);
+    const hold = run(t, clock, 3);
+    // The sun jumps back east only under full dusk, after the hold.
+    const jump = hold.findIndex((s) => s.phase < 1);
+    expect(jump).toBeGreaterThanOrEqual(18);
+    expect(hold[jump]!.phase).toBe(0);
+    expect(hold.slice(0, jump + 1).every((s) => s.dusk === 1)).toBe(true);
+    expect(t.dusk).toBeLessThan(1);
+    const rest = run(t, clock, 4);
+    for (let i = 1; i < rest.length; i++) expect(rest[i]!.dusk).toBeLessThanOrEqual(rest[i - 1]!.dusk);
+    expect(t.dusk).toBe(0);
+    expect(t.phase).toBeGreaterThan(0.3);
+    expect(t.phase).toBeLessThan(0.6);
   });
 
-  it("wraps instantly when the screen is already black", () => {
-    const t = { ...time(), phase: 0.9 };
+  it("jumps straight to a clear morning on request", () => {
+    const t = { ...time(), phase: 0.9, dusk: 0.6 };
     const clock = createDayClock(t);
-    wrapNow(t, clock, true);
+    wrapNow(t, clock);
     expect(t.phase).toBe(0);
-    expect(clock.fade).toBe(0);
+    expect(t.dusk).toBe(0);
   });
 
   it("puts the evening sun low in the west for long shadows", () => {

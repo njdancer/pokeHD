@@ -133,7 +133,7 @@ miniature feel, soft shadows, light haze and gentle bloom. Clear day (flat, satu
 blur) was dropped. Every value stays tunable in the `?lookdev` panel; refine within this
 direction rather than reopening it.
 
-## D16. The day runs forwards into a low evening, and wraps to morning out of sight
+## D16. The day runs forwards into a low evening, and wraps to morning out of sight (wrap superseded by D42)
 
 Supersedes D9's "drifting between morning and late afternoon". Ping-ponging the clock made the
 sun visibly reverse and shadows swing back, and Nick wanted an evening with long, low shadows.
@@ -670,3 +670,23 @@ calls, flagged for his review.
   took the save meanwhile, the first stops when it's back online.
 - **Ghosts go with the heartbeat.** Devices ping the room every 5 s; the room checks every 5 s and
   closes a connection not heard from for 15 s, so a phone put in a pocket leaves the world.
+
+## D42. The day settles into dusk and lifts back into morning; indoors and caves have no day
+
+Nick asked on 2026-10-10 for the end of the day not to "flash dark and start again" (D16's wrap
+fade, which outdoors happened on its own once the evening hold ran out). Now, after the evening
+(phase 1), `time.dusk` rises from 0 to 1 over `duskSeconds`: the look blends toward a Dusk preset,
+a sunset without the sun. The sun goes (so no direct shadows), but a warm, glowing sky light and
+haze keep the scene about as bright as golden hour; Nick didn't want it to read as night
+("a sunset look with a warm glowing sky ... will trick you into accepting the sun resetting"). Full dusk holds for `eveningHold`, then the sun moves back to the east while
+it's gone (full dusk looks the same at any phase, by construction and by test), and the dusk
+lifts over `dawnSeconds` as the morning sun rises. Nothing fades to black any more, so the clock no longer
+hides a wrap inside the game's warp fades. Still never night.
+
+The day only shows outdoors. The game has no indoor flag, but every map names a tileset, and the
+game's own CheckIfInOutsideMap counts OVERWORLD and PLATEAU as outside; FOREST (Viridian Forest,
+the Safari Zone) is open sky too, so it keeps the day. CAVERN is every cave (Mt Moon, Rock
+Tunnel, Diglett's Cave, Seafoam Islands, Victory Road, the Cerulean Cave), which take a fixed,
+darker, cooler Cave look; every other tileset is a building, lit by the midday look with the sun
+overhead. The clock keeps running while the player is inside. The light switches at once on a
+map change, since the game changes maps behind its own fade to black.
