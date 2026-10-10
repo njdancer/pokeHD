@@ -12,7 +12,7 @@ import type { LookParams, ToneMappingName } from "./params.ts";
 
 // Post-processing chain, in order:
 //   scene → AO → depth of field → tilt-shift band → bloom → tone map → LUT grade
-//   → vignette → wrap fade → FXAA/SMAA
+//   → vignette → FXAA/SMAA
 // No MSAA: AO and depth of field need a single-sample depth buffer to read.
 // Values that only change uniforms update every frame for free; toggling an effect or changing
 // a resource size rebuilds the graph (see STRUCTURAL in params.ts), so disabled effects cost
@@ -53,7 +53,6 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
     vignetteIntensity: uniform(0),
     vignetteRadius: uniform(0.8),
     vignetteSmoothness: uniform(0.5),
-    fade: uniform(0),
   };
 
   const lutData = new Uint8Array(LUT_SIZE ** 3 * 4);
@@ -112,7 +111,6 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
       const v = smoothstep(u.vignetteRadius.sub(u.vignetteSmoothness), u.vignetteRadius, d);
       out = vec4(out.rgb.mul(float(1).sub(v.mul(u.vignetteIntensity))), out.a);
     }
-    out = vec4(out.rgb.mul(float(1).sub(u.fade)), out.a); // day-wrap fade to black
     if (p.render.antialias === "fxaa") out = v4(fxaa(out));
     if (p.render.antialias === "smaa") {
       const node = smaa(out);
@@ -128,13 +126,12 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
     pipeline,
     build,
     /**
-     * Per-frame uniform updates. `focusDistance` is the camera-to-target distance; `fade` 1 is
-     * black; `place` is the place tint (a `normTint`). `dt` is the frame's seconds: while time
-     * runs, the grade drifts a little every frame, and the LUT is re-baked at most every
-     * LUT_EVERY seconds; 0 (a capture, a benchmark) bakes any change at once.
+     * Per-frame uniform updates. `focusDistance` is the camera-to-target distance; `place` is the
+     * place tint (a `normTint`). `dt` is the frame's seconds: while time runs, the grade drifts a
+     * little every frame, and the LUT is re-baked at most every LUT_EVERY seconds; 0 (a capture,
+     * a benchmark) bakes any change at once.
      */
-    update(p: LookParams, focusDistance: number, fade: number, place: Readonly<[number, number, number]> = NEUTRAL_TINT, dt = 0) {
-      u.fade.value = fade;
+    update(p: LookParams, focusDistance: number, place: Readonly<[number, number, number]> = NEUTRAL_TINT, dt = 0) {
       renderer.toneMappingExposure = p.grade.exposure;
       u.aoIntensity.value = p.ao.intensity;
       if (aoNode) {

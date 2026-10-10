@@ -4,9 +4,10 @@ import { createChangeWatch } from "./change-watch.ts";
 import { sceneTime } from "./scene-time.ts";
 import { createSky } from "./sky.ts";
 import { createDayClock, stepDay, wrapNow } from "./look/clock.ts";
-import { blendCycle, type DayCycle } from "./look/cycle.ts";
+import { blendCycle, blendLooks, type DayCycle } from "./look/cycle.ts";
 import { mergeLook, STRUCTURAL, type LookParams } from "./look/params.ts";
-import { DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
+import { CAVE_LOOK, DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
+import { FIXED_PHASE, type Setting } from "./look/setting.ts";
 import { createPlaceholder } from "./look/placeholder.ts";
 import { NEUTRAL_TINT, normTint } from "./look/grade.ts";
 import { createPost } from "./look/post.ts";
@@ -18,8 +19,9 @@ import { webgpuViewsWork } from "./webgpu-probe.ts";
 
 export type { DayCycle } from "./look/cycle.ts";
 export type { LookParams } from "./look/params.ts";
+export { settingOfTileset, type Setting } from "./look/setting.ts";
 export { alignedPixelRatio, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
-export { BUILT_IN_PRESETS, DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
+export { BUILT_IN_PRESETS, CAVE_LOOK, DEFAULT_CYCLE, DEFAULT_LOOK } from "./look/presets.ts";
 
 export interface LookController {
   /** The live parameters. Edit in place, then call `changed(path)`. */
@@ -29,16 +31,14 @@ export interface LookController {
   /** Call after editing `params` in place; `path` is e.g. "bloom.strength". */
   changed(path?: string): void;
   /**
-   * Blends three looks across the day (morning, midday, evening), overwriting `params`
-   * every frame except time, camera and render. Null returns to editing `params` directly.
+   * Blends the day's looks (morning, midday, evening, dusk), overwriting `params` every frame
+   * except time, camera and render. Indoors and in caves the light holds still instead (D40).
+   * Null returns to editing `params` directly.
    */
   setCycle(cycle: DayCycle | null): void;
   readonly cycle: DayCycle | null;
-  /**
-   * Jumps the clock to morning. Pass `instant` when the screen is already black (an in-game
-   * warp fade); otherwise the engine fades out and back in around the jump.
-   */
-  wrapToMorning(instant?: boolean): void;
+  /** Jumps the clock straight to a clear morning (look-dev). */
+  wrapToMorning(): void;
 }
 
 /** What the engine renders and frames: the placeholder by default, or a world from `./world`. */
@@ -59,6 +59,11 @@ export interface WorldContent {
   setCompiler?(compile: ((object: THREE.Object3D) => Promise<void>) | null): void;
   /** A framing that overrides the look's camera while set (a battle). */
   readonly view?: CameraView | null;
+  /**
+   * Outdoors (the default) follows the day; indoors and caves hold a fixed light of their own.
+   * Changes land at once: the game changes maps behind its own fade to black.
+   */
+  readonly setting?: Setting;
   /** False while the content is still loading what it needs to show; absent means always ready. */
   readonly ready?: boolean;
 }
@@ -261,18 +266,38 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     else look.set({ ...(source.look as object), time: params.time, camera: params.camera });
   };
   let cycle: DayCycle | null = null;
+  let cave = tiered(CAVE_LOOK);
+  /** The phase the sun stands at this frame: the clock's outdoors, fixed elsewhere. */
+  let lightPhase = params.time.phase;
+  /** Lays the cycle's look for where the player is, and the time, over `params`. */
+  let lastSetting: Setting = "outdoors";
+  const blendLight = () => {
+    const setting = world.setting ?? "outdoors";
+    if (setting !== lastSetting) {
+      lastSetting = setting;
+      dirty = true;
+    }
+    if (!cycle || setting === "outdoors") {
+      lightPhase = params.time.phase;
+      if (cycle) blendCycle(cycle, params.time.phase, params.time.dusk, params);
+    } else {
+      lightPhase = FIXED_PHASE;
+      blendLooks(setting === "cave" ? cave : cycle.midday, cycle.midday, 0, cycle.midday, params);
+    }
+  };
   const look: LookController = {
     params,
     get cycle() {
       return cycle;
     },
-    wrapToMorning(instant = false) {
-      wrapNow(params.time, clock, instant);
+    wrapToMorning() {
+      wrapNow(params.time, clock);
     },
     setCycle(next) {
       source = next ? { cycle: next } : { look: structuredClone(params) };
-      cycle = next && { morning: tiered(next.morning), midday: tiered(next.midday), evening: tiered(next.evening) };
-      if (cycle) blendCycle(cycle, params.time.phase, params);
+      cycle = next && { morning: tiered(next.morning), midday: tiered(next.midday), evening: tiered(next.evening), dusk: tiered(next.dusk) };
+      cave = tiered(CAVE_LOOK);
+      if (cycle) blendLight();
       rebuild();
     },
     set(next) {
@@ -317,9 +342,9 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     sceneTime.value = elapsed;
     const p = params;
 
-    // The wrap's fade to black runs smoothly; the day itself moves in steps.
-    stepDay(p.time, clock, clock.fading ? dt : ambientDt);
-    if (cycle) blendCycle(cycle, p.time.phase, p);
+    // The day moves in steps, and keeps going while the player is indoors.
+    stepDay(p.time, clock, ambientDt);
+    blendLight();
     if (p.camera.orbit) p.camera.yaw = ((p.camera.yaw + dt * 8 + 180) % 360) - 180;
 
     world.update(elapsed, camera, rig.sunDirection, p.shadows.spriteShadows);
@@ -337,7 +362,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       camera.updateProjectionMatrix();
     }
 
-    rig.update(p, p.time.phase, world.target);
+    rig.update(p, lightPhase, world.target);
     sky.follow(camera);
     fogNear.value = p.fog.near;
     fogFar.value = p.fog.far;
@@ -345,11 +370,11 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     const want = world.placeTint ? normTint(world.placeTint) : NEUTRAL_TINT;
     const k = 1 - Math.exp(-dt / PLACE_TINT_SECONDS);
     for (let i = 0; i < 3; i++) placeTint[i]! += (want[i]! - placeTint[i]!) * k;
-    post.update(p, camera.position.distanceTo(world.target), clock.fade, placeTint, dt);
+    post.update(p, camera.position.distanceTo(world.target), placeTint, dt);
 
     const { position: cp, quaternion: cq } = camera;
     watched.length = 0;
-    watched.push(cp.x, cp.y, cp.z, cq.x, cq.y, cq.z, cq.w, camera.fov, camera.aspect, ...placeTint, clock.fade, p.time.phase, elapsed);
+    watched.push(cp.x, cp.y, cp.z, cq.x, cq.y, cq.z, cq.w, camera.fov, camera.aspect, ...placeTint, lightPhase, p.time.dusk, elapsed);
     const moved = watch.changed(world.root, watched);
     // A battle animates through textures and attributes the watch doesn't see; shaders still
     // compiling skip draws that a later frame has to make up.

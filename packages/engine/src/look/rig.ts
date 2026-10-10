@@ -67,7 +67,8 @@ export function createRig(scene: THREE.Scene, sky: ReturnType<typeof createSky>)
 
       sky.zenith.lerpColors(tmp.a.set(p.sky.zenithMorning), tmp.b.set(p.sky.zenithEvening), phase);
       sky.horizon.lerpColors(tmp.a.set(p.sky.horizonMorning), tmp.b.set(p.sky.horizonEvening), phase);
-      sky.sunColor.copy(sun.color);
+      // The halo round the sun goes with it as the light fades into dusk (D40).
+      sky.sunColor.copy(sun.color).multiplyScalar(Math.min(p.sun.intensity, 1));
       sky.sunDirection.copy(dir);
       sky.discSize.value = p.sky.sunDiscSize;
       sky.discIntensity.value = p.sky.sunDiscIntensity;

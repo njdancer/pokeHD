@@ -2,7 +2,8 @@
 // standing still with time frozen, rendered at a fixed size so every run draws the same frame.
 // Open /dev/shots. URL options: ?map=VIRIDIAN_CITY (default Pallet Town), ?at=x,y (the player's
 // cell; default in front of the map's first door), ?phase=0.5 (time of day, 0 morning to 1
-// evening), ?quality=mobile (default full), ?size=WxH (default 960x540).
+// evening), ?dusk=1 (0 none to 1 full dusk, after the evening), ?quality=mobile (default full),
+// ?size=WxH (default 960x540).
 // Once every nearby map is built, window.__shots.capture() renders a frame and returns it as a
 // PNG data URL.
 import { useEffect, useRef, useState } from "react";
@@ -59,7 +60,9 @@ export function Shots() {
       if (disposed) return engine.dispose();
       live.setLook(engine.look);
       // Freeze time before the first frame, so grass and water hold the same pose every run.
-      Object.assign(engine.look.params.time, { phase: Number(query.get("phase") ?? 0.5), drift: false, animate: false });
+      Object.assign(engine.look.params.time, {
+        phase: Number(query.get("phase") ?? 0.5), dusk: Number(query.get("dusk") ?? 0), drift: false, animate: false,
+      });
       engine.look.setCycle(DEFAULT_CYCLE);
       engine.setFixedSize({ width: width!, height: height! });
 

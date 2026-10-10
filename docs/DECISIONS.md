@@ -133,7 +133,7 @@ miniature feel, soft shadows, light haze and gentle bloom. Clear day (flat, satu
 blur) was dropped. Every value stays tunable in the `?lookdev` panel; refine within this
 direction rather than reopening it.
 
-## D16. The day runs forwards into a low evening, and wraps to morning out of sight
+## D16. The day runs forwards into a low evening, and wraps to morning out of sight (wrap superseded by D40)
 
 Supersedes D9's "drifting between morning and late afternoon". Ping-ponging the clock made the
 sun visibly reverse and shadows swing back, and Nick wanted an evening with long, low shadows.
@@ -623,3 +623,22 @@ belong to a save; an intro with Resume). The storage choices below were made whi
   on their way out (they'd be sent twice) or earlier saves (they stay with the original).
 
 Until Nick picks the intro, the live game plays the main slot as before.
+
+## D40. The day settles into dusk and lifts back into morning; indoors and caves have no day
+
+Nick asked on 2026-10-10 for the end of the day not to "flash dark and start again" (D16's wrap
+fade, which outdoors happened on its own once the evening hold ran out). Now, after the evening
+(phase 1), `time.dusk` rises from 0 to 1 over `duskSeconds`: the look blends toward a Dusk preset
+with no sun (so no direct shadows), a warm low sky light, a purple-to-peach sky and a warmer,
+softer grade. Full dusk holds for `eveningHold`, then the sun moves back to the east while it's
+gone (full dusk looks the same at any phase, by construction and by test), and the dusk lifts over
+`dawnSeconds` as the morning sun rises. Nothing fades to black any more, so the clock no longer
+hides a wrap inside the game's warp fades. Still never night.
+
+The day only shows outdoors. The game has no indoor flag, but every map names a tileset, and the
+game's own CheckIfInOutsideMap counts OVERWORLD and PLATEAU as outside; FOREST (Viridian Forest,
+the Safari Zone) is open sky too, so it keeps the day. CAVERN is every cave (Mt Moon, Rock
+Tunnel, Diglett's Cave, Seafoam Islands, Victory Road, the Cerulean Cave), which take a fixed,
+darker, cooler Cave look; every other tileset is a building, lit by the midday look with the sun
+overhead. The clock keeps running while the player is inside. The light switches at once on a
+map change, since the game changes maps behind its own fade to black.
