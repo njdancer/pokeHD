@@ -29,7 +29,18 @@ describe("mapRelief", () => {
     // Wall 2, roof 2 slope pixels (+1 up, +1 back), mirrored (+1 back, back down), then ground again.
     const { top, back } = extent(column("gssffgg"), true);
     expect(top).toBeCloseTo(3);
-    expect(back).toBeCloseTo(2 + 1 + 1 + 1);
+    // The ground behind it stays at its natural depth (row 6 of 7 up the screen), not 2 + 1 + 1 + 1.
+    expect(back).toBeCloseTo(7);
+  });
+
+  it("leaves ground behind a tall object at its natural depth", () => {
+    // A 3-high counter at the bottom, floor behind it, then a shelf standing on that floor.
+    const region = column("ffffggggfff");
+    const { positions } = mapRelief(region, { sides: false, mirror: false });
+    // The shelf's base stands 7 rows up the screen, so it sits 7 back, not 7 − 3 = 4.
+    let shelfZ = Infinity;
+    for (let i = 0; i < positions.length; i += 3) if (positions[i + 1]! > 0.5 && -positions[i + 2]! > 0.5) shelfZ = Math.min(shelfZ, -positions[i + 2]!);
+    expect(shelfZ).toBeCloseTo(7);
   });
 
   it("lowers a hip pixel by its lean, from the column it leans against", () => {
