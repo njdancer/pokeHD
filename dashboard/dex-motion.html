@@ -403,6 +403,7 @@ function save() {
   try {
     const snap = await db.doc("tuning/values").get();
     if (snap.exists) { V = load(JSON.parse(snap.data().values)); try { localStorage.setItem(STORE, JSON.stringify(V)); } catch {} buildAll(); }
+    else save(); // first open with the database: copy this device's values up
     savedNote("Saved on this device and for Claude.");
   } catch { savedNote("Saved on this device only."); }
 })();
