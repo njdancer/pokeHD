@@ -148,6 +148,16 @@ test("the intro and save slots survive a child", async ({ page }) => {
       return { page: h.page, bytes: await Promise.all(addresses.map((a) => h.read(a, 1).then((b) => b[0]))) };
     }, at.map(([, a]) => a));
     log.push(`  page: ${JSON.stringify(read?.page)}`);
+    log.push(`  focus: ${await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 120) ?? "none")}`);
+    // Whether a held key reaches the game at all.
+    await page.keyboard.down("ArrowLeft");
+    await sleep(500);
+    const heldNow = await page.evaluate(async () => {
+      const h = (window as unknown as { __pokehd?: { read(a: number, n: number): Promise<number[]> } }).__pokehd;
+      return h ? (await h.read(0xffb4, 1))[0] : null;
+    });
+    await page.keyboard.up("ArrowLeft");
+    log.push(`  hJoyHeld while Left is held = ${heldNow?.toString(16)}, facing after: ${(await hooked(page))?.state?.player.facing}`);
     at.forEach(([n], i) => log.push(`  ${n} = ${read?.bytes[i]?.toString(16)}`));
     log.push(`  state: ${JSON.stringify((await hooked(page))?.state)?.slice(0, 600)}`);
     await page.screenshot({ path: test.info().outputPath("stuck.png"), timeout: 90_000 }).catch(() => {});
