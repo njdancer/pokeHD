@@ -19,6 +19,7 @@ import { StandIn } from "../ffi.ts";
 import { textBoxText } from "./asks.ts";
 import { saveGame } from "../gifts/gifts.ts";
 import { type Job, SafePoint, type Step } from "../gifts/safepoint.ts";
+import { acting } from "./acting.ts";
 
 export type GameAction =
   /**
@@ -75,6 +76,7 @@ export interface GameActionsOptions {
  * message on screen, a battle, a script), so one asked for mid-message happens once it ends.
  */
 export class GameActions {
+  readonly #gb: GameBoy;
   readonly #rom: Uint8Array;
   readonly #safe: SafePoint;
   readonly #standIns: StandIn[];
@@ -83,6 +85,7 @@ export class GameActions {
   #queued = 0;
 
   constructor(gb: GameBoy, options: GameActionsOptions) {
+    this.#gb = gb;
     this.#rom = options.rom;
     this.#safe = SafePoint.of(gb);
     const ours = () => this.#running !== null;
@@ -162,10 +165,12 @@ export class GameActions {
     const finish = (completed: boolean) => {
       const messages = this.#running?.messages ?? [];
       this.#running = null;
+      acting.delete(this.#gb);
       done(completed && !failed ? { ok: true, messages } : { ok: false, reason: failed ?? "not now", messages });
     };
     const begin = (mon?: number, answers: boolean[] = []) => {
       this.#running = { mon, yesNo: [...answers], messages: [] };
+      acting.add(this.#gb);
     };
     switch (action.kind) {
       case "use-item": {

@@ -82,7 +82,7 @@ export function TeamRowBody({ mon, lead }: { mon: TeamMon; lead?: boolean }) {
           {lead && <span className="dm-tag">Leader</span>}
           <StatusTag mon={mon} />
         </span>
-        {niceName(mon.nick) !== species && <span className="sub"> · {species}</span>}
+        {niceName(mon.nick) !== species && <span className="sub">{species}</span>}
         <HpBar hp={mon.hp} max={mon.maxHp} />
       </span>
       <span className="right">

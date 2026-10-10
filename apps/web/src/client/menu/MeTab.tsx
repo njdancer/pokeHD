@@ -2,7 +2,7 @@
 // routine), the game's options (wOptions, written at an idle point), the page's grown-up settings
 // behind a sum, and the adventure in numbers and its firsts from the play journal.
 import { useMemo, useState } from "react";
-import { monName } from "@pokehd/rom";
+import { monName, SGB_PAL } from "@pokehd/rom";
 import { niceName } from "../dex/catalogue.ts";
 import { personPicture } from "../dex/pictures.ts";
 import { useMenu } from "./context.ts";
@@ -37,7 +37,7 @@ export function Me() {
       <Head title="Me" pill={niceName(game.player)} />
       <div className="dm-body">
         <div className="dm-card-trainer">
-          <span className="face">{sheet && <img src={personPicture(rom, sheet, 0)} alt="" />}</span>
+          <span className="face">{sheet && <img src={personPicture(rom, sheet, SGB_PAL.REDMON)} alt="" />}</span>
           <div>
             <small>Trainer card</small>
             <h3>{game.player}</h3>
@@ -86,7 +86,7 @@ export function Me() {
             <div className="dm-c">
               <b>{stats.steps.toLocaleString("en")}</b>
               <span>Steps</span>
-              <small>about {Math.max(1, Math.round((stats.steps * 0.5) / 1000))} km</small>
+              {stats.steps >= 1000 && <small>about {Math.round((stats.steps * 0.5) / 1000)} km</small>}
             </div>
           )}
           {b && (
