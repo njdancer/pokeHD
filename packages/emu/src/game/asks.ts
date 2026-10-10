@@ -11,6 +11,10 @@
 // | `DisplayListMenuID` (item, priced item and PC Pokémon lists) | wWhichPokemon, wCurItem or wCurPartySpecies, the name, wMaxItemQuantity, then `GetItemPrice` |
 // | `DisplayChooseQuantityMenu` | wItemQuantity, hMoney (the total, halved when selling), a = $ff for "cancelled" |
 // | `DisplayTextBoxID` with a yes/no | wCurrentMenuItem, wMenuExitMethod |
+// | `HandleMenuInput`, straight after a battle switch or a PC Pokémon list | A on the first item (SWITCH, DEPOSIT, WITHDRAW) |
+//
+// The page has already said what it wants done with the Pokémon it chose, so the little menu
+// the game puts up next (SWITCH / STATS / CANCEL, DEPOSIT / STATS / CANCEL) gets its first item.
 import { decodeText, encodeText, itemName, SYMBOLS, type SymbolName } from "@pokehd/rom";
 import type { GameBoy } from "../core.ts";
 import { readWord, StandIn, type Answer } from "../ffi.ts";
@@ -26,10 +30,12 @@ const CANCELLED_MENU = 2;
 const CHOSE_FIRST_ITEM = 1;
 const CHOSE_SECOND_ITEM = 2;
 const TWO_OPTION_MENU = 0x14;
+const NORMAL_PARTY_MENU = 0;
 const USE_ITEM_PARTY_MENU = 1;
 const BATTLE_PARTY_MENU = 2;
 const NAME_LENGTH = 11;
 const NAME_BUFFER_LENGTH = 20;
+const PAD_A = 0x01;
 
 /** What the game asks the player, for the page's sheet. */
 export type GameAsk =
@@ -75,11 +81,19 @@ export class GameAsks {
   #ids = 0;
   #asked: { id: number; ask: GameAsk } | null = null;
   #answer: { id: number; answer: AskAnswer } | null = null;
+  /** The page chose a Pokémon to switch in or move in the PC: the game's next small menu gets its first item. */
+  #thenFirst = false;
 
   constructor(gb: GameBoy, options: GameAsksOptions) {
     this.#options = options;
     const free = () => !options.busy();
     const party = (g: GameBoy) => this.#ask(g, () => this.#partyAsk(g), (a) => this.#partyAnswer(g, a));
+    // Any other menu the game opens first means the moment has passed.
+    const thenFirst = () => {
+      const take = this.#thenFirst;
+      this.#thenFirst = false;
+      return take;
+    };
     this.#standIns = [
       new StandIn(gb, "DisplayPartyMenu", free, party),
       new StandIn(gb, "GoBackToPartyMenu", free, party),
@@ -95,6 +109,10 @@ export class GameAsks {
           return {};
         }),
       ),
+      new StandIn(gb, "HandleMenuInput", (g) => free() && thenFirst() && g.read(addr("wMaxMenuItem")) === 2, (g) => {
+        g.write(addr("wCurrentMenuItem"), 0);
+        return { registers: { af: (PAD_A << 8) | (g.registers.af & 0xff) } };
+      }),
     ];
   }
 
@@ -129,7 +147,10 @@ export class GameAsks {
     const inBattle = g.read(addr("wIsInBattle")) !== 0;
     const type = g.read(addr("wPartyMenuTypeOrMessageID"));
     const fainted = inBattle && readWord(g, addr("wBattleMonHP")) === 0;
-    const purpose = type === USE_ITEM_PARTY_MENU ? "item" : type === BATTLE_PARTY_MENU ? (fainted ? "next" : "switch") : "other";
+    // BATTLE_PARTY_MENU is a choice the battle needs (who's next after a faint, or the switch
+    // offered when the foe's Pokémon faints); the player's own PKMN choice is a NORMAL one.
+    const purpose =
+      type === USE_ITEM_PARTY_MENU ? "item" : type === BATTLE_PARTY_MENU ? (fainted ? "next" : "switch") : inBattle && type === NORMAL_PARTY_MENU ? "switch" : "other";
     return { kind: "party", purpose, inBattle };
   }
 
@@ -142,6 +163,8 @@ export class GameAsks {
     g.write(addr("wWhichPokemon"), slot);
     g.write(addr("wCurPartySpecies"), species);
     g.write(addr("wBattleMonSpecies2"), species);
+    // A switch in battle: the game asks SWITCH / STATS / CANCEL next.
+    this.#thenFirst = g.read(addr("wIsInBattle")) !== 0 && g.read(addr("wPartyMenuTypeOrMessageID")) === NORMAL_PARTY_MENU;
     return { carry: false };
   }
 
@@ -189,6 +212,8 @@ export class GameAsks {
     let name: string;
     if (id === PCPOKEMONLISTMENU) {
       g.write(addr("wCurPartySpecies"), entry);
+      // DEPOSIT (or WITHDRAW) / STATS / CANCEL comes next.
+      this.#thenFirst = true;
       const nicks = list === addr("wPartyCount") ? addr("wPartyMonNicks") : addr("wBoxMonNicks");
       name = decodeText(g.readBytes(nicks + index * NAME_LENGTH, NAME_LENGTH));
     } else {

@@ -78,10 +78,11 @@ import { Pokedex } from "../dex/Pokedex.tsx";
 import { LoadingScreen, LOADING_FADE_MS } from "../LoadingScreen.tsx";
 import { buildCatalogue, dexFlags, type DexProgress } from "../dex/catalogue.ts";
 import { DexJournal } from "../dex/journal.ts";
-import type { Page, Tab } from "../menu/context.ts";
-import { DexMenu } from "../menu/DexMenu.tsx";
+import type { DexMenuProps } from "../menu/DexMenu.tsx";
+import type { LiveActions } from "../menu/live.ts";
+import { LiveMenu } from "../menu/LiveMenu.tsx";
+import type { AppOptions } from "../menu/model.ts";
 import { PlayJournal } from "../menu/journal.ts";
-import { AskSheet } from "../menu/Sheets.tsx";
 import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
 import "./game.css";
 
@@ -94,7 +95,7 @@ const classic = new URLSearchParams(location.search).has("classic");
 declare global {
   interface Window {
     /** Set with ?stats, for scripted play-throughs. */
-    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly slow: SlowFrame[] };
+    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly frames: number; read(address: number, length: number): Promise<number[]>; readonly page: object; readonly slow: SlowFrame[] };
   }
 }
 /** A display frame over 50 ms, with what the page was doing (for ?stats perf checks). */
@@ -200,19 +201,23 @@ interface Props {
    * battle, Mart, PC) come as sheets; the play journal records as the game runs.
    */
   menu?: boolean;
+  /** Called once the world has drawn behind a menu (or there won't be one), so it can show. */
+  onReady?(): void;
 }
 
-export function Game({ rom, romKey, header, onForget, held, menu = false }: Props) {
+export function Game({ rom, romKey, header, onForget, held, onReady, menu = false }: Props) {
   const holder = useRef<HTMLDivElement>(null);
   const heldRef = useRef(held ?? false);
+  /** The game sits behind a page's menu (held is given), rather than starting on its own. */
+  const behindMenu = useRef(held !== undefined);
   const menuRef = useRef(menu);
   /** The Pokédex menu is open (and where it opened), or the game asked a question as a sheet. */
-  const [menuOpen, setMenuOpenState] = useState<{ tab: Tab; page?: Page } | null>(null);
+  const [menuOpen, setMenuOpenState] = useState<DexMenuProps["start"] | null>(null);
   const [ask, setAskState] = useState<{ id: number; ask: GameAsk; game: GameSnapshot | null } | null>(null);
   /** While either is up, the player's buttons are the menu's, not the game's. */
   const menuUpRef = useRef(false);
   const menuStateRef = useRef({ open: false, ask: false });
-  const setMenuOpen = (next: { tab: Tab; page?: Page } | null) => {
+  const setMenuOpen = (next: DexMenuProps["start"] | null) => {
     menuStateRef.current.open = !!next;
     menuUpRef.current = menuStateRef.current.open || menuStateRef.current.ask;
     if (menuUpRef.current) hostRef.current?.setButtons(0);
@@ -228,6 +233,8 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
   const dexHeldRef = useRef(false);
   const [playJournal, setPlayJournal] = useState<PlayJournal | null>(null);
   const playJournalRef = useRef<PlayJournal | null>(null);
+  /** The Pokédex menu's actions: the game's questions go to them first. */
+  const liveActionsRef = useRef<LiveActions | null>(null);
   /** The emulator has run its first frame, so pausing it now won't hold up the loading screen. */
   const emuRanRef = useRef(false);
   const screenRef = useRef<HTMLCanvasElement>(null);
@@ -370,6 +377,8 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
     let courier: GiftCourier | null = null;
     let raf = 0;
     let stopResumePoints = () => {};
+    /** Before the game goes (another slot, the page leaving it): its save and a last resume point. */
+    let finish = async () => {};
     let stopJournal = () => {};
     /** Takes a resume point once a save has finished, so the newest point always holds it. */
     let pointAfterSave = () => {};
@@ -378,6 +387,9 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
       onChange: (mask, source) => {
         // Behind a menu, the player's buttons are the menu's.
         if (heldRef.current) return;
+        // While the page presses the game's buttons for the player's start, the player's own are
+        // let go: a stray press there could pick NEW GAME.
+        if (onboardingRef.current?.phase === "starting") mask = 0;
         // The Pokédex menu: Start and Select are gone, and while it's up nothing reaches the game.
         if (menuRef.current) mask = menuUpRef.current ? 0 : mask & ~(Button.Start | Button.Select);
         // B closes the HD Pokédex (the game's is held while it's up).
@@ -403,9 +415,12 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
       // A device with no save (a new phone, or storage the browser cleared) gets the cloud's
       // back before the game starts, for signed-in players.
       let restored = false;
+      /** Whether this slot is known to have no save anywhere (here, or a cloud that answered). */
+      let noSave = false;
       if (!(await loadSave(romKey).catch(() => null))) {
         const backup = cloudBackup(romKey);
         const status = await within(backup.status(), CLOUD_WAIT_MS, null);
+        noSave = status?.kind === "none" || status?.kind === "signed-out";
         if (status?.kind === "newer" && !(await loadSave(romKey))) {
           await backup.restore(status.cloud);
           restored = true;
@@ -424,7 +439,11 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
       if (disposed) return;
       // The page's own start screen, unless the game's own screens are wanted.
       const custom = !recorded && !classic;
-      if (custom && !resume) setOnboarding({ phase: "choose" });
+      // Behind a menu, a slot with no save here that the cloud didn't answer for (offline, or slow)
+      // may still have one: the game's own title screen then, so a new game is the player's
+      // choice, never one the menu's Resume makes for them.
+      const unknown = behindMenu.current && !slot.sram && !noSave;
+      if (custom && !resume && !unknown) setOnboarding({ phase: "choose" });
       setStartSave(slot.sram ? saveSummary(slot.sram) : null);
       if (!restored) void cloudBackup(romKey).status().then((s) => !disposed && setCloudNewer(s.kind === "newer"), () => {});
 
@@ -480,6 +499,7 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
         },
         onScriptPress: () => readOnScript(),
         onFrame: ({ pixels, watched, count }) => {
+          if (disposed) return; // the game is going: only its save is still wanted
           image.data.set(new Uint8Array(pixels));
           if (++emuFrames === 1) {
             setStartup((s) => ({ ...s, emu: true }));
@@ -572,7 +592,7 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
           if (menuRef.current && h) {
             dexHeldRef.current = true;
             const dexNo = opened.kind === "data" ? pokedexNumber(rom, opened.species) : 0;
-            setMenuOpen({ tab: "pokemon", ...(dexNo ? { page: { kind: "mon", dex: dexNo } } : {}) });
+            setMenuOpen({ tab: "dex", ...(dexNo ? { screen: { k: "entry", dex: dexNo } } : {}) });
             return;
           }
           if (!h || dexLookRef.current === "off") return h?.passDex();
@@ -606,6 +626,8 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
         ...(menuRef.current
           ? {
               onAsk: (id: number, question: GameAsk) => {
+                // The menu may already know the answer (a purchase's quantity, its "OK?").
+                if (liveActionsRef.current?.asked(id, question)) return;
                 setAsk({ id, ask: question, game: null });
                 void hostRef.current?.read(SNAPSHOT_RANGES).then((bytes) => {
                   const game = decodeSnapshot(bytes);
@@ -680,6 +702,14 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
         });
       };
       const resumeTimer = setInterval(takeResumePoint, RESUME_POINT_MS);
+      finish = async () => {
+        if (!sceneRef.current.inWorld) return;
+        const state = await h.resumePoint(); // hands over any newer save first
+        const save = slot.latest;
+        if (!state) return;
+        await storeResumePoint(romKey, state, save);
+        if (upload && save) await uploadResumePoint(romKey, state, save, true).catch(() => {});
+      };
       // A save makes every earlier point stale (it no longer holds the stored save), so take a
       // new one straight after; the delay lets the save routine finish its last writes.
       let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -739,6 +769,14 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
           },
           get inWorld() {
             return sceneRef.current.inWorld;
+          },
+          get frames() {
+            return emuFrames;
+          },
+          /** For a stuck test's report: game memory, and what the page holds back. */
+          read: (address: number, length: number) => h.read([[address, length]]).then(([bytes]) => Array.from(bytes!)),
+          get page() {
+            return { held: heldRef.current, onboarding: onboardingRef.current?.phase ?? null, starter: !!starterRef.current, script: scriptRef.current?.id ?? null };
           },
           slow,
         };
@@ -833,7 +871,11 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
       roomLink?.dispose();
       courier?.dispose();
       roomClient?.close();
-      host?.dispose();
+      // The game stops where it is; it goes once its save and a resume point are kept, or after
+      // a while if the emulator doesn't answer.
+      const h = host;
+      h?.setPaused(true);
+      void Promise.race([finish().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]).then(() => h?.dispose());
       hostRef.current = null;
       engine?.dispose();
       live?.dispose();
@@ -862,7 +904,8 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
   }, [rom, romKey, boot, glyphs]);
 
   // The loading screen: up until the world is drawn, or the Game Boy screen is all there is to see.
-  const loaded = startup.emu && (startup.world || layout === "full");
+  // Behind a menu the Game Boy screen is hidden, so only the world will do.
+  const loaded = startup.emu && (startup.world || (layout === "full" && held === undefined));
   useEffect(() => {
     if (loaded) return;
     const timer = setTimeout(() => {
@@ -878,6 +921,10 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
     return () => clearTimeout(timer);
   }, [ready, boot]);
   const loaderGone = ready && loaderGoneFor === boot;
+  // The menu in front shows its own loading screen, and fades it out once this says it's ready.
+  useEffect(() => {
+    if (ready) onReady?.();
+  }, [ready, onReady]);
 
   const onTouch = useMemo(() => (mask: number) => input?.setTouchMask(mask), [input]);
   // Without an emulator (it's restarting) the panel just stays on "Reading your game…".
@@ -959,6 +1006,8 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
     if (held === undefined) return;
     heldRef.current = held;
     if (emuRanRef.current) hostRef.current?.setPaused(held);
+    // A new game only for a slot known to have no save: one that may be in the cloud, unreached,
+    // gets the game's own title screen instead, so a new game is the player's choice there.
     if (!held && onboarding?.phase === "choose") start(startSave ? "continue" : "new");
   }, [held, onboarding, startSave]);
 
@@ -1009,11 +1058,22 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
       {admin && <Friends />}
     </>
   );
-  const readMenu = useMemo(() => async () => decodeSnapshot(await hostRef.current!.read(SNAPSHOT_RANGES)), []);
-  const menuAct = useMemo(() => (action: Parameters<EmulatorHost["act"]>[0], signal: AbortSignal) => hostRef.current!.act(action, signal), []);
-  const answerAsk = (answer: AskAnswer) => {
-    if (ask) hostRef.current?.answerAsk(ask.id, answer);
-    setAsk(null);
+  /** The game as the Pokédex menu reads it, acts on it and answers it. */
+  const liveGame = useMemo(
+    () => ({
+      read: async () => decodeSnapshot(await hostRef.current!.read(SNAPSHOT_RANGES)),
+      act: (action: Parameters<EmulatorHost["act"]>[0], signal?: AbortSignal) => hostRef.current!.act(action, signal),
+      answer: (id: number, answer: AskAnswer) => hostRef.current?.answerAsk(id, answer),
+    }),
+    [],
+  );
+  const bindLive = useMemo(() => (actions: LiveActions) => void (liveActionsRef.current = actions), []);
+  const [readAloud, setReadAloud] = useState(false);
+  const appOptions = useMemo<AppOptions>(() => ({ sound, readAloud, gameBoyScreen: pip }), [sound, readAloud, pip]);
+  const setApp = <K extends keyof AppOptions>(key: K, value: AppOptions[K]) => {
+    if (key === "sound" && value) void enableSound();
+    if (key === "readAloud") setReadAloud(!!value);
+    if (key === "gameBoyScreen" && value !== pipRef.current) togglePip();
   };
   const closeMenu = () => {
     setMenuOpen(null);
@@ -1148,27 +1208,31 @@ export function Game({ rom, romKey, header, onForget, held, menu = false }: Prop
         />
       )}
       {menu && ready && !menuOpen && !ask && !onboarding && !nameAsk && world && (
-        <button type="button" className="dm-open" aria-label="Pokédex" onClick={() => setMenuOpen({ tab: "pokemon" })} />
+        <button type="button" className="dm-open" aria-label="Pokédex" onClick={() => setMenuOpen({ tab: "dex" })} />
       )}
-      {menu && menuOpen && world && catalogue && (
-        <DexMenu
+      {menu && world && catalogue && (
+        <LiveMenu
           rom={rom}
           world={world}
           catalogue={catalogue}
-          read={readMenu}
-          act={menuAct}
+          game={liveGame}
+          bind={bindLive}
+          ask={ask}
+          onAskDone={() => setAsk(null)}
+          open={!!menuOpen}
+          {...(menuOpen ? { start: menuOpen } : {})}
+          onClose={closeMenu}
           journal={playJournal}
           friends={room?.friends ?? []}
           savedAt={savedAt}
+          app={appOptions}
+          setApp={setApp}
           grownUps={<div className="game-settings">{grownUpControls}</div>}
-          start={menuOpen}
-          onClose={closeMenu}
         />
       )}
-      {menu && ask && world && catalogue && <AskSheet rom={rom} world={world} catalogue={catalogue} ask={ask.ask} game={ask.game} answer={answerAsk} />}
       {savedAt > 0 && <SavedToast shownAt={savedAt} />}
       {erasing && <EraseConfirm old={erasing.old} onAnswer={answerErase} />}
-      {!loaderGone && <LoadingScreen leaving={ready} />}
+      {!loaderGone && !held && <LoadingScreen leaving={ready} />}
     </div>
   );
 }

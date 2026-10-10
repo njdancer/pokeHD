@@ -362,10 +362,14 @@ export class EmulatorHost {
     this.#post({ type: "watch", watches });
   }
 
+  /**
+   * Stops or restarts the game. Sound is left running: paused, the worklet runs dry and plays
+   * silence, and the game refills it when it goes again. Suspending the context instead would
+   * need a resume() to start again, which iOS can leave pending outside a gesture, and the game,
+   * paced by that context, would stay frozen.
+   */
   setPaused(paused: boolean): void {
     this.#post({ type: "pause", paused });
-    if (paused) void this.#audio.suspend();
-    else if (this.#audioNode) void this.#audio.resume();
   }
 
   saveState(): Promise<Uint8Array> {

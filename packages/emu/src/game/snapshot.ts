@@ -76,6 +76,8 @@ export interface GameSnapshot {
   x: number;
   y: number;
   inBattle: boolean;
+  /** wIsInBattle: 1 is a wild battle, 2 a trainer's. */
+  battleKind: "wild" | "trainer" | null;
 }
 
 const sym = (name: SymbolName, length: number): Watch => [SYMBOLS[name].address, length];
@@ -178,5 +180,6 @@ export function decodeSnapshot(bytes: readonly Uint8Array[]): GameSnapshot {
     y: coords![0] ?? 0,
     x: coords![1] ?? 0,
     inBattle: (battle![0] ?? 0) !== 0,
+    battleKind: battle![0] === 1 ? "wild" : battle![0] === 2 ? "trainer" : null,
   };
 }

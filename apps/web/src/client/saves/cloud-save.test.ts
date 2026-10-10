@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { IDBFactory } from "fake-indexeddb";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { memoryBucket } from "../../worker/saves/memory-bucket.ts";
 import { savesApi, type SaveBucket } from "../../worker/saves/saves.ts";
 import { closeDb } from "../idb.ts";
@@ -61,7 +61,9 @@ describe("cloud backup", () => {
     const first = await b.backup.status();
     if (first.kind === "newer") await b.backup.restore(first.cloud);
 
-    // B plays on and saves; A sees B's save as newer, B sees itself in sync.
+    // B plays on and saves (stored, then backed up, as a save slot does); A sees B's save as
+    // newer, B sees itself in sync.
+    await storeSave(KEY, sram(2));
     b.backup.onSram(sram(2));
     await b.backup.flush();
     expect(await b.backup.status()).toEqual({ kind: "in-sync" });
@@ -112,5 +114,32 @@ describe("cloud backup", () => {
     device(fetch);
     const backup = new CloudBackup(KEY, { fetch: (() => Promise.reject(new TypeError("offline"))) as typeof fetch });
     expect(await backup.status()).toEqual({ kind: "offline" });
+  });
+
+  it("sends a save made offline with the next flush", async () => {
+    const { fetch, objects } = server();
+    let online = false;
+    const flaky = ((input: RequestInfo | URL, init?: RequestInit) => (online ? fetch(input, init) : Promise.reject(new TypeError("offline")))) as typeof globalThis.fetch;
+    device(fetch);
+    const backup = new CloudBackup(KEY, { fetch: flaky, delayMs: 0 });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    backup.onSram(sram(1));
+    await backup.flush();
+    warn.mockRestore();
+    online = true;
+    await backup.flush();
+    expect(new Uint8Array(objects.values().next().value!.body)).toEqual(sram(1));
+  });
+
+  it("sends a save this device made since it last synced, at start-up", async () => {
+    const { fetch, objects } = server();
+    const a = device(fetch);
+    const slot = await openSaveSlot(KEY, a.backup, null);
+    await slot.persist(sram(1));
+    await a.backup.flush();
+    // Saved while signed out (or offline, and then the page closed): the cloud never heard.
+    await storeSave(KEY, sram(2));
+    expect(await a.backup.status()).toEqual({ kind: "in-sync" });
+    expect(new Uint8Array(objects.values().next().value!.body)).toEqual(sram(2));
   });
 });

@@ -29,6 +29,8 @@ export class Starter {
   #phase: "menu" | "confirm" | "done" = "menu";
   #last = -Infinity;
   #since = 0;
+  /** The frame the menu was first seen without the choice, or -1. */
+  #missing = -1;
 
   constructor(choice: StartChoice, press: Presser) {
     this.choice = choice;
@@ -51,9 +53,16 @@ export class Starter {
       if (menu) {
         const want = this.choice === "continue" ? "CONTINUE" : "NEW GAME";
         const index = menu.items.findIndex((i) => i.text === want);
-        // No CONTINUE (the save went bad since): start a new game rather than stall.
-        this.#press.select(index >= 0 ? index : menu.items.findIndex((i) => i.text === "NEW GAME"), true);
-        this.#phase = this.choice === "continue" && index >= 0 ? "confirm" : "done";
+        // No CONTINUE (the menu still drawing, or the game can't read the save): never start a
+        // new game in its place, which would save over the player's. Look again for a while,
+        // then leave the game's own menu to the player.
+        if (index < 0) {
+          if (this.#missing < 0) this.#missing = count;
+          else if (count - this.#missing > CONFIRM_TIMEOUT) this.#phase = "done";
+          return;
+        }
+        this.#press.select(index, true);
+        this.#phase = this.choice === "continue" ? "confirm" : "done";
         this.#last = count;
         this.#since = count;
       } else if (count - this.#last >= START_EVERY) {

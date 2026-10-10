@@ -35,3 +35,6 @@
 .saves-name-input:focus { box-shadow: inset 0 0 0 calc(var(--tile) * .1) var(--hd-accent); }
 .saves-name-input::placeholder { color: inherit; opacity: .45; }
 .saves-screen { z-index: 30; }
+/* Fades in as the loading screen fades out over it. */
+.saves-screen { animation: saves-in .45s ease-out; }
+@keyframes saves-in { from { opacity: 0; } }

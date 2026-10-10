@@ -91,7 +91,7 @@ test("the Pokédex menu shows the game and works it through its routines", async
     },
     { key: POKEBLUE_SHA1, bytes: [...sram] },
   );
-  await page.goto("/dev/menu?stats&classic");
+  await page.goto("/dev/menu/live?stats&classic");
   await expect(page.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   await intoTheWorld(page);
   // Out into Pallet Town, so the map has a trail to show.
@@ -102,27 +102,27 @@ test("the Pokédex menu shows the game and works it through its routines", async
   await p.leave("ArrowDown", PALLET_TOWN);
   await p.walkTo(PALLET_TOWN, [8, 8]);
 
-  await page.getByRole("button", { name: "Pokédex" }).click();
+  await page.getByRole("button", { name: "Pokédex", exact: true }).click();
   const menu = page.getByRole("dialog", { name: "Pokédex" });
-  await expect(menu.getByText(/caught · .* seen of 151/)).toBeVisible();
+  const tab = (name: string) => menu.getByRole("navigation").getByRole("button", { name });
+  await expect(menu.getByText("Kanto")).toBeVisible({ timeout: 10_000 });
+  await sleep(600);
   await page.screenshot({ path: "test-results/menu-pokemon.png" });
-  await menu.getByRole("button", { name: /Squirtle/ }).click();
-  await expect(menu.getByText("The Tinyturtle Pokémon")).toBeVisible();
-  await page.screenshot({ path: "test-results/menu-pokemon-page.png" });
 
-  await menu.getByRole("tab", { name: "Inventory" }).click();
+  await tab("Inventory").click();
   await expect(menu.getByText("Your team")).toBeVisible();
-  await expect(menu.getByText("6/")).toBeVisible();
+  await expect(menu.getByRole("meter", { name: "HP" }).nth(1)).toHaveAttribute("aria-valuenow", "6");
+  await sleep(600);
   await page.screenshot({ path: "test-results/menu-inventory.png" });
   // A Potion for Pikachu, through the game's own UseItem.
-  await menu.getByRole("button", { name: /Potion/ }).click();
-  await menu.getByRole("button", { name: "Use on a Pokémon" }).click();
-  await menu.getByRole("button", { name: /Pikachu/ }).click();
-  await expect(menu.getByText(/recovered by 20/i)).toBeVisible({ timeout: 20_000 });
+  await menu.getByRole("button", { name: /^Potion/i }).first().click();
+  await menu.getByRole("button", { name: /Use it on/ }).click();
+  await menu.getByRole("button", { name: /Pikachu/i }).first().click();
+  await menu.getByRole("button", { name: /Use Potion on Pikachu/i }).click();
+  await expect(page.getByRole("status")).toContainText(/recovered by 20/i, { timeout: 20_000 });
   await page.screenshot({ path: "test-results/menu-potion.png" });
-  await menu.getByRole("button", { name: "Back" }).click();
-  await expect(menu.getByText("26/")).toBeVisible({ timeout: 5_000 });
-  await expect(menu.getByText("×4")).toBeVisible();
+  await tab("Inventory").click();
+  await expect(menu.getByRole("meter", { name: "HP" }).nth(1)).toHaveAttribute("aria-valuenow", "26", { timeout: 5_000 });
 
   // Pikachu to the front, by dragging its handle above Squirtle.
   const handles = menu.getByLabel("Drag to move");
@@ -132,14 +132,14 @@ test("the Pokédex menu shows the game and works it through its routines", async
   await page.mouse.down();
   await page.mouse.move(first!.x + 5, first!.y - 10, { steps: 8 });
   await page.mouse.up();
-  await expect(menu.locator("[data-row]").first()).toContainText("Pikachu", { timeout: 10_000 });
+  await expect(menu.getByRole("meter", { name: "HP" }).first()).toHaveAttribute("aria-valuenow", "26", { timeout: 10_000 });
 
-  for (const tab of ["People", "Map", "Me"]) {
-    await menu.getByRole("tab", { name: tab }).click();
-    await sleep(600);
-    await page.screenshot({ path: `test-results/menu-${tab.toLowerCase()}.png` });
+  for (const name of ["People", "Map", "Me"]) {
+    await tab(name).click();
+    await sleep(800);
+    await page.screenshot({ path: `test-results/menu-${name.toLowerCase()}.png` });
   }
-  await menu.getByRole("button", { name: "Close" }).click();
+  await menu.getByRole("button", { name: "Close the Pokédex" }).click();
   // Back to playing: the player walks.
   await expect(menu).toBeHidden();
 });

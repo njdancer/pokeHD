@@ -1,223 +1,205 @@
-// The Pokédex menu (p2-dex-menu, D40): one menu in place of the game's Start menu and its
-// Pokédex. Five tabs (Pokémon, People, Inventory, Map, Me), each a list with pages on top. What
-// it shows is read from the game's memory and the play journal; what it does goes through the
-// game's own routines (EmulatorHost.act), never its menus. Prototype and decisions:
-// /mnt/project-files/dex-menu/ (prototype.html, handoff.md, hifi-screens.png).
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { ActionResult, GameAction, GameSnapshot } from "@pokehd/emu";
-import type { WorldData } from "@pokehd/rom";
-import type { Catalogue } from "../dex/catalogue.ts";
-import type { Friend } from "../room/client.ts";
-import { Menu, type MenuContext, type Page, type Tab } from "./context.ts";
-import { Inventory, ItemPage, TeamPage } from "./InventoryTab.tsx";
-import type { PlayJournal } from "./journal.ts";
-import { MapTab, PlacePage } from "./MapTab.tsx";
-import { Me, SavesPage, SettingsPage } from "./MeTab.tsx";
-import { MonGrid, MonPage } from "./MonTab.tsx";
-import { TAB_ICONS } from "./icons.tsx";
-import { FriendPage, People, PersonPage } from "./PeopleTab.tsx";
+// The Pokédex menu (p2-menu): one menu around the Pokédex, replacing Start and Select. Five tabs
+// (Pokémon, People, Inventory, Map, Me), each keeping its own place; and the game's requests
+// (battle Team and Bag, who's next, PC, Mart) as a sheet over the game instead. Storybook look.
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Env, useEnv, type MenuEnv } from "./env.tsx";
+import { CloseIcon, TabIcon, type TabId } from "./icons.tsx";
+import { NavContext, rootOf, TABS, type Nav, type Screen } from "./nav.tsx";
+import type { Request } from "./model.ts";
+import { EntryScreen, PokemonScreen } from "./screens/Pokemon.tsx";
+import { FriendScreen, PeopleScreen, PersonScreen } from "./screens/People.tsx";
+import { BagPick, BoxPick, InventoryScreen, ItemScreen, MonScreen, ShopPick, TeamPick } from "./screens/Inventory.tsx";
+import { MapScreen } from "./screens/MapScreen.tsx";
+import { GrownupsScreen, MeScreen, SavesScreen, SettingsScreen } from "./screens/Me.tsx";
 import "./menu.css";
 
+function render(s: Screen): ReactNode {
+  switch (s.k) {
+    case "dex": return <PokemonScreen />;
+    case "entry": return <EntryScreen dex={s.dex} />;
+    case "people": return <PeopleScreen />;
+    case "person": return <PersonScreen id={s.key} />;
+    case "friend": return <FriendScreen id={s.id} />;
+    case "inv": return <InventoryScreen />;
+    case "mon": return <MonScreen i={s.i} purpose={s.for} />;
+    case "item": return <ItemScreen id={s.id} purpose={s.for} />;
+    case "team": return <TeamPick purpose={s.for} />;
+    case "bag": return <BagPick purpose={s.for} />;
+    case "map": return <MapScreen key={s.focus} focus={s.focus} />;
+    case "me": return <MeScreen />;
+    case "settings": return <SettingsScreen />;
+    case "grownups": return <GrownupsScreen />;
+    case "saves": return <SavesScreen />;
+  }
+}
+
+/** How the last change moved: deeper, back out, or across tabs. Picks the animation. */
+type Motion = "push" | "pop" | "tab" | "none";
+
+function useStack(initial: Screen[]) {
+  const [state, setState] = useState({ stack: initial, motion: "none" as Motion });
+  const set = useCallback((next: (s: Screen[]) => Screen[], motion: Motion) => setState((st) => ({ stack: next(st.stack), motion })), []);
+  return { stack: state.stack, motion: state.motion, set };
+}
+
 export interface DexMenuProps {
-  rom: Uint8Array;
-  world: WorldData;
-  catalogue: Catalogue;
-  /** Reads the game as it is now. */
-  read(): Promise<GameSnapshot>;
-  act(action: GameAction, signal: AbortSignal): Promise<ActionResult>;
-  journal: PlayJournal | null;
-  friends: readonly Friend[];
-  savedAt: number;
-  grownUps?: ReactNode;
-  /** Opens on this tab and page (the game showing a new catch opens its page). */
-  start?: { tab: Tab; page?: Page };
+  env: Omit<MenuEnv, "toast">;
+  open: boolean;
   onClose(): void;
+  /** Where to open (a tab, or a screen in it). */
+  start?: { tab: TabId; screen?: Screen };
+  /** A game request: shown as a sheet instead of the dex. */
+  request?: Request | null;
+  /** Called when the request ends (answered or cancelled). */
+  onRequestDone?(): void;
+  /** A line from the game after an action finished (toasted when `n` changes). */
+  notice?: { text: string; n: number } | null;
 }
 
-const TABS: [Tab, string][] = [
-  ["pokemon", "Pokémon"],
-  ["people", "People"],
-  ["inventory", "Inventory"],
-  ["map", "Map"],
-  ["me", "Me"],
-];
-/** How often the open menu re-reads the game (HP in a battle, money, the clock). */
-const READ_EVERY_MS = 1000;
-/** An action still waiting after this long shows "waiting for the game" with a Cancel. */
-const WAIT_SHOWN_MS = 350;
-
-/** Why an action didn't happen, in words for the player. */
-function reasonText(reason: string): string {
-  if (reason === "not now") return "Not right now.";
-  return reason.charAt(0).toUpperCase() + reason.slice(1) + (/[.!?]$/.test(reason) ? "" : ".");
-}
-
-/** The game's words for the toast: its line breaks join, its capitals stay (they're names). */
-const said = (messages: readonly string[]) => messages.map((m) => m.replace(/\n/g, " ")).join("\n");
-
-export function DexMenu(props: DexMenuProps) {
-  const { rom, world, catalogue, read, journal, friends, savedAt, grownUps, start, onClose } = props;
-  const [tab, setTab] = useState<Tab>(start?.tab ?? "pokemon");
-  const [stack, setStack] = useState<Page[]>(start?.page ? [start.page] : []);
-  const [game, setGame] = useState<GameSnapshot | null>(null);
-  const [waiting, setWaiting] = useState<{ cancel(): void } | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [journalVersion, setJournalVersion] = useState(journal?.version ?? 0);
-  const body = useRef<HTMLDivElement>(null);
-  const actRef = useRef(props.act);
-  useLayoutEffect(() => {
-    actRef.current = props.act;
-  });
-
-  const refresh = useCallback(() => void read().then(setGame, () => {}), [read]);
+export function DexMenu({ env: base, open, onClose, start, request, onRequestDone, notice }: DexMenuProps) {
+  const [toastText, setToastText] = useState<{ text: string; n: number } | null>(null);
+  const toast = useCallback((text: string) => {
+    // Actions that finish later (in the game) return "", and their words follow as a notice.
+    if (text) setToastText((t) => ({ text, n: (t?.n ?? 0) + 1 }));
+  }, []);
   useEffect(() => {
-    refresh();
-    const timer = setInterval(() => {
-      refresh();
-      // The journal changes as the game runs behind the menu.
-      setJournalVersion(journal?.version ?? 0);
-    }, READ_EVERY_MS);
-    return () => clearInterval(timer);
-  }, [refresh, journal]);
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 3200);
+    if (!toastText) return;
+    const timer = setTimeout(() => setToastText(null), 2600);
     return () => clearTimeout(timer);
-  }, [toast]);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (stack.length) setStack((s) => s.slice(0, -1));
-      else onClose();
-    };
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, [stack.length, onClose]);
-  // A new page or tab starts at the top.
-  useEffect(() => body.current?.querySelector(".dm-body")?.scrollTo(0, 0), [tab, stack]);
-
-  const act = useCallback(
-    async (action: GameAction): Promise<ActionResult | null> => {
-      const abort = new AbortController();
-      const shown = setTimeout(() => setWaiting({ cancel: () => abort.abort() }), WAIT_SHOWN_MS);
-      const result = await actRef.current(action, abort.signal);
-      clearTimeout(shown);
-      setWaiting(null);
-      refresh();
-      if (!result.ok && result.reason === "cancelled") return null;
-      if (result.ok && result.messages.length) setToast(said(result.messages));
-      if (!result.ok) setToast(result.messages.length ? said(result.messages.slice(-1)) : reasonText(result.reason));
-      return result;
-    },
-    [refresh],
-  );
-
-  const ctx = useMemo<MenuContext>(
-    () => ({
-      rom,
-      world,
-      catalogue,
-      game,
-      journal,
-      journalVersion,
-      friends,
-      act,
-      savedAt,
-      grownUps,
-      lookOnly: !!game?.inBattle,
-      open: (page) => setStack((s) => [...s, page]),
-      go: (t, page) => {
-        setTab(t);
-        setStack(page ? [page] : []);
-      },
-      back: () => setStack((s) => s.slice(0, -1)),
-    }),
-    [rom, world, catalogue, game, journal, journalVersion, friends, act, savedAt, grownUps],
-  );
-  const page = stack.at(-1);
+  }, [toastText]);
+  // The game's words after an action, shown like any other line.
+  const [shown, setShown] = useState(notice);
+  if (notice !== shown) {
+    setShown(notice);
+    if (notice) setToastText((t) => ({ text: notice.text, n: (t?.n ?? 0) + 1 }));
+  }
+  const env = useMemo<MenuEnv>(() => ({ ...base, toast }), [base, toast]);
   return (
-    <Menu.Provider value={ctx}>
-      <div className="dm" role="dialog" aria-modal aria-label="Pokédex" onClick={(e) => e.target === e.currentTarget && onClose()}>
-        <div className="dm-frame">
-          <div className="dm-card" ref={body}>
-            {page ? <PageView page={page} /> : <TabView tab={tab} />}
-            {waiting && (
-              <div className="dm-wait" role="status">
-                Waiting for the game to finish talking…
-                <button type="button" onClick={waiting.cancel}>
-                  Cancel
-                </button>
-              </div>
-            )}
-            {toast && !waiting && (
-              <div className="dm-toast" role="status">
-                {toast}
-              </div>
-            )}
-            <nav className="dm-tabs" role="tablist">
-              {TABS.map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  className="dm-tab"
-                  aria-selected={tab === id}
-                  onClick={() => {
-                    setTab(id);
-                    setStack([]);
-                  }}
-                >
-                  {TAB_ICONS[id]}
-                  {label}
-                  {id === "people" && friends.some((f) => f.presence) && <span className="dm-dot">{friends.filter((f) => f.presence).length}</span>}
-                </button>
-              ))}
-            </nav>
+    <Env.Provider value={env}>
+      <div className={`m-root${open ? " open" : ""}${request ? " asked" : ""}`}>
+        <div className="m-shade" onClick={request ? undefined : onClose} />
+        <Dex open={open} onClose={onClose} start={start} />
+        {request && <Sheet key={request.kind} request={request} onDone={() => onRequestDone?.()} />}
+        {toastText && (
+          <div className="m-toast" key={toastText.n} role="status">
+            {toastText.text}
           </div>
-          {(["tl", "tr", "bl", "br"] as const).map((c) => (
-            <i key={c} className={`dm-ball ${c}`} aria-hidden />
-          ))}
-          <button type="button" className="dm-close" aria-label="Close" onClick={onClose}>
-            ✕
-          </button>
-        </div>
+        )}
       </div>
-    </Menu.Provider>
+    </Env.Provider>
   );
 }
 
-function TabView({ tab }: { tab: Tab }) {
-  switch (tab) {
-    case "pokemon":
-      return <MonGrid />;
-    case "people":
-      return <People />;
-    case "inventory":
-      return <Inventory />;
-    case "map":
-      return <MapTab />;
-    case "me":
-      return <Me />;
-  }
+function Dex({ open, onClose, start }: { open: boolean; onClose(): void; start?: DexMenuProps["start"] }) {
+  const [{ tab, stacks, motion }, setState] = useState(() => {
+    const s = Object.fromEntries(TABS.map((t) => [t.id, [rootOf(t.id)]])) as Record<TabId, Screen[]>;
+    if (start?.screen) s[start.tab] = [rootOf(start.tab), start.screen];
+    return { tab: start?.tab ?? ("dex" as TabId), stacks: s, motion: "none" as Motion };
+  });
+  const stack = stacks[tab];
+  const env = useEnv();
+  const update = (t: TabId, next: Screen[], how: Motion) => setState((st) => ({ tab: t, stacks: { ...st.stacks, [t]: next }, motion: how }));
+  const nav: Nav = {
+    depth: stack.length,
+    sheet: false,
+    go: (s) => update(tab, [...stack, s], "push"),
+    back: () => {
+      if (stack.length > 1) update(tab, stack.slice(0, -1), "pop");
+    },
+    replace: (s) => update(tab, [...stack.slice(0, -1), s], "none"),
+    reset: (s) => update(tab, s ? [rootOf(tab), s] : [rootOf(tab)], "pop"),
+    tab: (t, s) => setState((st) => ({ tab: t, stacks: s ? { ...st.stacks, [t]: s.k === t ? [s] : [rootOf(t), s] } : st.stacks, motion: "tab" })),
+    close: onClose,
+  };
+  const top = stack[stack.length - 1]!;
+  const gifts = env.model.friends.filter((f) => f.gift).length;
+  return (
+    <div className="m-dex" role="dialog" aria-label="Pokédex" aria-hidden={!open} inert={!open}>
+      <Corners />
+      <button type="button" className="m-round m-close" aria-label="Close the Pokédex" onClick={onClose}>
+        <CloseIcon />
+      </button>
+      <NavContext.Provider value={nav}>
+        <div className={`m-screen m-${motion}`} key={`${tab} ${stack.length} ${top.k}`}>
+          {render(top)}
+        </div>
+      </NavContext.Provider>
+      <nav className="m-tabbar" aria-label="Pokédex">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            aria-current={t.id === tab ? "page" : undefined}
+            onClick={() => {
+              // Tapping the tab you're on goes back to its start, as phones do.
+              if (t.id === tab) update(t.id, [rootOf(t.id)], "pop");
+              else nav.tab(t.id);
+            }}
+          >
+            <span className="m-tabicon">
+              <TabIcon tab={t.id} on={t.id === tab} />
+              {t.id === "people" && gifts > 0 && <i className="m-dot">{gifts}</i>}
+            </span>
+            <span>{t.label}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
 }
 
-function PageView({ page }: { page: Page }) {
-  switch (page.kind) {
-    case "mon":
-      return <MonPage key={page.dex} dex={page.dex} />;
-    case "team":
-      return <TeamPage slot={page.slot} />;
-    case "item":
-      return <ItemPage item={page.item} />;
-    case "person":
-      return <PersonPage k={page.key} />;
-    case "friend":
-      return <FriendPage id={page.id} />;
-    case "place":
-      return <PlacePage name={page.name} />;
-    case "settings":
-      return <SettingsPage />;
-    case "saves":
-      return <SavesPage />;
-  }
+function Corners() {
+  return (
+    <>
+      {(["tl", "tr", "bl", "br"] as const).map((c) => (
+        <span key={c} className={`m-corner ${c}`} aria-hidden="true" />
+      ))}
+    </>
+  );
+}
+
+/** A game request answered over the game: the same lists as the dex, filtered to what it asks. */
+function Sheet({ request, onDone }: { request: Request; onDone(): void }) {
+  const env = useEnv();
+  // The bottom of the stack stands for the list the game asked for (`root` below).
+  const { stack, set, motion } = useStack([{ k: "inv" }]);
+  const mustAnswer = request.kind === "fainted";
+  const close = () => {
+    if (!mustAnswer) env.actions.cancel();
+    onDone();
+  };
+  const nav: Nav = {
+    depth: stack.length,
+    sheet: true,
+    go: (s) => set((st) => [...st, s], "push"),
+    back: () => set((st) => (st.length > 1 ? st.slice(0, -1) : st), "pop"),
+    replace: (s) => set((st) => [...st.slice(0, -1), s], "none"),
+    reset: () => set((st) => st.slice(0, 1), "pop"),
+    tab: () => {},
+    close: onDone,
+  };
+  const top = stack[stack.length - 1];
+  // The sheet's root is the list the game asked for; deeper screens are the dex's own.
+  const root =
+    request.kind === "battle-team" ? <TeamPick title="Your team" />
+    : request.kind === "fainted" ? <TeamPick title="Who's next?" />
+    : request.kind === "deposit" ? <TeamPick title="Bill's PC" />
+    : request.kind === "withdraw" ? <BoxPick />
+    : request.kind === "buy" ? <ShopPick stock={request.stock} />
+    : <BagPick />;
+  return (
+    <div className="m-sheet" role="dialog" aria-label="The game asks">
+      <span className="m-grabber" aria-hidden="true" />
+      {!mustAnswer && (
+        <button type="button" className="m-round m-close" aria-label="Back to the game" onClick={close}>
+          <CloseIcon />
+        </button>
+      )}
+      <NavContext.Provider value={nav}>
+        <div className={`m-screen m-${motion}`} key={stack.length}>
+          {stack.length <= 1 ? root : render(top!)}
+        </div>
+      </NavContext.Provider>
+    </div>
+  );
 }

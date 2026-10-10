@@ -126,6 +126,35 @@ describe.skipIf(!existsSync(ROM_PATH))("the game's questions (ROM)", () => {
     expect(r(gb, "wNumBagItems", 4)).toBe(2);
   }, 30_000);
 
+  it("switches in battle: the party answer, then SWITCH on the game's small menu", async () => {
+    const { gb, asked, play } = await game((ask) => (ask.kind === "party" ? { index: 1 } : null));
+    gb.write(addr("wCurOpponent"), RATTATA);
+    gb.write(addr("wCurEnemyLevel"), 2);
+    let menus = 0;
+    const remove = gb.addHook({ bank: 0x0f, address: 0x4eb3 }, () => menus++);
+    for (let i = 0; i < 3000 && menus === 0; i++) {
+      gb.setButtons(i % 16 < 2 ? Button.A : 0);
+      gb.runFrame();
+    }
+    gb.setButtons(0);
+    expect(menus, "battle menu").toBeGreaterThan(0);
+    // PKMN, to the right of FIGHT on the game's battle menu.
+    frames(gb, 30);
+    gb.setButtons(Button.Right);
+    frames(gb, 3);
+    gb.setButtons(0);
+    frames(gb, 10);
+    gb.setButtons(Button.A);
+    frames(gb, 3);
+    gb.setButtons(0);
+    play(2500, () => r(gb, "wBattleMonSpecies") === PIKACHU && menus > 1);
+    remove();
+    expect(asked.map((a) => a.kind)).toEqual(["party"]);
+    expect(asked[0]).toMatchObject({ purpose: "switch", inBattle: true });
+    expect(r(gb, "wBattleMonSpecies")).toBe(PIKACHU);
+    expect(r(gb, "wPlayerMonNumber")).toBe(1);
+  }, 30_000);
+
   it("answers a sale's list and quantity with the game's own price", async () => {
     const { gb, play } = await game((ask) => (ask.kind === "items" ? { index: 1 } : ask.kind === "quantity" ? { quantity: 2 } : null));
     const out: { list?: number; quantity?: number; item?: number; price?: number; max?: number; money?: number; chosen?: number } = {};

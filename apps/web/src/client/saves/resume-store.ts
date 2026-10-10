@@ -13,6 +13,12 @@ import { run } from "../idb.ts";
 
 /** A save's identity for matching points: picture scratch space doesn't count (see `saveData`). */
 const saveHash = (save: Uint8Array) => sha1Hex(saveData(save));
+/**
+ * What a point taken with no save stored records as its save, so it's never picked for one
+ * made since (a new game's first save): left out, it would pass as a point from before points
+ * recorded their save.
+ */
+const NO_SAVE = "none";
 
 interface StoredPoint {
   state: ArrayBuffer;
@@ -20,8 +26,8 @@ interface StoredPoint {
   /** Local time it was taken (ms), for display only. */
   takenAt: number;
   /**
-   * SHA-1 of the battery save the state holds, picture scratch blanked (missing on points from
-   * before p1-kidproof).
+   * SHA-1 of the battery save the state holds, picture scratch blanked, or NO_SAVE (missing on
+   * points from before p1-kidproof).
    */
   saveSha1?: string;
 }
@@ -48,7 +54,7 @@ export async function readResumePoint(key: string): Promise<ResumePoint | null> 
 /** Stores a point taken while `save` was the stored battery save. Returns its state's SHA-1. */
 export async function storeResumePoint(key: string, state: Uint8Array, save?: Uint8Array): Promise<string> {
   const sha1 = await sha1Hex(state);
-  const point: StoredPoint = { state: state.slice().buffer, sha1, takenAt: Date.now(), ...(save ? { saveSha1: await saveHash(save) } : {}) };
+  const point: StoredPoint = { state: state.slice().buffer, sha1, takenAt: Date.now(), saveSha1: save ? await saveHash(save) : NO_SAVE };
   await run("saves", "readwrite", (s) => s.put(point, pointKey(key)));
   return sha1;
 }
@@ -97,7 +103,7 @@ export async function fetchCloudResumePoint(key: string, f: Fetch = fetch): Prom
  * points recorded their save is still tried (the emulator checks it anyway).
  */
 export async function pickResumePoint(save: Uint8Array | undefined, points: (ResumePoint | null)[]): Promise<ResumePoint | null> {
-  const saveSha1 = save ? await saveHash(save) : undefined;
+  const saveSha1 = save ? await saveHash(save) : NO_SAVE;
   const fits = points.filter((p): p is ResumePoint => !!p && (p.saveSha1 === undefined || p.saveSha1 === saveSha1));
   return fits.sort((a, b) => b.takenAt - a.takenAt)[0] ?? null;
 }
