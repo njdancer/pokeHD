@@ -206,9 +206,9 @@ test("the intro and save slots survive a child", async ({ page }) => {
         await page.getByTestId("intro-saves").click();
         const cards = page.locator(".saves-card:not(.binned) .saves-card-main");
         await cards.nth(rand.int(await cards.count())).click();
-        await page.getByRole("button", { name: "Copy" }).click();
+        await page.getByRole("button", { name: "Copy", exact: true }).click();
         await expect(page.locator(".saves-list[aria-busy='false']")).toBeVisible({ timeout: 30_000 });
-        await page.getByRole("button", { name: "Back" }).click();
+        await page.getByRole("button", { name: "Back", exact: true }).click();
         break;
       }
       case "rename": {
@@ -218,7 +218,7 @@ test("the intro and save slots survive a child", async ({ page }) => {
         const field = page.getByLabel("Name");
         await field.fill(rand.pick(["", "Ash", "Second go", "Zz"]));
         await field.press("Enter");
-        await page.getByRole("button", { name: "Back" }).click();
+        await page.getByRole("button", { name: "Back", exact: true }).click();
         break;
       }
       case "walk":
