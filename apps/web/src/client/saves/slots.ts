@@ -8,7 +8,7 @@
 // cloud, where a write merges rather than replaces. Deleting only moves a slot to the bin; its
 // data stays, so a slot can always be brought back.
 import { lastPlayedSlot, MAIN_SLOT, MAX_SLOTS, mergeSlotIndex, parseSlotIndex, slotKey, type SlotIndex, type SlotMeta } from "@pokehd/protocol";
-import { run } from "../idb.ts";
+import { run, update as updateLocal } from "../idb.ts";
 import { fetchCloudSave, uploadCloudSave, writeSynced } from "./cloud-save.ts";
 import { pickResumePoint, readResumePoint, uploadResumePoint } from "./resume-store.ts";
 import { loadSave } from "./save-store.ts";
@@ -18,20 +18,16 @@ export { lastPlayedSlot, MAIN_SLOT, slotKey, type SlotIndex, type SlotMeta };
 type Fetch = typeof fetch;
 const indexKey = (romSha1: string) => `${romSha1}:slots`;
 
-async function readLocal(romSha1: string): Promise<SlotIndex> {
-  const stored = await run<unknown>("saves", "readonly", (s) => s.get(indexKey(romSha1)));
-  return (stored ? parseSlotIndex(stored) : null) ?? { slots: [] };
-}
-const writeLocal = (romSha1: string, index: SlotIndex) => run("saves", "readwrite", (s) => s.put(index, indexKey(romSha1)));
+const parseLocal = (stored: unknown): SlotIndex => (stored ? parseSlotIndex(stored) : null) ?? { slots: [] };
+const readLocal = async (romSha1: string) => parseLocal(await run<unknown>("saves", "readonly", (s) => s.get(indexKey(romSha1))));
 
-/** Changes to a ROM's list take turns, so two at once can't drop one. */
+/**
+ * Changes to a ROM's list take turns, so two at once can't drop one: in this tab through the
+ * queue, and against other tabs by reading and writing in one transaction.
+ */
 const queues = new Map<string, Promise<unknown>>();
-function update(romSha1: string, change: (index: SlotIndex) => SlotIndex | Promise<SlotIndex>): Promise<SlotIndex> {
-  const next = (queues.get(romSha1) ?? Promise.resolve()).then(async () => {
-    const index = await change(await readLocal(romSha1));
-    await writeLocal(romSha1, index);
-    return index;
-  });
+function update(romSha1: string, change: (index: SlotIndex) => SlotIndex): Promise<SlotIndex> {
+  const next = (queues.get(romSha1) ?? Promise.resolve()).then(() => updateLocal("saves", indexKey(romSha1), (stored) => change(parseLocal(stored))));
   queues.set(romSha1, next.catch(() => {}));
   return next;
 }

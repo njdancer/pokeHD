@@ -28,6 +28,7 @@ import {
 } from "../saves/slots.ts";
 import "../game/text-overlay.css";
 import "../game/start-screen.css";
+import { LoadingScreen, LOADING_FADE_MS } from "../LoadingScreen.tsx";
 import "./saves-dev.css";
 
 const Game = lazy(() => import("../game/Game.tsx").then((m) => ({ default: m.Game })));
@@ -104,6 +105,11 @@ export function SavesDev() {
   const [behind, setBehind] = useState<string | null>(null);
   const [menu, setMenu] = useState(true);
   const [busy, setBusy] = useState(false);
+  /** The game behind has drawn its world, and the list's details have been read. */
+  const [worldReady, setWorldReady] = useState(false);
+  const [viewsReady, setViewsReady] = useState(false);
+  const [loaderGone, setLoaderGone] = useState(false);
+  const onWorldReady = useCallback(() => setWorldReady(true), []);
   /** A slot just made from the list: its name is being typed. */
   const [naming, setNaming] = useState<string | null>(null);
 
@@ -115,15 +121,16 @@ export function SavesDev() {
   useEffect(() => {
     (async () => {
       const rom = (await fetchDevRom()) ?? (await loadStoredRom());
-      if (!rom) return setStatus("No ROM: load one in the app first.");
+      if (!rom) return setStatus("No ROM: load one in the app first."), setViewsReady(true), setWorldReady(true);
       const check = await checkRom(rom);
-      if (!check.ok) return setStatus(check.reason);
+      if (!check.ok) return setStatus(check.reason), setViewsReady(true), setWorldReady(true);
       const sha1 = await romKey(rom);
       const idx = await loadSlots(sha1);
       setCart({ rom, header: check.header, sha1 });
       setIndex(idx);
       setBehind(lastPlayedSlot(idx)?.id ?? newSlotId());
       await loadViews(sha1, idx);
+      setViewsReady(true);
     })();
   }, [loadViews]);
 
@@ -160,14 +167,24 @@ export function SavesDev() {
   const binned = index?.slots.filter((s) => s.deletedAt !== undefined) ?? [];
   const viewFor = (id: string) => views.get(id) ?? EMPTY;
 
+  // One loading screen, the app's own, until the menu can show over a finished world; then it
+  // fades out as the menu fades in.
+  const shown = worldReady && viewsReady;
+  useEffect(() => {
+    if (!shown) return;
+    const timer = setTimeout(() => setLoaderGone(true), LOADING_FADE_MS);
+    return () => clearTimeout(timer);
+  }, [shown]);
+
   return (
     <>
+      {!loaderGone && <LoadingScreen leaving={shown} />}
       {cart && behind && (
         <Suspense>
-          <Game key={behind} rom={cart.rom} romKey={slotKey(cart.sha1, behind)} header={cart.header} onForget={() => setMenu(true)} held={menu} />
+          <Game key={behind} rom={cart.rom} romKey={slotKey(cart.sha1, behind)} header={cart.header} onForget={() => setMenu(true)} held={menu} onReady={onWorldReady} />
         </Suspense>
       )}
-      {menu && (
+      {menu && shown && (
         <div className="start-screen saves-screen" data-look="ball">
           <div className="start-panel saves-panel">
             <i className="hd-corner tl" />
