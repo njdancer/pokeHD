@@ -94,6 +94,14 @@ app.patch("/me", async (c) => {
   return c.json(account(c, result.player));
 });
 
+/** Everyone else on the server: the Pokédex menu's friends, names only (who's online comes from the room). */
+app.get("/friends", async (c) => {
+  const player = await currentPlayer(c);
+  if (!player) return c.json({ error: "signed-out" }, 401);
+  const players = await directory(c).listPlayers();
+  return c.json({ friends: players.filter((p) => p.id !== player.id).map((p) => ({ id: p.id, name: p.name })) });
+});
+
 app.post("/sign-out", async (c) => {
   const token = getCookie(c, SESSION_COOKIE);
   if (token) await directory(c).endSession(token);

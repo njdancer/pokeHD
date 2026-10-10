@@ -5,10 +5,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ActionResult, AskAnswer, GameAction, GameAsk, GameSnapshot } from "@pokehd/emu";
 import { trainerClasses, type WorldData } from "@pokehd/rom";
 import type { Catalogue } from "../dex/catalogue.ts";
-import type { Friend } from "../room/client.ts";
 import { DexMenu, type DexMenuProps } from "./DexMenu.tsx";
 import type { PlayJournal } from "./journal.ts";
-import { LiveActions, liveModel, momentOf, requestOf, type LiveHost } from "./live.ts";
+import { LiveActions, liveModel, momentOf, requestOf, type LiveFriend, type LiveHost } from "./live.ts";
 import type { AppOptions } from "./model.ts";
 import { AskSheet } from "./Sheets.tsx";
 import "./ask-sheet.css";
@@ -36,7 +35,7 @@ export interface LiveMenuProps {
   onClose(): void;
   /** Read again with every read of the game (so its new records show). */
   journal: PlayJournal | null;
-  friends: readonly Friend[];
+  friends: readonly LiveFriend[];
   savedAt: number;
   app: AppOptions;
   setApp<K extends keyof AppOptions>(key: K, value: AppOptions[K]): void;
