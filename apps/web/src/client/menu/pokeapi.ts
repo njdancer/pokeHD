@@ -28,15 +28,14 @@ function fetchEntry(dex: number): Promise<LiveEntry | null> {
 
 /** PokeAPI's page for a caught Pokémon; null until it arrives, or if it can't. */
 export function useLiveEntry(dex: number, caught: boolean): LiveEntry | null {
-  const [entry, setEntry] = useState<LiveEntry | null>(null);
+  const [got, setGot] = useState<{ dex: number; entry: LiveEntry | null } | null>(null);
   useEffect(() => {
-    setEntry(null);
     if (!caught) return;
     let live = true;
-    void fetchEntry(dex).then((e) => live && setEntry(e));
+    void fetchEntry(dex).then((entry) => live && setGot({ dex, entry }));
     return () => {
       live = false;
     };
   }, [dex, caught]);
-  return entry;
+  return caught && got?.dex === dex ? got.entry : null;
 }

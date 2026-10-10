@@ -77,3 +77,7 @@ export function itemLine(rom: Uint8Array, item: number): string {
   if (shelf(rom, item) === "Key") return "An important thing for your adventure.";
   return "";
 }
+
+/** "6:42", hours and minutes. */
+export const playTime = (t: { hours: number; minutes: number }) => `${t.hours}:${String(t.minutes).padStart(2, "0")}`;
+export const money = (n: number) => `₽${n.toLocaleString("en")}`;
