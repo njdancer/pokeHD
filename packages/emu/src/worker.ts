@@ -76,9 +76,13 @@ function flushSram() {
   desk?.saved();
 }
 
-/** Audio-driven pacing: top the worklet's queue up to the lead. */
+/**
+ * Audio-driven pacing: top the worklet's queue up to the lead. Without a worklet nothing fills
+ * the queue, so this would never stop: the timer paces the game then (an unpause before any
+ * sound, as when /dev/saves lets its game go on the very tap that starts the sound).
+ */
 function fillAudio() {
-  while (!paused && gb && queuedSamples < samplesPerFrame * AUDIO_LEAD_FRAMES) runOneFrame();
+  while (!paused && gb && audio && queuedSamples < samplesPerFrame * AUDIO_LEAD_FRAMES) runOneFrame();
 }
 
 /** Timer pacing when there's no audio clock. */
