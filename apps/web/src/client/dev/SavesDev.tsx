@@ -157,37 +157,40 @@ export function SavesDev() {
           <i className="hd-corner tr" />
           <i className="hd-corner bl" />
           <i className="hd-corner br" />
-          {!cart || !index ? (
-            <p className="start-title start-wait">{status}</p>
-          ) : screen === "intro" ? (
-            <Intro
-              last={lastView ?? null}
-              onResume={() => last && void play(last.id)}
-              onNew={() => void act(async () => play((await createSlot(cart.sha1)).id))}
-              onSaves={() => setScreen("saves")}
-              onSettings={() => setScreen("settings")}
-              count={live.length}
-            />
-          ) : screen === "saves" ? (
-            <SaveList
-              live={live.map((m) => views.get(m.id) ?? { meta: m, summary: null, pointAt: null, cloudOnly: false })}
-              binned={binned.map((m) => views.get(m.id) ?? { meta: m, summary: null, pointAt: null, cloudOnly: false })}
-              busy={busy}
-              onBack={() => setScreen("intro")}
-              onPlay={(id) => void play(id)}
-              onNew={() => void act(() => createSlot(cart.sha1))}
-              onCopy={(v) => void act(() => duplicateSlot(cart.sha1, v.meta.id, `${title(v)} (copy)`))}
-              onRename={(id, name) => void act(() => renameSlot(cart.sha1, id, name))}
-              onBin={(id) => void act(() => binSlot(cart.sha1, id))}
-              onUnbin={(id) => void act(() => unbinSlot(cart.sha1, id))}
-            />
-          ) : (
-            <>
-              <p className="start-title">Settings</p>
-              <p className="start-sub">The Pokédex menu's settings panel goes here once it's built, so both places share one.</p>
-              <button type="button" className="start-button" onClick={() => setScreen("intro")}>Back</button>
-            </>
-          )}
+          {/* Scrolls inside the panel, so the corners stand clear of its edge. */}
+          <div className="saves-scroll">
+            {!cart || !index ? (
+              <p className="start-title start-wait">{status}</p>
+            ) : screen === "intro" ? (
+              <Intro
+                last={lastView ?? null}
+                onResume={() => last && void play(last.id)}
+                onNew={() => void act(async () => play((await createSlot(cart.sha1)).id))}
+                onSaves={() => setScreen("saves")}
+                onSettings={() => setScreen("settings")}
+                count={live.length}
+              />
+            ) : screen === "saves" ? (
+              <SaveList
+                live={live.map((m) => views.get(m.id) ?? { meta: m, summary: null, pointAt: null, cloudOnly: false })}
+                binned={binned.map((m) => views.get(m.id) ?? { meta: m, summary: null, pointAt: null, cloudOnly: false })}
+                busy={busy}
+                onBack={() => setScreen("intro")}
+                onPlay={(id) => void play(id)}
+                onNew={() => void act(() => createSlot(cart.sha1))}
+                onCopy={(v) => void act(() => duplicateSlot(cart.sha1, v.meta.id, `${title(v)} (copy)`))}
+                onRename={(id, name) => void act(() => renameSlot(cart.sha1, id, name))}
+                onBin={(id) => void act(() => binSlot(cart.sha1, id))}
+                onUnbin={(id) => void act(() => unbinSlot(cart.sha1, id))}
+              />
+            ) : (
+              <>
+                <p className="start-title">Settings</p>
+                <p className="start-sub">The Pokédex menu's settings panel goes here once it's built, so both places share one.</p>
+                <button type="button" className="start-button" onClick={() => setScreen("intro")}>Back</button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </>
