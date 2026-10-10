@@ -63,8 +63,6 @@ function DeviceDex({ rom, world, catalogue, progress, openOn, tab, closeSignal, 
       let size = { w: 0, h: 0 };
       device = await createDexDevice(canvasRef.current!, {
         model: "/models/pokedex.glb",
-        // The hand that holds it is a prototype, off unless asked for (?hand).
-        hand: new URLSearchParams(location.search).has("hand"),
         onScreen(quad, open, settled) {
           const el = screenRef.current;
           if (!el) return;

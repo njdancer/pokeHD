@@ -1,17 +1,13 @@
 // The modelled Pokédex (p2-dex): the device built in Blender after the anime's (assets-src/dex/
 // pokedex.blend, exported as a GLB). Its parts by name: "Cover" swings on the hinge (its
 // "CoverOpen" action runs shut to open), and "Screen" is the quad the page is laid over, its
-// UVs 0–1 with (0, 0) at the top left. It can be held in Ash's hand (hand.ts), a pixel-art sprite
-// whose thumb rests on the body's face and whose fingers curl under it.
+// UVs 0–1 with (0, 0) at the top left.
 import * as THREE from "three/webgpu";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { drawDexHand } from "./hand.ts";
 
 export interface DexModel {
-  /** The device (and the hand holding it), in centimetres. */
+  /** The device, in centimetres. */
   root: THREE.Object3D;
-  /** Whether a hand holds it. */
-  held: boolean;
   /** Shut 0 … open 1. */
   setOpen(open: number): void;
   /** The screen's corners in `screenSpace`: top-left, top-right, bottom-right, bottom-left. */
@@ -25,7 +21,7 @@ export interface DexModel {
   dispose(): void;
 }
 
-export async function loadDexModel(url: string, options: { hand?: boolean } = {}): Promise<DexModel> {
+export async function loadDexModel(url: string): Promise<DexModel> {
   const gltf = await new GLTFLoader().loadAsync(url);
   const root = new THREE.Group();
   // Blender's metres to the device's centimetres.
@@ -70,11 +66,9 @@ export async function loadDexModel(url: string, options: { hand?: boolean } = {}
   const shut = box();
   setOpen(1);
   const opened = box();
-  if (options.hand) root.add(handSprite(shut, screen.localToWorld(screenCorners[0]!.clone()).applyMatrix4(new THREE.Matrix4().copy(root.matrixWorld).invert()).z));
 
   return {
     root,
-    held: !!options.hand,
     setOpen,
     screenCorners,
     screenSpace: screen,
@@ -93,38 +87,3 @@ export async function loadDexModel(url: string, options: { hand?: boolean } = {}
   };
 }
 
-/** The hand's width, in centimetres. */
-const HAND_W = 8.5;
-/** Where the thumb rests, across the body from its left. */
-const THUMB_AT = 0.3;
-
-/**
- * The hand as two flat sprites: its fingers behind the body, its thumb on the face (`face` is
- * the face's depth), under the cover while that's ajar.
- */
-function handSprite(shut: THREE.Box3, face: number): THREE.Object3D {
-  const hand = drawDexHand();
-  const px = HAND_W / hand.width;
-  const group = new THREE.Group();
-  const layer = (data: Uint8ClampedArray, z: number) => {
-    const tex = new THREE.DataTexture(data, hand.width, hand.height, THREE.RGBAFormat);
-    // Rows run top down; textures bottom up.
-    tex.flipY = true;
-    tex.magFilter = tex.minFilter = THREE.NearestFilter;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.needsUpdate = true;
-    const mesh = new THREE.Mesh(
-      new THREE.PlaneGeometry(hand.width * px, hand.height * px),
-      new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.5, toneMapped: false }),
-    );
-    mesh.position.set(
-      shut.min.x + THUMB_AT * (shut.max.x - shut.min.x) + (hand.width / 2 - hand.thumb) * px,
-      shut.min.y - (hand.height / 2 - hand.edge) * px,
-      z,
-    );
-    group.add(mesh);
-  };
-  layer(hand.back, shut.min.z - 0.4);
-  layer(hand.front, face + 0.25);
-  return group;
-}
