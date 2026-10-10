@@ -15,6 +15,8 @@ const Explorer = lazy(() => import("./explore/Explorer.tsx").then((m) => ({ defa
 const DexDev = lazy(() => import("./dev/DexDev.tsx").then((m) => ({ default: m.DexDev })));
 const MenuDev = lazy(() => import("./dev/MenuDev.tsx").then((m) => ({ default: m.MenuDev })));
 const SavesDev = lazy(() => import("./dev/SavesDev.tsx").then((m) => ({ default: m.SavesDev })));
+// The Pokédex menu in the real game (p2-dex-menu), until Nick picks it.
+const MenuLive = lazy(() => import("./dev/MenuLive.tsx").then((m) => ({ default: m.MenuLive })));
 const DialogDev = lazy(() => import("./dev/DialogDev.tsx").then((m) => ({ default: m.DialogDev })));
 // The relief editor: paint which way each pixel faces, for training data only (never used in play).
 const ReliefEditor = lazy(() => import("./tools/relief/ReliefEditor.tsx").then((m) => ({ default: m.ReliefEditor })));
@@ -45,6 +47,7 @@ export function Root() {
   if (path === "/dev/dex") return <Suspense><DexDev /></Suspense>;
   if (path === "/dev/menu") return <Suspense><MenuDev /></Suspense>;
   if (path === "/dev/saves") return <Suspense><SavesDev /></Suspense>;
+  if (path === "/dev/menu/live") return <Suspense><MenuLive /></Suspense>;
   if (path === "/dev/dialog") return <Suspense><DialogDev /></Suspense>;
   if (path === "/tools/relief") return <Suspense><ReliefEditor /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;

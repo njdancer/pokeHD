@@ -176,6 +176,12 @@ export function GrownupsScreen() {
         </div>
       </Page>
     );
+  if (env.grownUps)
+    return (
+      <Page title="Grown-ups" meta="Unlocked">
+        <div className="m-grownups">{env.grownUps}</div>
+      </Page>
+    );
   return (
     <Page title="Grown-ups" meta="Unlocked">
       <Section>Saves</Section>

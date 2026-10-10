@@ -274,7 +274,7 @@ export function TeamPick({ purpose, title = "Your team" }: { purpose?: Purpose; 
   const nav = useNav();
   const { model, moment } = env;
   const it = purpose && "use" in purpose ? model.bag.find((b) => b.id === purpose.use) : undefined;
-  const offFor = (m: Mon) => (purpose && "teach" in purpose ? !canLearn(m, purpose.teach) : moment === "fainted" ? m.hp === 0 : false);
+  const offFor = (m: Mon) => (purpose && "teach" in purpose ? !canLearn(env, m, purpose.teach) : moment === "fainted" ? m.hp === 0 : false);
   const banner =
     purposeLine(env, purpose) ??
     (moment === "fainted" ? `${niceMon(model.team[0]!.name)} fainted! Who's next?` : moment === "pc" ? "Put which Pokémon in the PC?" : inBattle(moment) ? "Sending one out uses your turn" : undefined);

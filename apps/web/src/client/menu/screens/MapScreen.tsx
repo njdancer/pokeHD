@@ -12,37 +12,6 @@ import { SPRITE_NAMES } from "@pokehd/rom";
 
 const mapId = (name: string) => MAP_NAMES.indexOf(name);
 
-/** Journal samples for the layers: where things happened, in steps on a map. */
-const ENCOUNTERS: { dex: number; map: string; x: number; y: number; how: "caught" | "seen" | "battled"; text: string; today?: boolean }[] = [
-  { dex: 7, map: "PALLET_TOWN", x: 12, y: 12, how: "caught", text: "Your first partner, from PROF. OAK" },
-  { dex: 16, map: "ROUTE_1", x: 10, y: 24, how: "caught", text: "Caught at level 3" },
-  { dex: 19, map: "ROUTE_1", x: 6, y: 12, how: "caught", text: "Caught at level 4" },
-  { dex: 32, map: "ROUTE_22", x: 14, y: 8, how: "caught", text: "Caught at level 4" },
-  { dex: 13, map: "ROUTE_2", x: 4, y: 50, how: "seen", text: "Seen near Viridian Forest" },
-  { dex: 95, map: "PEWTER_CITY", x: 16, y: 18, how: "battled", text: "BROCK's ONIX. Beaten" },
-  { dex: 21, map: "ROUTE_3", x: 20, y: 6, how: "seen", text: "Seen 6 times" },
-  { dex: 39, map: "ROUTE_3", x: 40, y: 10, how: "seen", text: "Seen twice" },
-  { dex: 27, map: "ROUTE_4", x: 30, y: 8, how: "caught", text: "Caught at level 9" },
-  { dex: 121, map: "CERULEAN_CITY", x: 30, y: 20, how: "battled", text: "MISTY's STARMIE. Beaten" },
-  { dex: 63, map: "ROUTE_24", x: 10, y: 20, how: "seen", text: "Seen once. It teleported away" },
-  { dex: 69, map: "ROUTE_25", x: 20, y: 6, how: "seen", text: "Seen 3 times" },
-  { dex: 17, map: "ROUTE_6", x: 10, y: 20, how: "battled", text: "A trainer's PIDGEOTTO", today: true },
-  { dex: 96, map: "ROUTE_11", x: 8, y: 8, how: "seen", text: "Seen just now", today: true },
-];
-const FINDS: { item: string; map: string; x: number; y: number; text: string; today?: boolean }[] = [
-  { item: "POTION", map: "ROUTE_1", x: 12, y: 30, text: "Lying on Route 1" },
-  { item: "TOWN MAP", map: "PALLET_TOWN", x: 4, y: 5, text: "From DAISY" },
-  { item: "HM01", map: "VERMILION_CITY", x: 18, y: 30, text: "From the S.S. ANNE's captain", today: true },
-  { item: "BICYCLE", map: "CERULEAN_CITY", x: 13, y: 26, text: "Cerulean Bike Shop", today: true },
-];
-const CHECKPOINTS: { place: string; map: string; x: number; y: number; when: string; today?: boolean }[] = [
-  { place: "Vermilion City", map: "VERMILION_CITY", x: 11, y: 4, when: "10 minutes ago", today: true },
-  { place: "Cerulean City", map: "CERULEAN_CITY", x: 19, y: 18, when: "1 hour ago", today: true },
-  { place: "Pewter City", map: "PEWTER_CITY", x: 13, y: 26, when: "Yesterday" },
-];
-const FRIEND_AT: Record<string, [string, number, number]> = { nick: ["CELADON_CITY", 20, 12], sam: ["ROUTE_3", 30, 8] };
-const TRAIL = ["PALLET_TOWN", "ROUTE_1", "VIRIDIAN_CITY", "ROUTE_2", "PEWTER_CITY", "ROUTE_3", "ROUTE_4", "CERULEAN_CITY", "ROUTE_5", "ROUTE_6", "VERMILION_CITY"];
-const TODAY_FROM = 7;
 
 type LayerId = "places" | "mons" | "finds" | "trail" | "saves" | "friends" | "wild";
 const LAYERS: [LayerId, string, string][] = [
@@ -96,7 +65,7 @@ export function MapScreen({ focus }: { focus?: string }) {
   const [layers, setLayers] = useState<Record<LayerId, boolean>>({ places: true, mons: true, finds: false, trail: false, saves: false, friends: true, wild: false });
   const [today, setToday] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
-  const partly = useMemo(() => new Set(["ROUTE 11"]), []);
+  const { encounters: ENCOUNTERS, finds: FINDS, checkpoints: CHECKPOINTS, friendsAt: FRIEND_AT, trail: TRAIL, todayFrom: TODAY_FROM, partly } = model.layers;
   const fog = useMemo(() => paintFog(map, model.visited, partly).toDataURL(), [map, model.visited, partly]);
   const here = map.at(model.here.map, model.here.x, model.here.y);
   const [view, setView] = useState(() => {
@@ -305,6 +274,7 @@ export function MapScreen({ focus }: { focus?: string }) {
 function MapCard({ sel, map, onClose, go, friend, saves }: { sel: Sel | null; map: WorldMap; onClose(): void; go(dex: number): void; friend(id: string): void; saves(): void }) {
   const env = useEnv();
   const { model } = env;
+  const { encounters: ENCOUNTERS, finds: FINDS, checkpoints: CHECKPOINTS } = model.layers;
   if (!sel)
     return (
       <div className="m-mapcard hint">

@@ -11,8 +11,8 @@ export const ID = { POKE_BALL: 4, TOWN_MAP: 5, BICYCLE: 6, ANTIDOTE: 0x0b, SUPER
 export const heals = (it: Item) => it.kind === "Healing";
 export const isMachine = (it: Item) => it.id >= ID.HM01;
 
-/** Who can learn what: from the ROM's TM/HM flags in the real build. */
-export const canLearn = (m: Mon, item: number) => item === ID.HM01 && (m.dex === 32 || m.dex === 1 || m.dex === 69);
+/** Who can learn what: the model's answer (the ROM's TM/HM flags in the real game). */
+export const canLearn = (env: MenuEnv, m: Mon, item: number) => env.model.canLearn(m.dex, item);
 
 function done(env: MenuEnv, nav: Nav, line: string, close = false) {
   env.toast(line);
@@ -28,7 +28,7 @@ export function monVerbs(env: MenuEnv, nav: Nav, i: number, purpose?: Purpose): 
     return [{ label: `Use ${niceItem(it.name)} on ${niceMon(m.name)}`, note: battle ? "Uses your turn" : undefined, run: () => (done(env, nav, actions.useItem(it.id, i), battle), battle || nav.back()) }];
   }
   if (purpose && "teach" in purpose)
-    return [{ label: `Teach it to ${niceMon(m.name)}`, off: canLearn(m, purpose.teach) ? undefined : `${niceMon(m.name)} can't learn it`, run: () => (done(env, nav, actions.teach(purpose.teach, i)), nav.replace({ k: "mon", i })) }];
+    return [{ label: `Teach it to ${niceMon(m.name)}`, off: canLearn(env, m, purpose.teach) ? undefined : `${niceMon(m.name)} can't learn it`, run: () => (done(env, nav, actions.teach(purpose.teach, i)), nav.replace({ k: "mon", i })) }];
   if (purpose && "giftTo" in purpose) {
     const f = model.friends.find((x) => x.id === purpose.giftTo)!;
     return [{ label: `Send ${niceMon(m.name)} to ${f.name}`, off: model.team.length < 2 ? "Keep one with you" : undefined, run: () => (done(env, nav, actions.gift(f.id, { mon: i })), nav.reset({ k: "friend", id: f.id })) }];

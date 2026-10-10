@@ -6,7 +6,6 @@ import { BallMark } from "../icons.tsx";
 import { useNav } from "../nav.tsx";
 import { heightText, weightText } from "../../dex/catalogue.ts";
 import { Page, Pixel, ReadButton, Row, Seg, Types } from "../ui.tsx";
-import { SAMPLE_LEARNS } from "../sample.ts";
 
 type Filter = "all" | "caught" | "seen";
 
@@ -102,7 +101,7 @@ export function EntryScreen({ dex }: { dex: number }) {
       </Page>
     );
 
-  const learns = SAMPLE_LEARNS[dex];
+  const learns = env.model.learns(dex);
   return (
     <Page title={name} meta={dexNo(dex)}>
       <div className="m-hero" style={{ ["--type" as string]: typeTint(e.types[0]!) }}>
