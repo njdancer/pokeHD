@@ -9,15 +9,27 @@ export const QUALITY_PATCHES: Record<Quality, object> = {
   full: {},
   mobile: {
     ao: { resolution: 0.25 },
-    render: { antialias: "fxaa" },
+    // At most 1.5 rendered pixels per CSS pixel: a 3× iPhone keeps its 1.5 (2×2 screen pixels
+    // each), and a 2× iPad renders at 1× instead of 2×, a quarter of the pixels. A 12.9" iPad at
+    // 2× is 2048×2732, four times an iPhone's buffer, on an older GPU.
+    render: { antialias: "fxaa", maxPixelRatio: 1.5 },
   },
 };
 
-/** `?quality=full|mobile` wins; otherwise phones and tablets (a coarse pointer, no hover) get mobile. */
+/**
+ * Phones and tablets: a coarse pointer and no hover, or an iPad with a trackpad or mouse, which
+ * reports hover and, like any iPad by default, a Mac's user agent. Macs have no touch points.
+ */
+export function isTouchDevice(env: { matchMedia(query: string): { matches: boolean }; navigator: { maxTouchPoints: number; userAgent: string } } = globalThis as never): boolean {
+  if (env.matchMedia("(pointer: coarse) and (hover: none)").matches) return true;
+  return env.navigator.maxTouchPoints > 1 && /Macintosh/.test(env.navigator.userAgent);
+}
+
+/** `?quality=full|mobile` wins; otherwise phones and tablets get mobile. */
 export function defaultQuality(): Quality {
   const asked = new URLSearchParams(location.search).get("quality");
   if (asked === "full" || asked === "mobile") return asked;
-  return matchMedia("(pointer: coarse) and (hover: none)").matches ? "mobile" : "full";
+  return isTouchDevice() ? "mobile" : "full";
 }
 
 /**
