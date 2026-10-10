@@ -11,6 +11,7 @@ import { DexGuard } from "./dex-guard.ts";
 import { EraseGuard } from "./erase-guard.ts";
 import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
+import { JournalHooks } from "./journal-hooks.ts";
 import { LinkPort } from "./link.ts";
 import type { FromWorker, FromWorklet, ToWorker, ToWorklet, Watch } from "./protocol.ts";
 
@@ -37,6 +38,7 @@ let autosave: AutoSave | undefined;
 let guard: EraseGuard | undefined;
 let controls: Controls | undefined;
 let dex: DexGuard | undefined;
+let journal: JournalHooks | undefined;
 let rom: Uint8Array | undefined;
 let scriptText = false;
 
@@ -121,6 +123,8 @@ async function handle(data: ToWorker) {
             post({ type: "gift", event });
           },
         });
+        // After the gift desk, so its SafePoint calls are known as the page's.
+        journal = data.journal ? new JournalHooks(gb, { rom: data.rom, emit: (event) => post({ type: "journal", event }) }) : undefined;
         autosave = new AutoSave(gb, {
           rom: data.rom,
           skipped: (why) => post({ type: "autosave-skipped", reason: why }),
@@ -223,6 +227,7 @@ async function handle(data: ToWorker) {
         break;
       case "load-state":
         gb?.loadState(data.state);
+        journal?.resync();
         break;
       case "resume-point": {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.

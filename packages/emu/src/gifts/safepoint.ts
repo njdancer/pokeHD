@@ -76,6 +76,11 @@ export class SafePoint {
     return safe;
   }
 
+  /** True while `gb`'s queue, if it has one, is mid-call. Doesn't make a queue (or a hook). */
+  static callingOn(gb: GameBoy): boolean {
+    return shared.get(gb)?.calling ?? false;
+  }
+
   readonly #gb: GameBoy;
   readonly #queue: Job[] = [];
   readonly #remove: () => void;
