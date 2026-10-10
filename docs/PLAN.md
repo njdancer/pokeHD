@@ -25,6 +25,7 @@ data (`p2-text-read`, `p2-battle-read`); battles draw in HD (`p2-battles`, D28).
 | `p2-tapfirst` | Tap-first UI (D32): own start screen, Oak in HD, keyboard names, real buttons | Nick's pick of panel look (`/dev/ui`) |
 | `p2-slots` | Any number of saves per ROM, a save manager and a new intro with Resume (D39) | Nick's pick of the intro (`/dev/saves`); settings wait on the Pokédex menu's |
 | `p2-dex-menu` | One menu around the Pokédex (D40): game hooks, play journal and world map, the menu on `/dev/menu` | Nick's pick of the hi-fi design |
+| `p2-save-lock` | One device per save: a lease with a heartbeat, takeover, quiet ghosts leave (D41) | Done |
 | `p4-bundle` | Code-splitting and Playwright screenshot regression tests | — |
 | `p4-vlm-colour` | Sprite colour and relief models, on Nick's Mac (brief: project file `plan/vision-model.md`) | Bake-off results for Nick |
 

@@ -3,6 +3,7 @@
 import {
   CloseCode,
   parseClientMessage,
+  ROOM_QUIET_MS,
   type Gift,
   type PlayerInfo,
   type Presence,
@@ -85,6 +86,15 @@ export function receive(peers: readonly Peer[], from: Peer, frame: string | Arra
       gifts?.delete(from.player.id, message.id);
       return;
   }
+}
+
+/**
+ * Peers not heard from (no ping, no message) for ROOM_QUIET_MS, given when each was last heard:
+ * a phone put to sleep or a closed laptop whose socket the network hasn't ended yet. The room
+ * closes them, so their ghosts leave the world.
+ */
+export function quietPeers<P>(peers: readonly P[], lastHeard: (p: P) => number, now: number): P[] {
+  return peers.filter((p) => now - lastHeard(p) >= ROOM_QUIET_MS);
 }
 
 /** `leaver` closed. Unless the player is still connected elsewhere, they've left. */

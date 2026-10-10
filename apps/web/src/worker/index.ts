@@ -3,10 +3,12 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { sendSignIn, signInLink } from "./directory/mail.ts";
 import { cleanEmail, type CodeKind, type Player } from "./directory/store.ts";
 import { PLAYER_ID_HEADER, PLAYER_NAME_HEADER } from "./room/do.ts";
+import { locksApi } from "./locks/api.ts";
 import { savesApi } from "./saves/saves.ts";
 
 export { Directory } from "./directory/do.ts";
 export { Room } from "./room/do.ts";
+export { SaveLocks } from "./locks/do.ts";
 
 type Bindings = Env & { DEV_ROM_TOKEN?: string; ADMIN_TOKEN?: string };
 type Ctx = Context<{ Bindings: Bindings }>;
@@ -114,6 +116,8 @@ app.get("/room", async (c) => {
   return room.fetch(new Request(c.req.raw, { headers }));
 });
 
+/** One device per save (D41): leases on the player's saves, kept by their own SaveLocks object. */
+app.route("/saves", locksApi<Bindings>(currentPlayer, (c, id) => c.env.LOCKS.getByName(id)));
 /** Cloud backup of the player's battery saves, per ROM. */
 app.route("/saves", savesApi<Bindings>(currentPlayer));
 

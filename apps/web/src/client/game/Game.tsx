@@ -41,6 +41,7 @@ import { cloudBackup } from "../saves/cloud-save.ts";
 import { loadSave, openSaveSlot, storeSave } from "../saves/save-store.ts";
 import { EarlierSaves } from "../saves/EarlierSaves.tsx";
 import { keepSave } from "../saves/history.ts";
+import { SaveLock, type LockHolder } from "../saves/lock.ts";
 import { giftStorage } from "../saves/gift-store.ts";
 import {
   deleteResumePoint,
@@ -71,6 +72,7 @@ import { NamePrompt } from "./NamePrompt.tsx";
 import { StartScreen } from "./StartScreen.tsx";
 import { IntroStage } from "./IntroStage.tsx";
 import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
+import { LockScreen } from "./LockScreen.tsx";
 import { Starter, type StartChoice } from "./onboarding.ts";
 import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
@@ -298,6 +300,15 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const starterRef = useRef<Starter | null>(null);
   /** The save the start screen offers to continue. */
   const [startSave, setStartSave] = useState<SaveSummary | null>(null);
+  /**
+   * One device per save (D41): another device has this save (the game waits to start), is
+   * keeping its progress for a takeover, or has taken it over from this one (the game stopped).
+   */
+  const [lockUi, setLockUi] = useState<{ kind: "in-use" | "waiting" | "lost"; other: LockHolder; mine: string } | null>(null);
+  /** Takes the save over from the device that has it, while the game waits to start. */
+  const takeRef = useRef(() => {});
+  /** The next start takes the save over at once ("Play here" after it was taken from this one). */
+  const takeNextRef = useRef(false);
   const introCanvas = useRef<HTMLCanvasElement>(null);
   // Bumped by a .sav import: restarts the emulator on the imported save.
   const [boot, setBoot] = useState(0);
@@ -379,6 +390,13 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     let stopResumePoints = () => {};
     /** Before the game goes (another slot, the page leaving it): its save and a last resume point. */
     let finish = async () => {};
+    let lock: SaveLock | null = null;
+    /** This device holds the save (signed in and online): let it go when the game goes. */
+    let holding = false;
+    /** The page is closing: the save is free for another device straight away. */
+    const onClosing = () => {
+      if (holding) void lock?.release(true);
+    };
     let stopJournal = () => {};
     /** Takes a resume point once a save has finished, so the newest point always holds it. */
     let pointAfterSave = () => {};
@@ -412,18 +430,43 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       live = createLiveWorld(world);
       // Asks the browser not to clear the save under storage pressure (Safari's eviction).
       void navigator.storage?.persist?.().catch(() => false);
+      // One device per save (D41): claim it first. While another device has it, the game waits
+      // here, and starts once that one lets go or this one takes it over. Signed out or offline,
+      // nobody can be asked and the game plays as before.
+      const l = (lock = new SaveLock(romKey));
+      const claim = l.claim((s) => !disposed && setLockUi({ kind: s.state, other: s.by, mine: l.name }));
+      takeRef.current = claim.take;
+      if (takeNextRef.current) {
+        takeNextRef.current = false;
+        claim.take();
+      }
+      const claimed = await claim.done;
+      if (disposed) {
+        if (claimed.state === "held") void l.release();
+        return;
+      }
+      holding = claimed.state === "held";
+      setLockUi(null);
+
       // A device with no save (a new phone, or storage the browser cleared) gets the cloud's
-      // back before the game starts, for signed-in players.
+      // back before the game starts, for signed-in players. So does one holding the save whose
+      // cloud copy is newer: with one device per save, that's another device's later play, and
+      // the game carries on from it. What this device had stays in Earlier saves.
       let restored = false;
       /** Whether this slot is known to have no save anywhere (here, or a cloud that answered). */
       let noSave = false;
-      if (!(await loadSave(romKey).catch(() => null))) {
+      const local = await loadSave(romKey).catch(() => null);
+      if (!local || holding) {
         const backup = cloudBackup(romKey);
         const status = await within(backup.status(), CLOUD_WAIT_MS, null);
-        noSave = status?.kind === "none" || status?.kind === "signed-out";
-        if (status?.kind === "newer" && !(await loadSave(romKey))) {
-          await backup.restore(status.cloud);
-          restored = true;
+        if (!local) noSave = status?.kind === "none" || status?.kind === "signed-out";
+        if (status?.kind === "newer") {
+          const here = await loadSave(romKey);
+          if (!here || holding) {
+            if (here) await keepSave(romKey, here, "before-restore").catch(() => {});
+            await backup.restore(status.cloud);
+            restored = true;
+          }
         }
       }
       const slot = await openSaveSlot(romKey);
@@ -728,6 +771,24 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         removeEventListener("pagehide", onPageHide);
       };
 
+      // The save's heartbeat. If another device has it now, this game stops where it is: its
+      // progress is kept (a resume point, the save to the cloud), then the save is let go.
+      if (holding) {
+        l.keep((s) => {
+          if (disposed) return;
+          h.setPaused(true);
+          setLockUi({ kind: "lost", other: s.state === "lost" ? s.to : s.by, mine: l.name });
+          void (async () => {
+            await finish().catch(() => {});
+            stopResumePoints();
+            await cloudBackup(romKey).flush(true).catch(() => {});
+            holding = false;
+            if (s.state === "lost") await l.release();
+          })();
+        });
+        addEventListener("pagehide", onClosing);
+      }
+
       // Friends, for players signed in by email (D23); everyone else plays alone.
       void me().then(
         (account) => {
@@ -863,6 +924,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
 
     return () => {
       disposed = true;
+      lock?.stop();
+      removeEventListener("pagehide", onClosing);
       stopResumePoints();
       stopJournal();
       cancelAnimationFrame(raf);
@@ -875,7 +938,15 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       // a while if the emulator doesn't answer.
       const h = host;
       h?.setPaused(true);
-      void Promise.race([finish().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]).then(() => h?.dispose());
+      const l = lock;
+      const held = holding;
+      void Promise.race([finish().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]).then(async () => {
+        h?.dispose();
+        if (held) {
+          await cloudBackup(romKey).flush(true).catch(() => {});
+          await l?.release();
+        }
+      });
       hostRef.current = null;
       engine?.dispose();
       live?.dispose();
@@ -922,9 +993,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   }, [ready, boot]);
   const loaderGone = ready && loaderGoneFor === boot;
   // The menu in front shows its own loading screen, and fades it out once this says it's ready.
+  // Waiting on another device counts: the page's menu can show meanwhile.
+  const waitingOnDevice = lockUi?.kind === "in-use" || lockUi?.kind === "waiting";
   useEffect(() => {
-    if (ready) onReady?.();
-  }, [ready, onReady]);
+    if (ready || waitingOnDevice) onReady?.();
+  }, [ready, waitingOnDevice, onReady]);
 
   const onTouch = useMemo(() => (mask: number) => input?.setTouchMask(mask), [input]);
   // Without an emulator (it's restarting) the panel just stays on "Reading your game…".
@@ -1182,6 +1255,18 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       {/* The pad hides while Settings is open so it can't cover the panel's forms (and unmounting releases any held button). */}
       {/* The pad is for the world: anything with buttons of its own (HD menus, messages, the start and names) hides it. */}
       {input && touch && !settings && !(hdText && !noHd) && !nameAsk && !onboarding && !dex && !menuOpen && !ask && <TouchPad onChange={onTouch} />}
+      {lockUi && !held && (
+        <LockScreen
+          {...lockUi}
+          onTake={() => {
+            if (lockUi.kind === "lost") {
+              takeNextRef.current = true;
+              setLockUi(null);
+              setBoot((n) => n + 1);
+            } else takeRef.current();
+          }}
+        />
+      )}
       {ready && held === undefined && (onboarding?.phase === "choose" || onboarding?.phase === "starting") && (
         <StartScreen
           save={startSave}

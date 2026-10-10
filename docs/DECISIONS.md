@@ -644,3 +644,29 @@ the mechanism", not orchestrate the existing UI). Mechanism chosen by Claude.
   sheets while the game's rules decide what happens. Lists the page doesn't ask are left to the game.
 - **Opt-in.** Only a page that passes `onAsk` to `EmulatorHost` turns them on; the live game is
   unchanged until Nick picks the menu.
+
+## D41. One device per save: a lease with a heartbeat, handed over on request
+
+**Status:** asked for by Nick on 2026-10-10 (two devices must not play the same save at once; a
+heartbeat; a quiet device loses the save and its ghost quickly). The details below are Claude's
+calls, flagged for his review.
+
+- **A lease per save, per player.** A device (a browser tab: its ID lives in sessionStorage, so a
+  reload still holds what it held) claims a save before the game starts and renews it every 5 s
+  (`POST /api/saves/:key/lock`). Without a renewal for 15 s the lease lapses. Leases live in a
+  `SaveLocks` Durable Object, one per player, so two claims can't both win. Different saves (or
+  different players' copies) never block each other.
+- **Busy means wait or take over.** A device that finds the save busy says where ("Playing on the
+  iPhone") and starts by itself once that device closes it. "Play here" takes it over: the holder
+  hears on its next heartbeat, stops, keeps its progress (a resume point, the save to the cloud),
+  and lets go; the taker then starts from that spot. A holder that heard but never lets go loses
+  the save after 10 s; one that never heard (asleep) keeps it until its lease lapses, so two
+  devices never play at once.
+- **Holding the save means the cloud is the latest.** With the save held, a newer cloud save can
+  only be another device's later play, so the game carries on from it by itself (what this device
+  had goes to Earlier saves). Before, it was offered to grown-ups.
+- **Never stop a child for the network.** Signed out or offline there's no service to ask: the
+  game plays as before. A device that can't reach the service keeps playing; if another device
+  took the save meanwhile, the first stops when it's back online.
+- **Ghosts go with the heartbeat.** Devices ping the room every 5 s; the room checks every 5 s and
+  closes a connection not heard from for 15 s, so a phone put in a pocket leaves the world.

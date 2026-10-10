@@ -36,8 +36,13 @@
   "durable_objects": {
     "bindings": [
       { "name": "DIRECTORY", "class_name": "Directory" },
-      { "name": "ROOM", "class_name": "Room" }
+      { "name": "ROOM", "class_name": "Room" },
+      // One device per save (D40): each player's save leases.
+      { "name": "LOCKS", "class_name": "SaveLocks" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Directory", "Room"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Directory", "Room"] },
+    { "tag": "v2", "new_sqlite_classes": ["SaveLocks"] }
+  ]
 }
