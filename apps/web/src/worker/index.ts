@@ -151,7 +151,11 @@ app.post("/errors", async (c) => {
 // another site can't make Nick's browser call them.
 
 app.use("/admin/*", async (c, next) => {
-  const allowed = (await bearerMatches(c, c.env.ADMIN_TOKEN)) || isAdmin(c, await currentPlayer(c));
+  const allowed =
+    (await bearerMatches(c, c.env.ADMIN_TOKEN)) ||
+    isAdmin(c, await currentPlayer(c)) ||
+    // Claude's cloud sandboxes only have DEV_ROM_TOKEN; Nick let it read crash reports (`pnpm errors`).
+    (c.req.method === "GET" && c.req.path.startsWith("/api/admin/errors") && (await bearerMatches(c, c.env.DEV_ROM_TOKEN)));
   if (!allowed) return c.text("Not found", 404);
   await next();
 });
