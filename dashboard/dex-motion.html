@@ -67,6 +67,9 @@ select.btn { padding-right: 6px; }
 .stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
 .stage.framed { border-radius: 44px; box-shadow: 0 0 0 10px #0d0b09, 0 0 0 11px #3b342d, 0 30px 80px #000a; }
 .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#dex { z-index: 2; }
+.page { z-index: 3; }
+.badge { z-index: 4; }
 .dim { position: absolute; inset: 0; background: #1a1006; opacity: 0; pointer-events: none; }
 .page {
   position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; opacity: 0; overflow: hidden;
@@ -124,6 +127,19 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
 
 .stage-wrap.full { position: fixed; inset: 0; z-index: 10; }
 .exit-full { position: fixed; z-index: 11; left: 12px; top: calc(12px + env(safe-area-inset-top, 0px)); }
+/* Alerts on the closed dex */
+.badge { position: absolute; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; display: grid; place-items: center;
+  background: #e8473b; color: #fff; font: 900 13px/1 var(--font-ui); border: 2px solid #fffaf0; box-shadow: 0 2px 6px #4a2a0a66;
+  translate: -50% -50%; pointer-events: none; transition: scale .25s cubic-bezier(.3,1.6,.5,1), opacity .2s; }
+.badge.off { scale: 0; opacity: 0; }
+.pin { position: absolute; z-index: 1; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 30px 0 12px; border-radius: 14px 6px 6px 14px;
+  background: #fffaf0; color: var(--brown); border: 2px solid var(--sand); box-shadow: 0 3px 10px #4a2a0a55; font: 800 14px/1 var(--font-ui);
+  white-space: nowrap; transition: translate .45s cubic-bezier(.2,1.2,.3,1), opacity .25s; cursor: pointer; }
+/* It slides out from behind the dex. */
+.pin.off { translate: 40% 0; opacity: 0; pointer-events: none; }
+.pin i { width: 22px; height: 22px; border-radius: 7px; flex: none; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggles .btn { font-size: .8rem; padding: 5px 10px; }
 @media (max-width: 820px) {
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; height: auto; }
   .left { grid-template-rows: 62vh auto; }
@@ -168,6 +184,8 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
           </div>
           <small>A stand-in page, to judge the settle.</small>
         </div>
+        <div class="badge off" id="badge">0</div>
+        <div class="pin off" id="pin"><i id="pin-icon"></i><span id="pin-text"></span></div>
         <div class="hint" id="hint">Tap the dex</div>
         <div class="loading" id="loading">Loading the model…</div>
       </div>
@@ -200,6 +218,20 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
     <section>
       <h3>Open (in place)</h3>
       <div class="fields" id="open-fields"></div>
+    </section>
+
+    <section>
+      <h3>Alerts on the closed dex</h3>
+      <p class="note">Send some news, then mix the ways the closed dex can show it. Any combination works.</p>
+      <div class="toggles" id="alert-events">
+        <button class="btn" type="button" data-ev="gift">+ Gift arrives</button>
+        <button class="btn" type="button" data-ev="friend">+ Friend comes online</button>
+        <button class="btn" type="button" data-ev="save">+ Newer save</button>
+        <button class="btn" type="button" data-ev="clear">Clear</button>
+      </div>
+      <div class="toggles" id="alert-styles"></div>
+      <div class="fields" id="alert-fields"></div>
+      <p class="note">Lights: red is a gift, green a friend, yellow a save. The badge counts everything. The toast shows the newest and opens the dex when tapped.</p>
     </section>
 
     <section>
@@ -257,6 +289,8 @@ const DEFAULTS = {
   closed: { width: 58, top: 12, right: 12, tiltX: -12, tiltY: -22, tiltZ: 4 },
   open: { fill: 0.94, offsetY: 0 },
   close: { speed: 1.4 },
+  // 1 on, 0 off. period: one pulse or blink (ms); peek: how far the lid lifts, every peekEvery ms.
+  alerts: { lens: 1, lights: 1, peek: 0, badge: 1, toast: 0, period: 1400, glow: 2.5, peekAmount: 0.22, peekMs: 700, peekEvery: 3200 },
 };
 const PRESETS = {
   linear: [0, 0, 1, 1],
@@ -401,6 +435,7 @@ async function initThree() {
   mixer = new THREE.AnimationMixer(gltf.scene);
   mixer.clipAction(clip).play();
   screenMesh = gltf.scene.getObjectByName("Screen");
+  setupAlerts(gltf.scene);
 
   device.updateMatrixWorld(true);
   setOpen(0); shutBox = new THREE.Box3().setFromObject(gltf.scene);
@@ -459,8 +494,12 @@ function pose(ms) {
   device.scale.setScalar(s0 * Math.pow(s1 / s0, scale.e) * squash);
   const r = 1 - turn.e;
   device.rotation.set(deg(V.closed.tiltX) * r, deg(V.closed.tiltY) * r + deg(V.tracks.turn.swing) * Math.sin(Math.PI * turn.u), deg(V.closed.tiltZ) * r);
-  setOpen(open.e);
+  // Alerts show while it's shut and fade as it starts to move.
+  const shut = Math.max(0, 1 - move.e * 4);
+  const now = alertPhase === null ? performance.now() : news.since + alertPhase;
+  setOpen(Math.max(open.e, peekAt(now) * shut));
   device.updateMatrixWorld(true);
+  showAlerts(now, shut, b);
   dimEl.style.opacity = String(V.tracks.dim.amount * Math.min(1, Math.max(0, dim.e)));
 
   // The page over the screen.
@@ -495,6 +534,110 @@ function quadTransform(width, height, quad) {
   const d = y1 - y0 + g * y1, e = y3 - y0 + h * y3, f = y0;
   const m = [a / width, d / width, 0, g / width, b / height, e / height, 0, h / height, 0, 0, 1, 0, c, f, 0, 1];
   return `matrix3d(${m.map((n) => +n.toFixed(8)).join(",")})`;
+}
+
+// ---------- Alerts ----------
+const news = { gift: 0, friend: 0, save: 0, newest: null, since: 0 };
+/** Pins the alerts' clock this many ms after the first news (for screenshots); null runs it. */
+let alertPhase = null;
+const KIND = {
+  gift: { led: "LedRed", colour: "#e8473b", text: () => "A gift from Sam!" },
+  friend: { led: "LedGreen", colour: "#3fb24f", text: () => "Mia is playing" },
+  save: { led: "LedYellow", colour: "#e6b450", text: () => "A newer save is ready" },
+};
+let lensMat, lensHalo, leds = {};
+function haloTexture() {
+  const c = document.createElement("canvas"); c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  r.addColorStop(0, "#ffffffff"); r.addColorStop(0.25, "#ffffff99"); r.addColorStop(1, "#ffffff00");
+  g.fillStyle = r; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+function halo(mesh, colour, size) {
+  mesh.geometry.computeBoundingSphere();
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloMap, color: colour, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false, opacity: 0 }));
+  sp.position.copy(mesh.geometry.boundingSphere.center);
+  sp.scale.setScalar(mesh.geometry.boundingSphere.radius * size);
+  sp.renderOrder = 10;
+  mesh.add(sp);
+  return sp;
+}
+let haloMap;
+function setupAlerts(root) {
+  haloMap = haloTexture();
+  const lens = root.getObjectByName("Lens");
+  if (lens) {
+    lensMat = lens.material;
+    lensMat.emissive = new THREE.Color(0x3fb6ff);
+    lensMat.emissiveIntensity = 0;
+    lensHalo = halo(lens, 0x6cc8ff, 5);
+  }
+  for (const [kind, k] of Object.entries(KIND)) {
+    const m = root.getObjectByName(k.led);
+    if (!m) continue;
+    leds[kind] = { mat: m.material, base: m.material.emissiveIntensity, halo: halo(m, new THREE.Color(k.colour), 16) };
+  }
+}
+const pending = () => news.gift + news.friend + news.save;
+/** How far the lid is lifted for a peek right now (0 shut). */
+function peekAt(now) {
+  const A = V.alerts;
+  if (!A.peek || !pending()) return 0;
+  const phase = (now - news.since) % Math.max(A.peekEvery, A.peekMs + 100);
+  if (phase > A.peekMs) return 0;
+  return A.peekAmount * Math.sin(Math.PI * (phase / A.peekMs)) ** 2;
+}
+function showAlerts(now, shut, b) {
+  const A = V.alerts, any = pending() > 0;
+  const wave = 0.5 - 0.5 * Math.cos((2 * Math.PI * (now - news.since)) / A.period);
+  if (lensMat) {
+    const on = A.lens && any ? wave * shut : 0;
+    lensMat.emissiveIntensity = on * A.glow;
+    lensHalo.material.opacity = on * 0.9;
+  }
+  for (const [kind, l] of Object.entries(leds)) {
+    // With Lights on, the LEDs rest dim and the ones with news blink.
+    const blink = (Math.sin((2 * Math.PI * (now - news.since)) / A.period) > -0.2) ? 1 : 0.1;
+    const lit = A.lights ? (news[kind] ? blink : 0.08) : 1;
+    l.mat.emissiveIntensity = l.base * (A.lights ? lerp(1, lit, shut) : 1);
+    l.halo.material.opacity = A.lights && news[kind] ? blink * shut * 0.9 : 0;
+  }
+  const badge = $("badge");
+  badge.classList.toggle("off", !(A.badge && any && shut > 0.5));
+  badge.textContent = String(pending());
+  badge.style.left = b.x + 4 + "px"; badge.style.top = b.y + b.h - 4 + "px";
+  const pin = $("pin");
+  pin.classList.toggle("off", !(A.toast && news.newest && shut > 0.5));
+  pin.style.right = SW - b.x - 22 + "px"; pin.style.top = b.y + b.h / 2 - 20 + "px";
+}
+for (const btn of document.querySelectorAll("#alert-events .btn")) {
+  btn.onclick = () => {
+    const ev = btn.dataset.ev;
+    if (ev === "clear") { news.gift = news.friend = news.save = 0; news.newest = null; return; }
+    if (t > 0) { t = 0; dir = 0; }
+    if (!pending()) news.since = performance.now();
+    news[ev] = ev === "save" ? 1 : news[ev] + 1;
+    news.newest = ev;
+    $("pin-text").textContent = KIND[ev].text();
+    $("pin-icon").style.background = KIND[ev].colour;
+  };
+}
+const STYLES = [["lens", "Lens glow"], ["lights", "Lights"], ["peek", "Lid peek"], ["badge", "Number badge"], ["toast", "Toast"]];
+function buildAlertStyles() {
+  const host = $("alert-styles"); host.innerHTML = "";
+  for (const [k, label] of STYLES) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = label;
+    b.setAttribute("aria-pressed", String(!!V.alerts[k]));
+    b.onclick = () => { V.alerts[k] = V.alerts[k] ? 0 : 1; b.setAttribute("aria-pressed", String(!!V.alerts[k])); save(); };
+    host.append(b);
+  }
+  const f = $("alert-fields"); f.innerHTML = "";
+  field(f, "Pulse ms", () => V.alerts.period, (v) => (V.alerts.period = Math.max(200, v)), { step: 50, wide: true, range: [400, 3000] });
+  field(f, "Lens glow", () => V.alerts.glow, (v) => (V.alerts.glow = Math.max(0, v)), { step: 0.1, wide: true, range: [0, 6] });
+  field(f, "Peek amount", () => V.alerts.peekAmount, (v) => (V.alerts.peekAmount = Math.min(1, Math.max(0, v))), { step: 0.01, wide: true, range: [0, 0.4] });
+  field(f, "Peek ms", () => V.alerts.peekMs, (v) => (V.alerts.peekMs = Math.max(100, v)), { step: 50, wide: true, range: [200, 2000] });
+  field(f, "Peek every ms", () => V.alerts.peekEvery, (v) => (V.alerts.peekEvery = Math.max(300, v)), { step: 100, wide: true, range: [800, 8000] });
 }
 
 // ---------- Playback ----------
@@ -539,6 +682,7 @@ stage.addEventListener("pointerdown", (e) => {
   const x = (e.clientX - r.left) / stageScale, y = (e.clientY - r.top) / stageScale;
   const b = buttonRect();
   const pad = 10;
+  if (t === 0 && e.target.closest(".pin")) return playOpen();
   if (t === 0 && x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad) playOpen();
   else if (t > 0 && dir >= 0) playClose();
 });
@@ -760,12 +904,12 @@ $("apply").onclick = () => {
   } catch { toast("That isn't valid JSON. Paste the whole block from Copy JSON."); }
 };
 
-function buildAll() { buildTimeline(); buildCurve(); buildFields(); writeJson(); pageSized = false; }
+function buildAll() { buildTimeline(); buildCurve(); buildFields(); buildAlertStyles(); writeJson(); pageSized = false; }
 
 layoutStage();
 buildAll();
 new ResizeObserver(() => placeBars()).observe(tl);
 requestAnimationFrame(frame);
 initThree().catch((e) => { $("loading").textContent = "The model didn't load: " + e.message; console.error(e); });
-window.__dexMotion = { get t() { return t; }, set t(v) { t = v; dir = 0; }, V: () => V, ready: () => ready };
+window.__dexMotion = { get t() { return t; }, set t(v) { t = v; dir = 0; }, V: () => V, ready: () => ready, alertsAt: (ms) => (alertPhase = ms) };
 </script>
