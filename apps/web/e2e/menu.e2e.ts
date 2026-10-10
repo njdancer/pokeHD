@@ -119,7 +119,7 @@ test("the Pokédex menu shows the game and works it through its routines", async
   await menu.getByRole("button", { name: /Use it on/ }).click();
   await menu.getByRole("button", { name: /Pikachu/i }).first().click();
   await menu.getByRole("button", { name: /Use Potion on Pikachu/i }).click();
-  await expect(page.getByRole("status")).toContainText(/recovered by 20/i, { timeout: 20_000 });
+  await expect(page.locator(".m-toast")).toContainText(/recovered by 20/i, { timeout: 20_000 });
   await page.screenshot({ path: "test-results/menu-potion.png" });
   await tab("Inventory").click();
   await expect(menu.getByRole("meter", { name: "HP" }).nth(1)).toHaveAttribute("aria-valuenow", "26", { timeout: 5_000 });

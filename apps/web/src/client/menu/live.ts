@@ -349,6 +349,12 @@ export class LiveActions implements MenuActions {
   constructor(rom: Uint8Array, host: { readonly current: LiveHost }) {
     this.#rom = rom;
     this.#ref = host;
+    // The screens pass the methods on unbound (onMove={actions.moveMon}).
+    const self = this as unknown as Record<string, unknown>;
+    for (const name of Object.getOwnPropertyNames(LiveActions.prototype)) {
+      const f = self[name];
+      if (name !== "constructor" && typeof f === "function") self[name] = f.bind(this);
+    }
   }
 
   get #host(): LiveHost {
