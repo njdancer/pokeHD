@@ -420,11 +420,13 @@ export class EmulatorHost {
    * Runs a Pokédex menu action with the game's own routine at its next overworld idle point
    * (needs `onAsk`). Resolves with what the game said, or why it didn't happen.
    */
-  act(action: GameAction): Promise<ActionResult> {
+  act(action: GameAction, signal?: AbortSignal): Promise<ActionResult> {
     const id = this.#nextId++;
     return new Promise((resolve) => {
       this.#actions.set(id, resolve);
       this.#post({ type: "action", id, action });
+      // Taken back before it started: the game drops it, and its "cancelled" answers this.
+      signal?.addEventListener("abort", () => this.#post({ type: "action-cancel", id }), { once: true });
     });
   }
 

@@ -200,4 +200,20 @@ describe.skipIf(!existsSync(ROM_PATH))("game actions (ROM)", () => {
     expect(r(gb, "wOptions")).toBe(0x41);
     void run;
   });
+
+  it("drops an action taken back before it starts", async () => {
+    const { gb } = await game();
+    const before = r(gb, "wOptions");
+    gb.write(addr("wJoyIgnore"), 0xff);
+    let result: ActionResult | undefined;
+    const actions = new GameActions(gb, { rom });
+    const cancel = actions.run({ kind: "options", options: before ^ 0x80 }, (res) => (result = res));
+    frames(gb, 10);
+    cancel();
+    gb.write(addr("wJoyIgnore"), 0);
+    frames(gb, 10);
+    expect(result).toEqual({ ok: false, reason: "cancelled", messages: [] });
+    expect(r(gb, "wOptions")).toBe(before);
+    expect(actions.pending).toBe(0);
+  });
 });

@@ -41,6 +41,8 @@ let controls: Controls | undefined;
 let dex: DexGuard | undefined;
 let rom: Uint8Array | undefined;
 let actions: GameActions | undefined;
+/** Queued actions' cancels, by the page's id. */
+const cancels = new Map<number, () => void>();
 let asks: GameAsks | undefined;
 let scriptText = false;
 
@@ -269,9 +271,19 @@ async function handle(data: ToWorker) {
       case "action": {
         const { id } = data;
         if (!actions) post({ type: "action-done", id, result: { ok: false, reason: "menu hooks are off", messages: [] } });
-        else actions.run(data.action, (result) => post({ type: "action-done", id, result }));
+        else
+          cancels.set(
+            id,
+            actions.run(data.action, (result) => {
+              cancels.delete(id);
+              post({ type: "action-done", id, result });
+            }),
+          );
         break;
       }
+      case "action-cancel":
+        cancels.get(data.id)?.();
+        break;
       case "ask-answer":
         asks?.answer(data.id, data.answer);
         break;

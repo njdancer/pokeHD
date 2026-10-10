@@ -21,8 +21,11 @@ import { saveGame } from "../gifts/gifts.ts";
 import { type Job, SafePoint, type Step } from "../gifts/safepoint.ts";
 
 export type GameAction =
-  /** `mon` is the party slot, for items used on a Pokémon. */
-  | { kind: "use-item"; item: number; mon?: number }
+  /**
+   * `mon` is the party slot, for items used on a Pokémon. `answers` are the yes/no questions the
+   * item's routine asks, in order (a TM's "Teach it to a Pokémon?"); any more are answered no.
+   */
+  | { kind: "use-item"; item: number; mon?: number; answers?: boolean[] }
   | { kind: "toss-item"; item: number; quantity: number }
   /** Moves a party member from one slot to another (the rest shift up or down). */
   | { kind: "move-mon"; from: number; to: number }
@@ -119,8 +122,21 @@ export class GameActions {
     return this.#queued;
   }
 
-  run(action: GameAction, done: (result: ActionResult) => void): void {
-    const job = this.#job(action, done);
+  /**
+   * Queues the action for the next idle point. The returned function cancels it if it hasn't
+   * started yet (a page's queued tap the player took back); `done` then gets "cancelled".
+   */
+  run(action: GameAction, done: (result: ActionResult) => void): () => void {
+    let cancelled = false;
+    let started = false;
+    const job = this.#job(action, (result) => done(cancelled ? { ok: false, reason: "cancelled", messages: [] } : result));
+    const check = job.check;
+    job.check = (g) => {
+      if (cancelled) return { drop: "cancelled" };
+      const verdict = check?.(g);
+      if (!verdict) started = true;
+      return verdict;
+    };
     this.#queued++;
     const finish = job.done;
     job.done = (completed) => {
@@ -128,6 +144,9 @@ export class GameActions {
       finish?.(completed);
     };
     this.#safe.enqueue(job);
+    return () => {
+      if (!started) cancelled = true;
+    };
   }
 
   dispose(): void {
@@ -136,18 +155,21 @@ export class GameActions {
 
   #job(action: GameAction, done: (result: ActionResult) => void): Job {
     let failed: string | undefined;
-    const fail = (reason: string) => ({ drop: reason });
+    const fail = (reason: string) => {
+      failed = reason;
+      return { drop: reason };
+    };
     const finish = (completed: boolean) => {
       const messages = this.#running?.messages ?? [];
       this.#running = null;
       done(completed && !failed ? { ok: true, messages } : { ok: false, reason: failed ?? "not now", messages });
     };
-    const begin = (mon?: number) => {
-      this.#running = { mon, yesNo: [], messages: [] };
+    const begin = (mon?: number, answers: boolean[] = []) => {
+      this.#running = { mon, yesNo: [...answers], messages: [] };
     };
     switch (action.kind) {
       case "use-item": {
-        const { item, mon } = action;
+        const { item, mon, answers } = action;
         const job: Job = {
           scratch: [
             [addr("hTextID"), 1],
@@ -166,7 +188,7 @@ export class GameActions {
             {
               routine: "Bankswitch",
               before: (g) => {
-                begin(mon);
+                begin(mon, answers);
                 g.write(addr("hTextID"), TEXT_BOX);
               },
               registers: () => ({ bc: SYMBOLS.DisplayTextIDInit.bank << 8, hl: SYMBOLS.DisplayTextIDInit.address }),

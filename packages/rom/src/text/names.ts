@@ -44,6 +44,13 @@ export function itemName(rom: Uint8Array, item: number): string {
   return decodeText(rom.subarray(offset, offset + 20));
 }
 
+/** A move's name (`MoveNames`, one after another, each ended by the terminator). */
+export function moveName(rom: Uint8Array, move: number): string {
+  let offset = romOffset(SYMBOLS.MoveNames);
+  for (let i = 1; i < move; i++) while (rom[offset++] !== TERMINATOR);
+  return decodeText(rom.subarray(offset, offset + 20));
+}
+
 /** A species' name, by internal index (not Pokédex number): `MonsterNames`, 10 bytes each. */
 export function monName(rom: Uint8Array, species: number): string {
   const offset = romOffset(SYMBOLS.MonsterNames) + (species - 1) * 10;

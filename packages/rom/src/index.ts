@@ -10,3 +10,4 @@ export * from "./text/names.ts";
 export * from "./text/message.ts";
 export * from "./colour/sgb.ts";
 export * from "./dex/dex.ts";
+export * from "./dex/growth.ts";

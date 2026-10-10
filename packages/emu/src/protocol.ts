@@ -60,6 +60,8 @@ export type ToWorker =
   | { type: "gift-give"; id: string; gift: Gift }
   /** A Pokédex menu action, run with the game's own routine at the next idle point. */
   | { type: "action"; id: number; action: GameAction }
+  /** Takes back a queued action that hasn't started. */
+  | { type: "action-cancel"; id: number }
   /** The page's answer to the game's question `id`. */
   | { type: "ask-answer"; id: number; answer: AskAnswer }
   /** Takes a gift out of the game at the next idle point, then saves. */

@@ -236,6 +236,7 @@ export const ALLOWLIST: readonly string[] = [
   "GoBackToPartyMenu",
   "ItemPrices",
   "hHalveItemPrices",
+  "EvosMovesPointerTable",
   "hItemPrice",
   "hJoy7",
   "wBattleMonHP",

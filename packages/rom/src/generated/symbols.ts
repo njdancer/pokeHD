@@ -32,6 +32,7 @@ export const SYMBOLS = {
   DoorTileIDPointers: { bank: 0x06, address: 0x662c },
   EndTrainerBattle: { bank: 0x00, address: 0x3275 },
   EnemyText: { bank: 0x00, address: 0x1a72 },
+  EvosMovesPointerTable: { bank: 0x0e, address: 0x705c },
   ExternalMapEntries: { bank: 0x1c, address: 0x5313 },
   FacilitySpinnerArrows: { bank: 0x11, address: 0x5023 },
   FlagActionPredefPredef: { bank: 0x13, address: 0x7ea9 },
