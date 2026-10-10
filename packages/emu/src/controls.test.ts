@@ -71,6 +71,20 @@ describe.skipIf(!existsSync(ROM_PATH))("controls", () => {
     expect(name(gb, "wPlayerName")).toBe("Nick.J");
   });
 
+  it("turns the player for a direction pressed and let go between two frames", { timeout: 60_000 }, async () => {
+    const { gb, controls, run } = await boot();
+    playIntro(gb);
+    run(60);
+    // wSpritePlayerStateData1FacingDirection: down 0, up 4, left 8, right 12.
+    const facing = () => gb.read(0xc109);
+    for (const [button, dir] of [[Button.Up, 4], [Button.Down, 0], [Button.Left, 8], [Button.Up, 4], [Button.Down, 0]] as const) {
+      controls.setButtons(button);
+      controls.setButtons(0);
+      run(30);
+      expect(facing()).toBe(dir);
+    }
+  });
+
   it("moves the menu cursor and presses A for a tapped choice", { timeout: 60_000 }, async () => {
     const { gb, controls, run } = await boot();
     playIntro(gb);
