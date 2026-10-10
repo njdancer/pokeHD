@@ -48,6 +48,12 @@ export class Controls {
   readonly #options: ControlsOptions;
   readonly #removeHooks: (() => void)[] = [];
   #player = 0;
+  /**
+   * Buttons the player pressed that no frame has run with yet. A tap pressed and let go between
+   * two frames (a quick touch, a busy page) would otherwise never reach the game: each is held
+   * for at least the next frame.
+   */
+  #unseen = 0;
   #sent = -1;
   /** Button presses queued by taps, frame by frame. */
   #steps: Step[] = [];
@@ -120,6 +126,7 @@ export class Controls {
     // A message on the page: A or B reads on there.
     const pressed = mask & ~this.#player;
     if (this.#script?.holding && pressed & (Button.A | Button.B)) this.#options.script?.press();
+    this.#unseen |= pressed;
     this.#player = mask;
     this.#apply();
   }
@@ -186,6 +193,8 @@ export class Controls {
     const step = this.#steps[0];
     if (step && --step.frames <= 0) this.#steps.shift();
     this.#apply(step?.mask);
+    // This frame runs with them; the next has the buttons as they are by then.
+    this.#unseen = 0;
   }
 
   dispose(): void {
@@ -216,7 +225,7 @@ export class Controls {
 
   /** Sends the buttons for this frame: the page's press, else nothing while it drives, else the player's. */
   #apply(press?: number): void {
-    let mask = this.#player;
+    let mask = this.#player | this.#unseen;
     if (press !== undefined) mask = press;
     else if (this.#pressing) mask = this.#tapping(this.#pressing);
     else if (this.#asking || this.#name || this.#steps.length || this.#select || this.#script?.holding) mask = 0;
