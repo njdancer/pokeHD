@@ -5,7 +5,7 @@
 // server keeps the newest few dozen. Settings lists both, newest first.
 import { saveSummary, type SaveSummary } from "@pokehd/emu";
 import { decodeText, sha1Hex } from "@pokehd/rom";
-import { run } from "../idb.ts";
+import { run, update } from "../idb.ts";
 
 /** Why a save was kept. "save" is the periodic copy; the others come before a replacement. */
 export type HistoryReason = "save" | "replaced" | "before-import" | "before-restore" | "before-rollback";
@@ -72,7 +72,8 @@ export function shouldKeep(entries: StoredEntry[], reason: HistoryReason, sha1: 
  */
 export function keepSave(key: string, sram: Uint8Array, reason: HistoryReason, f: Fetch = fetch): Promise<boolean> {
   // Each keep reads the list and writes it back, so two at once (a periodic copy still storing
-  // while a new game saves over it) would drop one. They take turns per key instead.
+  // while a new game saves over it) would drop one. They take turns per key instead, and each
+  // reads and writes in one transaction against another tab's.
   const next = (keeping.get(key) ?? Promise.resolve()).then(() => keepNow(key, sram, reason, f));
   const settled = next.catch(() => {});
   keeping.set(key, settled);
@@ -87,15 +88,22 @@ async function keepNow(key: string, sram: Uint8Array, reason: HistoryReason, f: 
   if (!saveSummary(sram)) return false;
   const sha1 = await sha1Hex(sram);
   const now = Date.now();
-  const entries = await readLocal(key);
-  if (!shouldKeep(entries, reason, sha1, sram, now)) return false;
-  // Ids are `<takenAt>-<reason>`, so no two entries share a millisecond.
-  const takenAt = Math.max(now, ...entries.map((e) => e.takenAt + 1));
-  const entry: StoredEntry = { takenAt, reason, sram: sram.slice().buffer, sha1 };
-  // A periodic copy of these bytes becomes this one, so the list doesn't show it twice and it
-  // lasts as long as the copies kept before a replacement.
-  const others = entries.filter((e) => e.sha1 !== sha1);
-  await run("saves", "readwrite", (s) => s.put(prune([...others, entry]), historyKey(key)));
+  const kept: { entry?: StoredEntry } = {};
+  await update("saves", historyKey(key), (stored) => {
+    const entries = (stored as StoredEntry[] | undefined) ?? [];
+    kept.entry = undefined;
+    if (!shouldKeep(entries, reason, sha1, sram, now)) return entries;
+    // Ids are `<takenAt>-<reason>`, so no two entries share a millisecond.
+    const takenAt = Math.max(now, ...entries.map((e) => e.takenAt + 1));
+    const entry: StoredEntry = { takenAt, reason, sram: sram.slice().buffer, sha1 };
+    kept.entry = entry;
+    // A periodic copy of these bytes becomes this one, so the list doesn't show it twice and it
+    // lasts as long as the copies kept before a replacement.
+    const others = entries.filter((e) => e.sha1 !== sha1);
+    return prune([...others, entry]);
+  });
+  const entry = kept.entry;
+  if (!entry) return false;
   void uploadEntry(key, entry, f).catch((err) => console.warn("[pokeHD] couldn't copy an earlier save to the cloud", err));
   return true;
 }
