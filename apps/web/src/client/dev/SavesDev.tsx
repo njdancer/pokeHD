@@ -1,12 +1,13 @@
 // Prototype of the intro and the save manager (p2-slots, D39), at /dev/saves until Nick picks it.
 // First load shows the intro: Resume (the save played last, from its latest resume point), Saves
 // (every adventure, to play, copy, rename, bin or bring back, and start new) and Settings (the
-// Pokédex menu's panel, once it exists). Playing a save runs the real game on that slot here.
-import { Suspense, lazy, useCallback, useEffect, useState } from "react";
+// Pokédex menu's panel, once it exists). The game of the save played last is already loaded
+// behind the menu, paused, so Resume just steps the menu aside; playing another save switches the
+// game behind to it.
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { saveSummary, type SaveSummary } from "@pokehd/emu";
 import { checkRom, decodeText, type RomHeader } from "@pokehd/rom";
 import { fetchDevRom } from "../dev-rom.ts";
-import { GameView } from "../GameView.tsx";
 import { loadStoredRom } from "../rom-store.ts";
 import { fetchCloudSave } from "../saves/cloud-save.ts";
 import { readResumePoint } from "../saves/resume-store.ts";
@@ -18,6 +19,7 @@ import {
   lastPlayedSlot,
   loadSlots,
   markPlayed,
+  newSlotId,
   renameSlot,
   slotKey,
   unbinSlot,
@@ -36,9 +38,8 @@ interface Cart {
   sha1: string;
 }
 
-/** What a slot holds, as far as this device can tell. */
+/** What a slot holds, as far as this device can tell. Its name and times come from the list. */
 interface SlotView {
-  meta: SlotMeta;
   summary: SaveSummary | null;
   /** Its latest resume point, if any (play since the last save). */
   pointAt: number | null;
@@ -46,13 +47,15 @@ interface SlotView {
   cloudOnly: boolean;
 }
 
+const EMPTY: SlotView = { summary: null, pointAt: null, cloudOnly: false };
+
 async function viewOf(sha1: string, meta: SlotMeta): Promise<SlotView> {
   const key = slotKey(sha1, meta.id);
   const local = await loadSave(key).catch(() => null);
   const cloud = local ? null : await fetchCloudSave(key).catch(() => null);
   const sram = local ?? (cloud && cloud !== "signed-out" ? cloud.sram : null);
   const point = await readResumePoint(key).catch(() => null);
-  return { meta, summary: sram && saveSummary(sram), pointAt: point?.takenAt ?? null, cloudOnly: !local && !!sram };
+  return { summary: sram && saveSummary(sram), pointAt: point?.takenAt ?? null, cloudOnly: !local && !!sram };
 }
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
@@ -68,11 +71,9 @@ function ago(at: number): string {
   return days === 1 ? "yesterday" : `${days} days ago`;
 }
 
-/** "RED", or the name the player gave it. */
-function title(v: SlotView): string {
-  if (v.meta.name) return v.meta.name;
-  if (v.summary) return decodeText(v.summary.name);
-  return "New adventure";
+/** The name the player gave it, or its trainer's. */
+function title(meta: SlotMeta, v: SlotView): string {
+  return meta.name ?? (v.summary ? decodeText(v.summary.name) : "New adventure");
 }
 
 function Facts({ summary }: { summary: SaveSummary | null }) {
@@ -88,20 +89,27 @@ function Facts({ summary }: { summary: SaveSummary | null }) {
 
 type Screen = "intro" | "saves" | "settings";
 
+/** A change to one slot in the list, shown at once while it's stored. */
+const patch = (index: SlotIndex, id: string, change: Partial<SlotMeta>): SlotIndex => ({
+  slots: index.slots.map((s) => (s.id === id ? { ...s, ...change } : s)),
+});
+
 export function SavesDev() {
   const [cart, setCart] = useState<Cart | null>(null);
   const [status, setStatus] = useState("Loading…");
   const [index, setIndex] = useState<SlotIndex | null>(null);
   const [views, setViews] = useState<Map<string, SlotView>>(new Map());
   const [screen, setScreen] = useState<Screen>("intro");
-  const [playing, setPlaying] = useState<string | null>(null);
+  /** The slot whose game is loaded behind the menu (one not made yet, for a player with none). */
+  const [behind, setBehind] = useState<string | null>(null);
+  const [menu, setMenu] = useState(true);
   const [busy, setBusy] = useState(false);
+  /** A slot just made from the list: its name is being typed. */
+  const [naming, setNaming] = useState<string | null>(null);
 
-  const refresh = useCallback(async (sha1: string, next?: SlotIndex) => {
-    const idx = next ?? (await loadSlots(sha1));
-    setIndex(idx);
-    const all = await Promise.all(idx.slots.map((m) => viewOf(sha1, m)));
-    setViews(new Map(all.map((v) => [v.meta.id, v])));
+  const loadViews = useCallback(async (sha1: string, idx: SlotIndex) => {
+    const all = await Promise.all(idx.slots.map(async (m) => [m.id, await viewOf(sha1, m)] as const));
+    setViews(new Map(all));
   }, []);
 
   useEffect(() => {
@@ -111,94 +119,119 @@ export function SavesDev() {
       const check = await checkRom(rom);
       if (!check.ok) return setStatus(check.reason);
       const sha1 = await romKey(rom);
+      const idx = await loadSlots(sha1);
       setCart({ rom, header: check.header, sha1 });
-      await refresh(sha1);
+      setIndex(idx);
+      setBehind(lastPlayedSlot(idx)?.id ?? newSlotId());
+      await loadViews(sha1, idx);
     })();
-  }, [refresh]);
+  }, [loadViews]);
 
-
-  /** Runs a change to the list, then shows the result. */
+  /** Copying and making slots wait for each other; renames and the bin show at once. */
   const act = async (change: () => Promise<unknown>) => {
     if (!cart || busy) return;
     setBusy(true);
     try {
       await change();
-      await refresh(cart.sha1);
+      const idx = await loadSlots(cart.sha1);
+      setIndex(idx);
+      await loadViews(cart.sha1, idx);
     } finally {
       setBusy(false);
     }
   };
-
-  const play = async (id: string) => {
+  const quick = (id: string, change: Partial<SlotMeta>, store: (sha1: string) => Promise<unknown>) => {
     if (!cart) return;
-    await markPlayed(cart.sha1, id).catch(() => {});
-    setPlaying(id);
+    setIndex((idx) => idx && patch(idx, id, change));
+    void store(cart.sha1).catch((err) => console.warn("[pokeHD] couldn't update the save slots", err));
   };
 
-  if (cart && playing) {
-    return (
-      <Suspense>
-        <Game rom={cart.rom} romKey={slotKey(cart.sha1, playing)} header={cart.header} onForget={() => setPlaying(null)} />
-      </Suspense>
-    );
-  }
+  /** Plays a slot: the game behind is it already (Resume), or switches to it. */
+  const play = (id: string) => {
+    if (!cart) return;
+    void markPlayed(cart.sha1, id).catch(() => {});
+    setIndex((idx) => idx && patch(idx, id, { playedAt: Date.now() }));
+    setBehind(id);
+    setMenu(false);
+  };
 
   const last = index && lastPlayedSlot(index);
-  const lastView = last ? views.get(last.id) : undefined;
-  const live = index?.slots.filter((s) => s.deletedAt === undefined) ?? [];
+  const live = useMemo(() => index?.slots.filter((s) => s.deletedAt === undefined) ?? [], [index]);
   const binned = index?.slots.filter((s) => s.deletedAt !== undefined) ?? [];
+  const viewFor = (id: string) => views.get(id) ?? EMPTY;
 
   return (
     <>
-      <GameView />
-      <div className="start-screen saves-screen" data-look="ball">
-        <div className="start-panel saves-panel">
-          <i className="hd-corner tl" />
-          <i className="hd-corner tr" />
-          <i className="hd-corner bl" />
-          <i className="hd-corner br" />
-          {/* Scrolls inside the panel, so the corners stand clear of its edge. */}
-          <div className="saves-scroll">
-            {!cart || !index ? (
-              <p className="start-title start-wait">{status}</p>
-            ) : screen === "intro" ? (
-              <Intro
-                last={lastView ?? null}
-                onResume={() => last && void play(last.id)}
-                onNew={() => void act(async () => play((await createSlot(cart.sha1)).id))}
-                onSaves={() => setScreen("saves")}
-                onSettings={() => setScreen("settings")}
-                count={live.length}
-              />
-            ) : screen === "saves" ? (
-              <SaveList
-                live={live.map((m) => views.get(m.id) ?? { meta: m, summary: null, pointAt: null, cloudOnly: false })}
-                binned={binned.map((m) => views.get(m.id) ?? { meta: m, summary: null, pointAt: null, cloudOnly: false })}
-                busy={busy}
-                onBack={() => setScreen("intro")}
-                onPlay={(id) => void play(id)}
-                onNew={() => void act(() => createSlot(cart.sha1))}
-                onCopy={(v) => void act(() => duplicateSlot(cart.sha1, v.meta.id, `${title(v)} (copy)`))}
-                onRename={(id, name) => void act(() => renameSlot(cart.sha1, id, name))}
-                onBin={(id) => void act(() => binSlot(cart.sha1, id))}
-                onUnbin={(id) => void act(() => unbinSlot(cart.sha1, id))}
-              />
-            ) : (
-              <>
-                <p className="start-title">Settings</p>
-                <p className="start-sub">The Pokédex menu's settings panel goes here once it's built, so both places share one.</p>
-                <button type="button" className="start-button" onClick={() => setScreen("intro")}>Back</button>
-              </>
-            )}
+      {cart && behind && (
+        <Suspense>
+          <Game key={behind} rom={cart.rom} romKey={slotKey(cart.sha1, behind)} header={cart.header} onForget={() => setMenu(true)} held={menu} />
+        </Suspense>
+      )}
+      {menu && (
+        <div className="start-screen saves-screen" data-look="ball">
+          <div className="start-panel saves-panel">
+            <i className="hd-corner tl" />
+            <i className="hd-corner tr" />
+            <i className="hd-corner bl" />
+            <i className="hd-corner br" />
+            {/* Scrolls inside the panel, so the corners stand clear of its edge. */}
+            <div className="saves-scroll">
+              {!cart || !index ? (
+                <p className="start-title start-wait">{status}</p>
+              ) : screen === "intro" ? (
+                <Intro
+                  last={last ?? null}
+                  view={last ? viewFor(last.id) : EMPTY}
+                  count={live.length}
+                  onResume={() => last && play(last.id)}
+                  onNew={() => void act(async () => play((await createSlot(cart.sha1, undefined, fetch, behind ?? undefined)).id))}
+                  onSaves={() => setScreen("saves")}
+                  onSettings={() => setScreen("settings")}
+                />
+              ) : screen === "saves" ? (
+                <SaveList
+                  live={live}
+                  binned={binned}
+                  viewFor={viewFor}
+                  busy={busy}
+                  naming={naming}
+                  onBack={() => setScreen("intro")}
+                  onPlay={play}
+                  onNew={() =>
+                    void act(async () => {
+                      const slot = await createSlot(cart.sha1);
+                      setNaming(slot.id);
+                    })
+                  }
+                  onCopy={(m) => void act(() => duplicateSlot(cart.sha1, m.id, `${title(m, viewFor(m.id))} (copy)`))}
+                  onRename={(id, name) => {
+                    setNaming(null);
+                    const trimmed = name.trim();
+                    const meta = index.slots.find((s) => s.id === id);
+                    if ((meta?.name ?? "") === trimmed) return;
+                    quick(id, trimmed ? { name: trimmed } : { name: undefined }, (sha1) => renameSlot(sha1, id, trimmed));
+                  }}
+                  onBin={(id) => quick(id, { deletedAt: Date.now() }, (sha1) => binSlot(sha1, id))}
+                  onUnbin={(id) => quick(id, { deletedAt: undefined }, (sha1) => unbinSlot(sha1, id))}
+                />
+              ) : (
+                <>
+                  <p className="start-title">Settings</p>
+                  <p className="start-sub">The Pokédex menu's settings panel goes here once it's built, so both places share one.</p>
+                  <button type="button" className="start-button" onClick={() => setScreen("intro")}>Back</button>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </>
   );
 }
 
 interface IntroProps {
-  last: SlotView | null;
+  last: SlotMeta | null;
+  view: SlotView;
   count: number;
   onResume(): void;
   onNew(): void;
@@ -206,19 +239,19 @@ interface IntroProps {
   onSettings(): void;
 }
 
-function Intro({ last, count, onResume, onNew, onSaves, onSettings }: IntroProps) {
+function Intro({ last, view, count, onResume, onNew, onSaves, onSettings }: IntroProps) {
   return (
     <>
       {last ? (
         <>
-          <p className="start-title">Welcome back{last.summary ? `, ${decodeText(last.summary.name)}` : ""}!</p>
-          <Facts summary={last.summary} />
+          <p className="start-title">Welcome back{view.summary ? `, ${decodeText(view.summary.name)}` : ""}!</p>
+          <Facts summary={view.summary} />
           <button type="button" className="start-button primary" onClick={onResume} data-testid="intro-resume">
             Resume
           </button>
           <p className="saves-when">
-            {last.meta.name ? `${last.meta.name} · ` : ""}
-            {last.pointAt ? `right where you left off, ${ago(last.pointAt)}` : `from the last save, played ${ago(last.meta.playedAt)}`}
+            {last.name ? `${last.name} · ` : ""}
+            {view.pointAt ? `right where you left off, ${ago(view.pointAt)}` : `from the last save, played ${ago(last.playedAt)}`}
           </p>
         </>
       ) : (
@@ -238,25 +271,46 @@ function Intro({ last, count, onResume, onNew, onSaves, onSettings }: IntroProps
   );
 }
 
+/** A save's name, typed over in place: it's stored when the field is left or Enter is pressed. */
+function NameField({ meta, view, focus, onDone }: { meta: SlotMeta; view: SlotView; focus: boolean; onDone(name: string): void }) {
+  return (
+    <input
+      className="saves-name saves-name-input"
+      defaultValue={meta.name ?? ""}
+      placeholder={view.summary ? decodeText(view.summary.name) : "Name your adventure"}
+      aria-label="Name"
+      maxLength={40}
+      autoFocus={focus}
+      enterKeyHint="done"
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      onBlur={(e) => onDone(e.currentTarget.value)}
+    />
+  );
+}
+
 interface ListProps {
-  live: SlotView[];
-  binned: SlotView[];
+  live: SlotMeta[];
+  binned: SlotMeta[];
+  viewFor(id: string): SlotView;
   busy: boolean;
+  /** A slot just made: its card opens with the name ready to type. */
+  naming: string | null;
   onBack(): void;
   onPlay(id: string): void;
   onNew(): void;
-  onCopy(v: SlotView): void;
+  onCopy(meta: SlotMeta): void;
   onRename(id: string, name: string): void;
   onBin(id: string): void;
   onUnbin(id: string): void;
 }
 
-function SaveList({ live, binned, busy, onBack, onPlay, onNew, onCopy, onRename, onBin, onUnbin }: ListProps) {
-  const [open, setOpen] = useState<string | null>(null);
-  const [renaming, setRenaming] = useState<string | null>(null);
+function SaveList({ live, binned, viewFor, busy, naming, onBack, onPlay, onNew, onCopy, onRename, onBin, onUnbin }: ListProps) {
+  const [picked, setPicked] = useState<string | null>(null);
   const [binning, setBinning] = useState<string | null>(null);
   const [showBin, setShowBin] = useState(false);
-  const byPlayed = [...live].sort((a, b) => b.meta.playedAt - a.meta.playedAt);
+  const open = naming ?? picked;
+  // Newest played first; a slot just made goes to the top.
+  const sorted = [...live].sort((a, b) => (b.id === naming ? 1 : 0) - (a.id === naming ? 1 : 0) || b.playedAt - a.playedAt || b.createdAt - a.createdAt);
 
   return (
     <div className="saves-list" aria-busy={busy}>
@@ -265,45 +319,43 @@ function SaveList({ live, binned, busy, onBack, onPlay, onNew, onCopy, onRename,
         <p className="start-title">Saves</p>
       </div>
       <ul>
-        {byPlayed.map((v) => {
-          const id = v.meta.id;
+        {sorted.map((meta) => {
+          const id = meta.id;
+          const view = viewFor(id);
+          const meta_ = (
+            <span className="saves-meta">
+              {view.summary ? `${plural(view.summary.badges, "badge")} · ${view.summary.owned} caught · ` : ""}
+              {ago(meta.playedAt)}
+              {view.cloudOnly ? " · in the cloud" : ""}
+            </span>
+          );
           return (
             <li key={id} className="saves-card" data-open={open === id}>
-              <button type="button" className="saves-card-main" onClick={() => setOpen(open === id ? null : id)}>
-                <span className="saves-name">{title(v)}</span>
-                <span className="saves-meta">
-                  {v.summary ? `${plural(v.summary.badges, "badge")} · ${v.summary.owned} caught · ` : ""}
-                  {ago(v.meta.playedAt)}
-                  {v.cloudOnly ? " · in the cloud" : ""}
-                </span>
-              </button>
+              {open === id ? (
+                <div className="saves-card-main">
+                  <NameField key={`${id}:${meta.name ?? ""}`} meta={meta} view={view} focus={naming === id} onDone={(name) => onRename(id, name)} />
+                  {meta_}
+                </div>
+              ) : (
+                <button type="button" className="saves-card-main" onClick={() => { setPicked(id); setBinning(null); }}>
+                  <span className="saves-name">{title(meta, view)}</span>
+                  {meta_}
+                </button>
+              )}
               {open === id &&
-                (renaming === id ? (
-                  <form
-                    className="saves-rename"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      onRename(id, String(new FormData(e.currentTarget).get("name") ?? ""));
-                      setRenaming(null);
-                    }}
-                  >
-                    <input name="name" defaultValue={v.meta.name ?? ""} placeholder={v.summary ? decodeText(v.summary.name) : "Name"} maxLength={40} autoFocus />
-                    <button type="submit" className="start-button">Save</button>
-                  </form>
-                ) : binning === id ? (
+                (binning === id ? (
                   <div className="saves-confirm">
                     <p>Put this adventure in the bin? It stays there, and you can bring it back any time.</p>
                     <div className="start-row">
                       <button type="button" className="start-button" onClick={() => setBinning(null)}>Keep it</button>
-                      <button type="button" className="start-button" onClick={() => { onBin(id); setBinning(null); setOpen(null); }}>Put in bin</button>
+                      <button type="button" className="start-button" onClick={() => { onBin(id); setBinning(null); setPicked(null); }}>Put in bin</button>
                     </div>
                   </div>
                 ) : (
                   <div className="saves-actions">
                     <button type="button" className="start-button primary" onClick={() => onPlay(id)}>Play</button>
                     <div className="start-row">
-                      <button type="button" className="start-button" disabled={busy} onClick={() => onCopy(v)}>Copy</button>
-                      <button type="button" className="start-button" onClick={() => setRenaming(id)}>Rename</button>
+                      <button type="button" className="start-button" disabled={busy} onClick={() => onCopy(meta)}>Copy</button>
                       <button type="button" className="start-button" onClick={() => setBinning(id)}>Bin</button>
                     </div>
                   </div>
@@ -320,15 +372,18 @@ function SaveList({ live, binned, busy, onBack, onPlay, onNew, onCopy, onRename,
           </button>
           {showBin && (
             <ul>
-              {binned.map((v) => (
-                <li key={v.meta.id} className="saves-card binned">
-                  <span className="saves-card-main">
-                    <span className="saves-name">{title(v)}</span>
-                    <span className="saves-meta">{v.summary ? `${plural(v.summary.badges, "badge")} · ${v.summary.owned} caught` : "Not started"}</span>
-                  </span>
-                  <button type="button" className="start-button" disabled={busy} onClick={() => onUnbin(v.meta.id)}>Bring back</button>
-                </li>
-              ))}
+              {binned.map((meta) => {
+                const view = viewFor(meta.id);
+                return (
+                  <li key={meta.id} className="saves-card binned">
+                    <span className="saves-card-main">
+                      <span className="saves-name">{title(meta, view)}</span>
+                      <span className="saves-meta">{view.summary ? `${plural(view.summary.badges, "badge")} · ${view.summary.owned} caught` : "Not started"}</span>
+                    </span>
+                    <button type="button" className="start-button" onClick={() => onUnbin(meta.id)}>Bring back</button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

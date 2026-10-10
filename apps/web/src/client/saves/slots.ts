@@ -82,7 +82,8 @@ function newMeta(id: string, createdAt: number, playedAt = 0, name?: string): Sl
   return { id, createdAt, updatedAt: createdAt, playedAt, ...(name ? { name } : {}) };
 }
 
-function newId(): string {
+/** A new slot's ID. A page can pick one before the slot exists, to start its game early. */
+export function newSlotId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(8));
   return Array.from(bytes, (b) => "0123456789abcdefghijklmnopqrstuvwxyz"[b % 36]).join("");
 }
@@ -132,10 +133,10 @@ export const unbinSlot = (romSha1: string, id: string, f: Fetch = fetch) =>
   );
 
 /** A new, empty slot: the game starts at its title screen with no save. */
-export async function createSlot(romSha1: string, name?: string, f: Fetch = fetch): Promise<SlotMeta> {
+export async function createSlot(romSha1: string, name?: string, f: Fetch = fetch, id = newSlotId()): Promise<SlotMeta> {
   // The save a player already had is listed first, so it never sits outside the list.
   await loadSlots(romSha1, f);
-  const slot = newMeta(newId(), Date.now(), 0, name?.trim().slice(0, 40));
+  const slot = newMeta(id, Date.now(), 0, name?.trim().slice(0, 40));
   await update(romSha1, (index) => {
     if (index.slots.length >= MAX_SLOTS) throw new Error(`At most ${MAX_SLOTS} save slots`);
     return mergeSlotIndex(index, { slots: [slot] });
