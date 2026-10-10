@@ -52,7 +52,7 @@ export class Room extends DurableObject<Env> {
   }
 
   /**
-   * The heartbeat check (D40): connections not heard from for ROOM_QUIET_MS are closed, so their
+   * The heartbeat check (D41): connections not heard from for ROOM_QUIET_MS are closed, so their
    * ghosts leave. Runs every heartbeat while anyone is connected; an empty room sleeps.
    */
   override async alarm(): Promise<void> {

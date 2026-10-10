@@ -3,7 +3,7 @@ import type { LockAnswer, LockBeat } from "@pokehd/protocol";
 import { heartbeat, release, type Lease, type LockStore } from "./locks.ts";
 
 /**
- * One player's save leases (D40), one object per player: a Durable Object runs one request at a
+ * One player's save leases (D41), one object per player: a Durable Object runs one request at a
  * time, so two devices' heartbeats for a save can't both be granted it. Leases live in its
  * SQLite-backed storage and outlast the object being evicted.
  */

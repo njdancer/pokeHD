@@ -1,7 +1,7 @@
 // The Pokédex menu (p2-menu): one menu around the Pokédex, replacing Start and Select. Five tabs
 // (Pokémon, People, Inventory, Map, Me), each keeping its own place; and the game's requests
 // (battle Team and Bag, who's next, PC, Mart) as a sheet over the game instead. Storybook look.
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Env, useEnv, type MenuEnv } from "./env.tsx";
 import { CloseIcon, TabIcon, type TabId } from "./icons.tsx";
 import { NavContext, rootOf, TABS, type Nav, type Screen } from "./nav.tsx";
@@ -52,16 +52,27 @@ export interface DexMenuProps {
   request?: Request | null;
   /** Called when the request ends (answered or cancelled). */
   onRequestDone?(): void;
+  /** A line from the game after an action finished (toasted when `n` changes). */
+  notice?: { text: string; n: number } | null;
 }
 
-export function DexMenu({ env: base, open, onClose, start, request, onRequestDone }: DexMenuProps) {
+export function DexMenu({ env: base, open, onClose, start, request, onRequestDone, notice }: DexMenuProps) {
   const [toastText, setToastText] = useState<{ text: string; n: number } | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const toast = useCallback((text: string) => {
-    clearTimeout(toastTimer.current);
-    setToastText((t) => ({ text, n: (t?.n ?? 0) + 1 }));
-    toastTimer.current = setTimeout(() => setToastText(null), 2600);
+    // Actions that finish later (in the game) return "", and their words follow as a notice.
+    if (text) setToastText((t) => ({ text, n: (t?.n ?? 0) + 1 }));
   }, []);
+  useEffect(() => {
+    if (!toastText) return;
+    const timer = setTimeout(() => setToastText(null), 2600);
+    return () => clearTimeout(timer);
+  }, [toastText]);
+  // The game's words after an action, shown like any other line.
+  const [shown, setShown] = useState(notice);
+  if (notice !== shown) {
+    setShown(notice);
+    if (notice) setToastText((t) => ({ text: notice.text, n: (t?.n ?? 0) + 1 }));
+  }
   const env = useMemo<MenuEnv>(() => ({ ...base, toast }), [base, toast]);
   return (
     <Env.Provider value={env}>

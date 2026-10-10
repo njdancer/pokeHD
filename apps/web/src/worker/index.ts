@@ -116,7 +116,7 @@ app.get("/room", async (c) => {
   return room.fetch(new Request(c.req.raw, { headers }));
 });
 
-/** One device per save (D40): leases on the player's saves, kept by their own SaveLocks object. */
+/** One device per save (D41): leases on the player's saves, kept by their own SaveLocks object. */
 app.route("/saves", locksApi<Bindings>(currentPlayer, (c, id) => c.env.LOCKS.getByName(id)));
 /** Cloud backup of the player's battery saves, per ROM. */
 app.route("/saves", savesApi<Bindings>(currentPlayer));

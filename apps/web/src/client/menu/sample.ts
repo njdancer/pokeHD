@@ -1,7 +1,7 @@
 // A sample adventure for the design page: RED in Vermilion City with two badges, the same story
 // as the clickable prototype. Names, pictures and Pokédex words still come from the ROM.
 import { SPRITE_NAMES, type TrainerClass } from "@pokehd/rom";
-import type { Item, MenuModel, Mon, Person } from "./model.ts";
+import type { Item, MapLayers, MenuModel, Mon, Person } from "./model.ts";
 
 const sprite = (name: string) => ({ sprite: SPRITE_NAMES.indexOf(name) });
 
@@ -33,6 +33,48 @@ export const SAMPLE_LEARNS: Record<number, { moves: [string, number][]; grows: (
   16: { moves: [["Gust", 0], ["Sand-Attack", 5], ["Quick Attack", 12], ["Whirlwind", 19], ["Wing Attack", 24], ["Agility", 31], ["Mirror Move", 40]], grows: [16, "Level 18", 17, "Level 36", 18] },
   25: { moves: [["ThunderShock", 0], ["Growl", 0], ["Thunder Wave", 9], ["Quick Attack", 16], ["Swift", 26], ["Agility", 33], ["Thunder", 43]], grows: [25, "Thunder Stone", 26] },
   32: { moves: [["Leer", 0], ["Tackle", 0], ["Horn Attack", 8], ["Double Kick", 12], ["Poison Sting", 17], ["Focus Energy", 23], ["Fury Attack", 30], ["Horn Drill", 38]], grows: [32, "Level 16", 33, "Moon Stone", 34] },
+};
+
+/** Journal samples for the layers: where things happened, in steps on a map. */
+const ENCOUNTERS: { dex: number; map: string; x: number; y: number; how: "caught" | "seen" | "battled"; text: string; today?: boolean }[] = [
+  { dex: 7, map: "PALLET_TOWN", x: 12, y: 12, how: "caught", text: "Your first partner, from PROF. OAK" },
+  { dex: 16, map: "ROUTE_1", x: 10, y: 24, how: "caught", text: "Caught at level 3" },
+  { dex: 19, map: "ROUTE_1", x: 6, y: 12, how: "caught", text: "Caught at level 4" },
+  { dex: 32, map: "ROUTE_22", x: 14, y: 8, how: "caught", text: "Caught at level 4" },
+  { dex: 13, map: "ROUTE_2", x: 4, y: 50, how: "seen", text: "Seen near Viridian Forest" },
+  { dex: 95, map: "PEWTER_CITY", x: 16, y: 18, how: "battled", text: "BROCK's ONIX. Beaten" },
+  { dex: 21, map: "ROUTE_3", x: 20, y: 6, how: "seen", text: "Seen 6 times" },
+  { dex: 39, map: "ROUTE_3", x: 40, y: 10, how: "seen", text: "Seen twice" },
+  { dex: 27, map: "ROUTE_4", x: 30, y: 8, how: "caught", text: "Caught at level 9" },
+  { dex: 121, map: "CERULEAN_CITY", x: 30, y: 20, how: "battled", text: "MISTY's STARMIE. Beaten" },
+  { dex: 63, map: "ROUTE_24", x: 10, y: 20, how: "seen", text: "Seen once. It teleported away" },
+  { dex: 69, map: "ROUTE_25", x: 20, y: 6, how: "seen", text: "Seen 3 times" },
+  { dex: 17, map: "ROUTE_6", x: 10, y: 20, how: "battled", text: "A trainer's PIDGEOTTO", today: true },
+  { dex: 96, map: "ROUTE_11", x: 8, y: 8, how: "seen", text: "Seen just now", today: true },
+];
+const FINDS: { item: string; map: string; x: number; y: number; text: string; today?: boolean }[] = [
+  { item: "POTION", map: "ROUTE_1", x: 12, y: 30, text: "Lying on Route 1" },
+  { item: "TOWN MAP", map: "PALLET_TOWN", x: 4, y: 5, text: "From DAISY" },
+  { item: "HM01", map: "VERMILION_CITY", x: 18, y: 30, text: "From the S.S. ANNE's captain", today: true },
+  { item: "BICYCLE", map: "CERULEAN_CITY", x: 13, y: 26, text: "Cerulean Bike Shop", today: true },
+];
+const CHECKPOINTS: { place: string; map: string; x: number; y: number; when: string; today?: boolean }[] = [
+  { place: "Vermilion City", map: "VERMILION_CITY", x: 11, y: 4, when: "10 minutes ago", today: true },
+  { place: "Cerulean City", map: "CERULEAN_CITY", x: 19, y: 18, when: "1 hour ago", today: true },
+  { place: "Pewter City", map: "PEWTER_CITY", x: 13, y: 26, when: "Yesterday" },
+];
+const FRIEND_AT: Record<string, [string, number, number]> = { nick: ["CELADON_CITY", 20, 12], sam: ["ROUTE_3", 30, 8] };
+const TRAIL = ["PALLET_TOWN", "ROUTE_1", "VIRIDIAN_CITY", "ROUTE_2", "PEWTER_CITY", "ROUTE_3", "ROUTE_4", "CERULEAN_CITY", "ROUTE_5", "ROUTE_6", "VERMILION_CITY"];
+const TODAY_FROM = 7;
+
+const SAMPLE_LAYERS: MapLayers = {
+  encounters: ENCOUNTERS,
+  finds: FINDS,
+  checkpoints: CHECKPOINTS,
+  friendsAt: FRIEND_AT,
+  trail: TRAIL,
+  todayFrom: TODAY_FROM,
+  partly: new Set(["ROUTE 11"]),
 };
 
 export function sampleModel(trainers: readonly TrainerClass[]): MenuModel {
@@ -98,6 +140,9 @@ export function sampleModel(trainers: readonly TrainerClass[]): MenuModel {
     app: { sound: true, readAloud: true, gameBoyScreen: false },
     repel: 0,
     biking: false,
+    layers: SAMPLE_LAYERS,
+    learns: (dex) => SAMPLE_LEARNS[dex],
+    canLearn: (dex, item) => item === 0xc4 && (dex === 32 || dex === 1 || dex === 69),
   };
 }
 

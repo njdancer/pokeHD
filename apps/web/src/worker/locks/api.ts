@@ -1,4 +1,4 @@
-// The lock service's routes (D40): `POST /:key/lock` with a heartbeat, `POST /:key/unlock` when
+// The lock service's routes (D41): `POST /:key/lock` with a heartbeat, `POST /:key/unlock` when
 // a device is done with a save. Unlock is sent with sendBeacon as a page closes, so it takes a
 // text body too.
 import { Hono, type Context } from "hono";

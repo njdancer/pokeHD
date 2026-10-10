@@ -1,4 +1,4 @@
-// One device per save (D40), the device's side: before a save is played it's claimed from the
+// One device per save (D41), the device's side: before a save is played it's claimed from the
 // lock service, and while it's played a heartbeat keeps it. Signed out or offline there's no
 // service to ask, and the game plays as before ("free"): it never stops a child playing.
 import { LOCK_BEAT_MS, parseLockAnswer, type LockAnswer, type LockHolder } from "@pokehd/protocol";

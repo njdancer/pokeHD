@@ -9,8 +9,11 @@ import { Controls } from "./controls.ts";
 import { FRAME_RATE, GameBoy } from "./core.ts";
 import { DexGuard } from "./dex-guard.ts";
 import { EraseGuard } from "./erase-guard.ts";
+import { GameActions } from "./game/actions.ts";
+import { GameAsks } from "./game/asks.ts";
 import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
+import { JournalHooks } from "./journal-hooks.ts";
 import { LinkPort } from "./link.ts";
 import type { FromWorker, FromWorklet, ToWorker, ToWorklet, Watch } from "./protocol.ts";
 
@@ -42,7 +45,12 @@ let autosave: AutoSave | undefined;
 let guard: EraseGuard | undefined;
 let controls: Controls | undefined;
 let dex: DexGuard | undefined;
+let journal: JournalHooks | undefined;
 let rom: Uint8Array | undefined;
+let actions: GameActions | undefined;
+/** Queued actions' cancels, by the page's id. */
+const cancels = new Map<number, () => void>();
+let asks: GameAsks | undefined;
 let scriptText = false;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
@@ -148,6 +156,8 @@ async function handle(data: ToWorker) {
             post({ type: "gift", event });
           },
         });
+        // After the gift desk, so its SafePoint calls are known as the page's.
+        journal = data.journal ? new JournalHooks(gb, { rom: data.rom, emit: (event) => post({ type: "journal", event }) }) : undefined;
         autosave = new AutoSave(gb, {
           rom: data.rom,
           skipped: (why) => post({ type: "autosave-skipped", reason: why }),
@@ -179,6 +189,10 @@ async function handle(data: ToWorker) {
             press: () => post({ type: "script-press" }),
           },
         });
+        if (data.menu) {
+          const act = (actions = new GameActions(gb, { rom: data.rom }));
+          asks = new GameAsks(gb, { rom: data.rom, busy: () => act.pending > 0 && SafePoint.of(g).calling, onAsk: (id, ask) => post({ type: "ask", id, ask }) });
+        }
         rom = data.rom;
         if (scriptText) controls.setScriptText(rom);
         samplesPerFrame = data.sampleRate / FRAME_RATE;
@@ -250,12 +264,13 @@ async function handle(data: ToWorker) {
         break;
       case "load-state":
         gb?.loadState(data.state);
+        journal?.resync();
         break;
       case "resume-point": {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.
         // Signed-in players always have a port open (RoomLink keeps one ready), so it's the
         // session that counts, not the port.
-        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !dex?.open && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !dex?.open && !asks?.asking && !actions?.pending && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
         // Hand over any newer save first, so the stored save matches the one in the state. None
         // while the game is part-way through saving: neither is a save it would load.
         const whole = g && (!g.sramDirty || flushSram());
@@ -285,6 +300,25 @@ async function handle(data: ToWorker) {
           const g = gb;
           post({ type: "read", id: data.id, bytes: data.ranges.map(([address, length]) => g.readBytes(address, length)) });
         }
+        break;
+      case "action": {
+        const { id } = data;
+        if (!actions) post({ type: "action-done", id, result: { ok: false, reason: "menu hooks are off", messages: [] } });
+        else
+          cancels.set(
+            id,
+            actions.run(data.action, (result) => {
+              cancels.delete(id);
+              post({ type: "action-done", id, result });
+            }),
+          );
+        break;
+      }
+      case "action-cancel":
+        cancels.get(data.id)?.();
+        break;
+      case "ask-answer":
+        asks?.answer(data.id, data.answer);
         break;
       case "gift-give":
         desk?.give(data.id, data.gift);

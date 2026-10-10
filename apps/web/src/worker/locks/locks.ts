@@ -1,4 +1,4 @@
-// One device per save (D40): a save is played on one tab or device at a time. The device
+// One device per save (D41): a save is played on one tab or device at a time. The device
 // playing it holds a lease that its heartbeat renews; a device that goes quiet (closed, asleep,
 // offline) loses it after LEASE_MS. Another device may take a save over: the holder is told on
 // its next heartbeat, keeps its progress, and lets go, or the save passes on after HANDOVER_MS

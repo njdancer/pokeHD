@@ -1,4 +1,4 @@
-// One device per save (D40) on the real game page: a player plays on device A; device B, the same
+// One device per save (D41) on the real game page: a player plays on device A; device B, the same
 // player, finds the save in use and takes it over. A stops where it was and keeps its progress,
 // and B carries on from that very spot. Then B is frozen like a phone put in a pocket: A takes the
 // save back once B's heartbeat has gone quiet, and B, woken, finds it has moved.

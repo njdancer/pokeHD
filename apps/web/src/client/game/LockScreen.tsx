@@ -1,4 +1,4 @@
-// One device per save (D40): what the player sees when another device has this adventure. The
+// One device per save (D41): what the player sees when another device has this adventure. The
 // game waits behind it to start (it starts by itself once the other device closes it), or has
 // stopped because another device took it over. Either way "Play here" brings it to this one, and
 // the other device keeps its progress first.

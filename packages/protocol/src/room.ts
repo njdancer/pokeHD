@@ -94,13 +94,13 @@ export const MAX_FRAME = 4096;
 export const CloseCode = {
   /** The same player connected again elsewhere (another tab or device). */
   replaced: 4001,
-  /** Nothing heard for ROOM_QUIET_MS: the device is closed, asleep or offline (D40). */
+  /** Nothing heard for ROOM_QUIET_MS: the device is closed, asleep or offline (D41). */
   quiet: 4002,
 } as const;
 
 /** How often a connected device pings the room (its heartbeat). */
 export const ROOM_KEEPALIVE_MS = 5_000;
-/** A connection silent this long is closed, and its ghost leaves the world (D40). */
+/** A connection silent this long is closed, and its ghost leaves the world (D41). */
 export const ROOM_QUIET_MS = 15_000;
 
 /** Parses a frame from a client, or null if it isn't a valid message. */

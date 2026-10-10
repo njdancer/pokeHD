@@ -1,4 +1,4 @@
-// One device per save (D40): the messages between a device playing a save and the lock service
+// One device per save (D41): the messages between a device playing a save and the lock service
 // (`POST /api/saves/:key/lock`, `/unlock`). A device beats every LOCK_BEAT_MS while it plays.
 import * as v from "valibot";
 
