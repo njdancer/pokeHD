@@ -55,6 +55,21 @@ def unlabelled_crops(size=64, stride=32):
     return np.stack(X)
 
 
+def grad_loss(pred, true, m, scales=3):
+    """Multi-scale gradient matching (MiDaS): the depth *differences* between neighbours must match,
+    so smooth surfaces stay smooth and real steps stay sharp. Shift-invariant by construction."""
+    tot = 0.0
+    for s in range(scales):
+        if s:
+            pred, true = F.avg_pool2d(pred[:, None], 2)[:, 0], F.avg_pool2d(true[:, None], 2)[:, 0]
+            m = (F.avg_pool2d(m[:, None], 2)[:, 0] > 0.99).float()
+        d = pred - true
+        gx = (d[:, :, 1:] - d[:, :, :-1]).abs() * m[:, :, 1:] * m[:, :, :-1]
+        gy = (d[:, 1:] - d[:, :-1]).abs() * m[:, 1:] * m[:, :-1]
+        tot = tot + (gx.sum() + gy.sum()) / m.sum().clamp(min=1)
+    return tot / scales
+
+
 def depth_loss(pred, true, m):
     """L1 on object pixels after removing each image's mean depth (absolute placement is arbitrary)."""
     n = m.sum((1, 2)).clamp(min=1)
@@ -180,7 +195,10 @@ class Trainer:
         loss = ((1 - (h["normal"] * y).sum(1)) * w).sum() / w.sum().clamp(min=1)
         occ = (self.M[idx][sl] > 0).float()
         if "occ" in h: loss = loss + 0.5 * F.binary_cross_entropy_with_logits(h["occ"], occ)
-        if "depth" in h: loss = loss + 0.1 * depth_loss(h["depth"], self.Z[idx][sl], occ)
+        if "depth" in h:
+            loss = loss + 0.1 * depth_loss(h["depth"], self.Z[idx][sl], occ)
+            g = t.get("depthGrad", 0)
+            if g: loss = loss + g * grad_loss(h["depth"], self.Z[idx][sl], occ)
         return loss
 
     def _consistency(self, c):

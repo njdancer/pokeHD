@@ -1,0 +1,7 @@
+{
+  "extends": "front-v5",
+  "title": "Pictures: depth with gradient matching (smoother surfaces, sharp steps)",
+  "why": "front-v5 layers parts in depth but the surfaces are noisy and tear into strips in 3D. Matching depth differences between neighbouring pixels should keep each part smooth while keeping real steps.",
+  "changes": ["+ multi-scale depth gradient-matching loss, weight 0.2"],
+  "train": {"depthGrad": 0.2}
+}
