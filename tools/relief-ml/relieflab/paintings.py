@@ -72,8 +72,9 @@ def truth_map(name, painted):
 
 def evaluate(model, cfg, run, maps):
     painted = painted_tiles()
-    trained = cfg.get("real", {}).get("paintings") and cfg["real"].get("share", 0) > 0
-    if trained: painted = {k: v for k, v in painted.items() if half(k) == "eval"}
+    # Always the 'eval' half, so models trained on the other half compare fairly with the rest.
+    painted = {k: v for k, v in painted.items() if half(k) == "eval"}
+    trained = True
     if not painted: return {}
     K = np.zeros((5, 5), np.int64); per_label = {}
     for name in maps:
@@ -90,7 +91,7 @@ def evaluate(model, cfg, run, maps):
     if K.sum() == 0: return {}
     acc = float(np.trace(K) / K.sum())
     labels = ["TOP", "FRONT", "SLOPE", "HIP◀", "HIP▶"]
-    run.eval("paintings", dict(title="Nick's relief-editor paintings (held-out maps" + (", held-out half of the tiles)" if trained else ")"),
+    run.eval("paintings", dict(title="Nick's relief-editor paintings (held-out maps, held-out half of the painted tiles)",
                                split="paintings", circular=False,
                                overall=dict(acc=acc, tiles=len(painted), pixels=int(K.sum())),
                                perClass=dict(acc={labels[i]: float(K[i, i] / K[i].sum()) for i in range(5) if K[i].sum()}),
