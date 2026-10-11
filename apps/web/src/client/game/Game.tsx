@@ -1194,13 +1194,14 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         aria-label="Menu"
         data-look={look}
         data-alert={cloudNewer || resumed || undefined}
+        data-dex={menu || undefined}
       >
         <i className="hd-ball" aria-hidden />
       </button>}
       {message && <div className="game-toast" role="status">{message}</div>}
       {settings && <div className="game-menu-scrim" onClick={() => setSettings(false)} />}
       {settings && (
-        <div className="game-menu" data-look={look} role="dialog" aria-label="Menu">
+        <div className="game-menu" data-look={look} data-dex={menu || undefined} role="dialog" aria-label="Menu">
           <i className="hd-corner tl" />
           <i className="hd-corner tr" />
           <i className="hd-corner bl" />

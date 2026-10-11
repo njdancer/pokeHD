@@ -101,24 +101,25 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
     onAskDone();
   };
 
-  if (!env) return null;
-  const menu = (slots: Partial<DexSlots>) => (
-    <DexMenu
-      key={start?.screen ? JSON.stringify(start) : "menu"}
-      env={env}
-      open={open && !asking}
-      onClose={onClose}
-      {...(start ? { start } : {})}
-      request={request}
-      onRequestDone={requestDone}
-      notice={notice}
-      {...slots}
-    />
-  );
+  const menu = (slots: Partial<DexSlots>) =>
+    env && (
+      <DexMenu
+        key={start?.screen ? JSON.stringify(start) : "menu"}
+        env={env}
+        open={open && !asking}
+        onClose={onClose}
+        {...(start ? { start } : {})}
+        request={request}
+        onRequestDone={requestDone}
+        notice={notice}
+        {...slots}
+      />
+    );
   return (
     <>
+      {/* The dex (the button) shows before the game's first read; the menu joins it once there's one. */}
       {onOpen ? (
-        <DexHost open={open && !asking} onOpen={onOpen} onClose={onClose} away={!!away} alert={env.model.friends.some((f) => f.gift)}>
+        <DexHost open={open && !asking} onOpen={onOpen} onClose={onClose} away={!!away} alert={!!env?.model.friends.some((f) => f.gift)}>
           {(slots) => menu(slots ?? {})}
         </DexHost>
       ) : (
