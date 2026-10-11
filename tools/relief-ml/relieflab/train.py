@@ -38,6 +38,20 @@ def real_crops(object_weight, size=64, stride=32):
     return np.stack(X), np.stack(Y), np.stack(W)
 
 
+def unlabelled_crops(size=64, stride=32):
+    """Every real map crop outside the eval maps, with no labels (for consistency training)."""
+    X = []
+    for name in tasks.map_names():
+        if name in EVAL_MAPS: continue
+        img, _ = tasks.map_img(name)
+        H, W = img.shape
+        if H < size or W < size: continue
+        for y in range(0, H - size + 1, stride):
+            for x in range(0, W - size + 1, stride):
+                X.append(img[y:y + size, x:x + size])
+    return np.stack(X)
+
+
 def depth_loss(pred, true, m):
     """L1 on object pixels after removing each image's mean depth (absolute placement is arbitrary)."""
     n = m.sum((1, 2)).clamp(min=1)
@@ -95,11 +109,24 @@ class Trainer:
         else:
             self.nreal = 0
         self.model = tasks.build(cfg).to(d)
+        # Mean-teacher consistency on unlabelled real map crops (research memo 1, section 1.2): the
+        # student, shown a flipped and outline-damaged crop, must match a slow-moving average of
+        # itself (the teacher) shown the clean crop. Teaches the real style without any labels.
+        self.cons = t.get("consistency")
+        if self.cons and cfg["task"] == "faces":
+            ux = unlabelled_crops()
+            self.UX = torch.as_tensor(ux, device=d)
+            import copy
+            self.teacher = copy.deepcopy(self.model).eval()
+            for q in self.teacher.parameters(): q.requires_grad_(False)
+        else:
+            self.cons = None
         self.opt = torch.optim.AdamW(self.model.parameters(), t["lr"], weight_decay=t["weightDecay"])
         self.per = len(ti) // (t["batch"] - self.nreal)
         self.sched = torch.optim.lr_scheduler.OneCycleLR(self.opt, t["lr"], total_steps=t["epochs"] * self.per)
         self.epoch = 0; self.step = 0; self.best = None
-        info = dict(samples=n, valSamples=nv, realCrops=int(len(self.RX)) if self.nreal else 0, device=str(d))
+        info = dict(samples=n, valSamples=nv, realCrops=int(len(self.RX)) if self.nreal else 0, device=str(d),
+                    unlabelledCrops=int(len(self.UX)) if self.cons else 0)
         run.set(arch=tasks.describe(self.model, (4, t["crop"], t["crop"])), metrics=METRIC_DEFS,
                 classes=["TOP", "FRONT", "SLOPE", "HIP◀", "HIP▶"] if cfg["task"] == "faces" else None, data=info)
         self._resume()
@@ -110,13 +137,15 @@ class Trainer:
         if not p.exists(): return
         s = torch.load(p, map_location=self.dev, weights_only=False)
         self.model.load_state_dict(s["model"]); self.opt.load_state_dict(s["opt"]); self.sched.load_state_dict(s["sched"])
+        if self.cons and "teacher" in s: self.teacher.load_state_dict(s["teacher"])
         self.epoch, self.step = s["epoch"], s["step"]
         torch.set_rng_state(s["rng"]); np.random.set_state(s["nprng"])
         lab.event("status", f"Resumed {self.run.id} at epoch {self.epoch}", runs=[self.run.id])
 
     def _save(self):
         s = dict(model=self.model.state_dict(), opt=self.opt.state_dict(), sched=self.sched.state_dict(),
-                 epoch=self.epoch, step=self.step, rng=torch.get_rng_state(), nprng=np.random.get_state(), cfg=self.cfg)
+                 epoch=self.epoch, step=self.step, rng=torch.get_rng_state(), nprng=np.random.get_state(), cfg=self.cfg,
+                 **({"teacher": self.teacher.state_dict()} if self.cons else {}))
         tmp = self.dir / "last.pt.tmp"; torch.save(s, tmp); os.replace(tmp, self.dir / "last.pt")
         torch.save(dict(model=self.model.state_dict(), cfg=self.cfg), self.dir / "model.pt")
 
@@ -138,7 +167,10 @@ class Trainer:
                 br = torch.randint(0, len(self.RX), (self.nreal,), device=self.dev)
                 x = torch.cat([x, tasks.onehot(self.RX[br][sl])]); y = torch.cat([y, self.RY[br][sl]]); w = torch.cat([w, self.RW[br][sl]])
             o = self.model(x)
-            return (F.cross_entropy(o, y, reduction="none") * w).sum() / w.sum().clamp(min=1)
+            loss = (F.cross_entropy(o, y, reduction="none") * w).sum() / w.sum().clamp(min=1)
+            if self.cons:
+                loss = loss + self.cons["weight"] * self._consistency(c)
+            return loss
         h = tasks.split(cfg, self.model(x))
         y = self.N[idx][(slice(None), slice(None)) + sl[1:]]
         loss = ((1 - (h["normal"] * y).sum(1)) * w).sum() / w.sum().clamp(min=1)
@@ -146,6 +178,31 @@ class Trainer:
         if "occ" in h: loss = loss + 0.5 * F.binary_cross_entropy_with_logits(h["occ"], occ)
         if "depth" in h: loss = loss + 0.1 * depth_loss(h["depth"], self.Z[idx][sl], occ)
         return loss
+
+    def _consistency(self, c):
+        nu = self.cons.get("batch", 16)
+        bu = torch.randint(0, len(self.UX), (nu,), device=self.dev)
+        H, W = self.UX.shape[-2:]
+        y0, x0 = np.random.randint(0, H - c + 1), np.random.randint(0, W - c + 1)
+        u = self.UX[bu][:, y0:y0 + c, x0:x0 + c]
+        with torch.no_grad():
+            p = self.teacher(tasks.onehot(u)).softmax(1)
+            conf, _ = p.max(1); keep = (conf > self.cons.get("threshold", 0.6)).float()
+        us = u.clone()
+        drop = (us == 3) & (torch.rand(us.shape, device=self.dev) < self.cons.get("outlineDrop", 0.15))
+        us[drop] = 2
+        flip = np.random.rand() < 0.5
+        if flip: us = us.flip(-1)
+        q = self.model(tasks.onehot(us)).log_softmax(1)
+        if flip: q = q.flip(-1)[:, [0, 1, 2, 4, 3]]   # a horizontal flip swaps the two hips
+        l = -(p * q).sum(1)
+        return (l * keep).sum() / keep.sum().clamp(min=1)
+
+    @torch.no_grad()
+    def _ema(self):
+        a = self.cons.get("ema", 0.99)
+        for pt, ps in zip(self.teacher.parameters(), self.model.parameters()): pt.mul_(a).add_(ps.detach(), alpha=1 - a)
+        for bt, bs in zip(self.teacher.buffers(), self.model.buffers()): bt.copy_(bs)
 
     # ---------- validation ----------
     @torch.no_grad()
@@ -187,6 +244,7 @@ class Trainer:
             for i in range(self.per):
                 loss = self._loss(perm[i * bs:(i + 1) * bs])
                 self.opt.zero_grad(set_to_none=True); loss.backward(); self.opt.step(); self.sched.step()
+                if self.cons: self._ema()
                 self.step += 1; li = loss.item(); tot += li; win += li; wn += 1
                 if self.step % t["logEvery"] == 0:
                     el = time.time() - t0

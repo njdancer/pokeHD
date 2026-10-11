@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v0",
+  "title": "Five faces, no tile labels, plus consistency on real maps (mean teacher)",
+  "why": "Learn the real game's look without trusting any labels: the model must give the same answer for a real map crop whether or not it is flipped or has gaps in its outlines.",
+  "changes": ["+ mean-teacher consistency on 16,600 unlabelled real map crops (eval maps excluded), weight 0.5"],
+  "train": {"consistency": {"weight": 0.5, "batch": 16, "ema": 0.99, "threshold": 0.6, "outlineDrop": 0.15}}
+}
