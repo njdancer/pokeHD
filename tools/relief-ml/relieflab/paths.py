@@ -24,7 +24,7 @@ PKG = Path(__file__).resolve().parent
 TOOL = PKG.parent                      # tools/relief-ml
 REPO = TOOL.parent.parent
 CONFIGS = TOOL / "configs"
-TESTSET = TOOL / "prototype" / "testset" / "objects.json"
+TESTSET = TOOL / "testset" / "objects.json"
 SHAPE_TS = REPO / "apps/web/src/client/tools/relief/shape.ts"
 
 for d in (PRIVATE, DATA, CKPT, LAB, QUEUE, LOGS):

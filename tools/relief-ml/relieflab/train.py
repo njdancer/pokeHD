@@ -20,14 +20,17 @@ EVAL_MAPS = ["PALLET_TOWN", "VIRIDIAN_CITY", "PEWTER_CITY", "CERULEAN_CITY", "VE
              "BLUES_HOUSE", "MUSEUM_1F", "PEWTER_GYM", "CELADON_MANSION_1F", "VIRIDIAN_SCHOOL_HOUSE"]
 
 
-def real_crops(object_weight, size=64, stride=32):
-    """Real map crops labelled by the plan rule (training maps only; the eval maps are held out)."""
+def real_crops(object_weight, size=64, stride=32, only=None):
+    """Real map crops labelled by the plan rule (training maps only; the eval maps are held out).
+    only: if given, the tile labels whose rule labels are trusted; every other label gets weight 0."""
     X, Y, W = [], [], []
     for name in tasks.map_names():
         if name in EVAL_MAPS: continue
         img, labs = tasks.map_img(name)
         f = np.zeros(labs.shape, np.int64); w = np.zeros(labs.shape, np.float32)
-        for (i, j), l in np.ndenumerate(labs): f[i, j], w[i, j] = tasks.rule(l, object_weight)
+        for (i, j), l in np.ndenumerate(labs):
+            f[i, j], w[i, j] = tasks.rule(l, object_weight)
+            if only is not None and l not in only: w[i, j] = 0.0
         f = np.kron(f, np.ones((8, 8), np.int64)); w = np.kron(w, np.ones((8, 8), np.float32))
         H, Wd = img.shape
         if H < size or Wd < size: continue
@@ -103,7 +106,8 @@ class Trainer:
             self.Y = torch.einsum("bchw,kc->bkhw", self.N, FT).argmax(1)
             share = cfg["real"]["share"]
             if share > 0:
-                rx, ry, rw = real_crops(cfg["real"]["objectRuleWeight"])
+                only = cfg["real"].get("labels")
+                rx, ry, rw = real_crops(cfg["real"]["objectRuleWeight"], only=set(only) if only else None)
                 self.RX, self.RY, self.RW = (torch.as_tensor(a, device=d) for a in (rx, ry, rw))
             self.nreal = int(t["batch"] * share) if share > 0 else 0
         else:

@@ -104,7 +104,7 @@ def testset(model, cfg, run):
                  dict(MAP_LAYERS, truth=dict(label="Hand-made boxes", encoding="faces", truth=True),
                       rule=dict(label="Rule labels", encoding="faces", truth=True),
                       err=dict(label="Wrong vs boxes", encoding="error")))
-    per, K, hits, n = [], np.zeros((2, 5), np.int64), 0, 0
+    per, K, hits, n = [], np.zeros((5, 5), np.int64), 0, 0
     rule_hits = 0
     for name in sorted({o["map"] for o in T}):
         img, labs = tasks.map_img(name)
@@ -112,11 +112,13 @@ def testset(model, cfg, run):
         truth = np.full(img.shape, 255, np.uint8)
         for o in [o for o in T if o["map"] == name]:
             xs = slice(o["x"][0], o["x"][1] + 1)
-            truth[o["top"][0]:o["top"][1] + 1, xs] = 0; truth[o["front"][0]:o["front"][1] + 1, xs] = 1
-            box = np.zeros(img.shape, bool); box[o["top"][0]:o["front"][1] + 1, xs] = True
-            m = box & (truth < 255)
+            box = np.zeros(img.shape, bool)
+            for key, face in (("top", 0), ("front", 1), ("slope", 2)):
+                if key in o:
+                    truth[o[key][0]:o[key][1] + 1, xs] = face; box[o[key][0]:o[key][1] + 1, xs] = True
+            m = box
             ok = f[m] == truth[m]; rok = rf[m] == truth[m]
-            per.append(dict(id=o["name"].lower().replace(" ", "-").replace("'", "").replace(",", ""), title=o["name"],
+            per.append(dict(id=o["name"].lower().replace(" ", "-").replace("'", "").replace(",", "").replace(":", ""), title=o["name"],
                             sample=f"map:{name}", scores=dict(acc=float(ok.mean()), rule=float(rok.mean()))))
             hits += ok.sum(); n += m.sum(); rule_hits += rok.sum()
             np.add.at(K, (truth[m].astype(int), f[m].astype(int)), 1)
@@ -126,10 +128,10 @@ def testset(model, cfg, run):
         ps.item(f"map:{name}", name, img.shape[1], img.shape[0], files, scores=dict(acc=float((f[m] == truth[m]).mean())))
     acc = hits / n; om = float(np.mean([o["scores"]["acc"] for o in per]))
     lo, hi = bootstrap([o["scores"]["acc"] for o in per])
-    run.eval("testset", dict(title="Hand-made test set (13 objects)", split="testset", circular=False,
+    run.eval("testset", dict(title=f"Hand-made test set ({len(per)} objects)", split="testset", circular=False,
                              overall=dict(acc=float(acc), obj_mean=om, obj_mean_lo=lo, obj_mean_hi=hi, rule_acc=float(rule_hits / n)),
-                             perClass=dict(acc={"TOP": float(K[0, 0] / max(1, K[0].sum())), "FRONT": float(K[1, 1] / max(1, K[1].sum()))}),
-                             confusion=dict(labels=FACE_LABELS, matrix=np.pad(K, ((0, 3), (0, 0))).tolist()),
+                             perClass=dict(acc={c: float(K[i, i] / K[i].sum()) for i, c in enumerate(FACE_LABELS[:3]) if K[i].sum()}),
+                             confusion=dict(labels=FACE_LABELS, matrix=K.tolist()),
                              perObject=per, preds=[ps.save()]))
     return dict(test_acc=float(acc), test_obj_mean=om, test_obj_mean_lo=lo, test_obj_mean_hi=hi)
 

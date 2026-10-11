@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v0",
+  "title": "Five faces: rule labels only where the rule is trustworthy (buildings, walls, ground)",
+  "why": "faces-v0 (no labels) gets furniture right but turns house walls, roofs and the lab's back wall into floor. faces-v3 (rule labels) gets buildings right but furniture wrong. Use the rule only for labels that are whole-tile and unambiguous.",
+  "changes": ["Real maps back in (half of each batch), rule labels only for: ground, lawn, tall-grass, flower, water, shore, bridge, floor, roof, wall, wall-interior, window, door, picture", "No rule labels for furniture, machines, shelves, statues, signs, plants, trees, rocks, cliffs, ledges, fences or stairs"],
+  "real": {"share": 0.5, "objectRuleWeight": 1, "labels": ["ground", "lawn", "tall-grass", "flower", "water", "shore", "bridge", "floor", "roof", "wall", "wall-interior", "window", "door", "picture"]}
+}

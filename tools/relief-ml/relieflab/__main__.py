@@ -26,6 +26,7 @@ def main(argv=None):
     s = sp.add_parser("ops"); s.add_argument("doing"); s.add_argument("--why", default=""); s.add_argument("--next", action="append", default=[]); s.add_argument("--run", action="append", default=[])
     s = sp.add_parser("event"); s.add_argument("kind"); s.add_argument("title"); s.add_argument("--body"); s.add_argument("--run", action="append")
     s = sp.add_parser("audit"); s.add_argument("run", help="a run trained without rule labels")
+    s = sp.add_parser("reeval"); s.add_argument("run", nargs="+")
     sp.add_parser("flags")
     s = sp.add_parser("flag-reply"); s.add_argument("id"); s.add_argument("status"); s.add_argument("reply")
     a = ap.parse_args(argv)
@@ -64,6 +65,13 @@ def main(argv=None):
         from . import audit
         for l, r in sorted(audit.run(a.run).items(), key=lambda kv: kv[1]["agreement"]):
             print(f"{l:14s} rule {r['ruleFace']:6s} agree {r['agreement']:.2f}  pixels {r['pixels']:7d}  tiles {r['distinctTiles']}")
+    elif a.cmd == "reeval":
+        from . import evals
+        from .runner import _load_model, _best
+        from .runs import Run
+        for rid in a.run:
+            r = Run(rid); cfg = r.h["config"]
+            res = evals.run_all(_load_model(cfg, rid), cfg, r); r.summary(**res); print(rid, {k: round(v, 3) for k, v in res.items()})
     elif a.cmd == "flags":
         for p in sorted((LAB / "flags").glob("*.json")) if (LAB / "flags").exists() else []:
             f = json.loads(p.read_text()); print(f"{f['id']} [{f['status']}] {f['kind']}: {f['note']}")
