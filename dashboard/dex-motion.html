@@ -4,8 +4,10 @@
   where the menu button is; tapping it opens the cover and flies it into place as separate,
   overlapping tracks, each with its own delay, duration and cubic-bezier curve. It also tries how
   the closed dex shows news (its lights, and a toast that comes out of it). The values copy out as
-  JSON for the game (packages/engine/src/dex/device.ts), and save to the page's database
-  (tuning/values) so Claude can read them.
+  JSON for the game (packages/engine/src/dex/motion.ts runs the same sums), and save to the page's
+  database (tuning/values) so Claude can read them. The dex follows the phone: held sideways the
+  open dex lies on its side with a wide page, and turning the phone rolls it over (⟲ ▯ ⟳, or the
+  real phone full screen).
 
   The model comes in as base64 in the dex-glb script tag: build with `node dashboard/build-dex-motion.mjs`,
   which writes the publishable page next to it (gitignored output under dashboard/dist/).
@@ -70,6 +72,10 @@ header h1 small { font-weight: 700; color: var(--muted); margin-left: 6px; font-
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 select.btn { padding-right: 6px; }
+.seg { display: inline-flex; }
+.seg .btn { border-radius: 0; min-width: 34px; }
+.seg .btn:first-child { border-radius: 8px 0 0 8px; } .seg .btn:last-child { border-radius: 0 8px 8px 0; }
+.seg .btn + .btn { margin-left: -1px; }
 
 .left { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
 .stage-wrap { position: relative; min-height: 0; overflow: hidden; touch-action: none; background:
@@ -91,6 +97,13 @@ select.btn { padding-right: 6px; }
 .page .row:nth-child(1) i { background: #e8473b; } .page .row:nth-child(2) i { background: #59b8ad; }
 .page .row:nth-child(3) i { background: #e6b450; } .page .row:nth-child(4) i { background: #8fb4f0; }
 .page small { color: #8a6a4a; font-weight: 700; }
+/* The landscape stand-in: a sidebar of sections beside the list, not the portrait page stretched. */
+.page.wide { flex-direction: row; padding: 4.5% 4%; gap: 4%; }
+.page.wide nav { display: grid; gap: 6px; align-content: start; width: 30%; flex: none; }
+.page.wide nav b { display: block; padding: 7px 10px; border-radius: 10px; font-weight: 800; }
+.page.wide nav b:first-child { background: var(--sand); color: #fffdf7; }
+.page.wide .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.page.wide .rowlist { grid-template-columns: 1fr 1fr; }
 .hint { position: absolute; z-index: 5; left: 50%; bottom: 22px; translate: -50% 0; padding: 6px 12px; border-radius: 99px;
   background: #0008; color: #fff; font-weight: 800; font-size: 13px; pointer-events: none; transition: opacity .3s; white-space: nowrap; }
 .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-weight: 800; }
@@ -207,6 +220,11 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
         <option value="0.5">0.5×</option>
         <option value="1" selected>1×</option>
       </select>
+      <span class="seg" id="turns" role="group" aria-label="How the phone is held">
+        <button class="btn" type="button" data-angle="90" title="Phone turned left (landscape)">⟲</button>
+        <button class="btn" type="button" data-angle="0" aria-pressed="true" title="Phone upright (portrait)">▯</button>
+        <button class="btn" type="button" data-angle="-90" title="Phone turned right (landscape)">⟳</button>
+      </span>
       <button class="btn" id="framed" type="button" aria-pressed="true">Phone frame</button>
       <button class="btn" id="full" type="button">Try it full screen</button>
       <button class="btn" id="reset" type="button">Reset all</button>
@@ -222,6 +240,19 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
         <div class="dim" id="dim"></div>
         <canvas id="dex"></canvas>
         <div id="glows"></div>
+        <div class="page wide" id="page-l">
+          <nav><b>Pokémon</b><b>People</b><b>Bag</b><b>Map</b><b>Me</b></nav>
+          <div class="main">
+            <h2>Pokémon</h2>
+            <div class="rowlist">
+              <div class="row"><i></i>Party</div>
+              <div class="row"><i></i>Seen</div>
+              <div class="row"><i></i>Caught</div>
+              <div class="row"><i></i>Boxes</div>
+            </div>
+            <small>A landscape stand-in, to judge the turn.</small>
+          </div>
+        </div>
         <div class="page" id="page">
           <h2>Menu</h2>
           <div class="rowlist">
@@ -273,8 +304,15 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
     </section>
 
     <section>
-      <h3>Open (in place)</h3>
+      <h3>Open (in place) <b id="open-orient">Portrait</b></h3>
       <div class="fields" id="open-fields"></div>
+      <p class="note">Portrait and landscape each keep their own fill, offset and motion path; these and the path on the preview are the ones for how the phone is held now.</p>
+    </section>
+
+    <section>
+      <h3>Turning the phone</h3>
+      <p class="note">The dex follows the phone: held sideways it lies on its side, its screen wide, and the page swaps to the landscape layout. Turn the phone with ⟲ ▯ ⟳ (or turn your own, full screen) to watch it roll over, open or mid-flight. The closed dex stays upright in the corner; opening, it turns to match the phone along the Turn track.</p>
+      <div class="fields" id="rotate-fields"></div>
     </section>
 
     <section>
@@ -336,7 +374,7 @@ const TRACKS = [
   { id: "page", label: "Page", note: "The page fades in on the screen." },
 ];
 const DEFAULTS = {
-  version: 3,
+  version: 4,
   tracks: {
     pressIn: { delay: 0, duration: 70, curve: [0.3, 0, 0.6, 1], depth: 0.1 },
     pressOut: { delay: 70, duration: 160, curve: [0.3, 0, 0.3, 1] },
@@ -354,6 +392,10 @@ const DEFAULTS = {
   // a fraction of the way across (x) and down (y), so x above 1 swings past the middle.
   path: { c1: [0.333, 0.333], c2: [0.667, 0.667] },
   close: { speed: 1.4 },
+  // Held sideways: the open pose and motion path for landscape (path and open above are portrait's).
+  landscape: { open: { fill: 0.94, offsetY: 0 }, path: { c1: [0.333, 0.333], c2: [0.667, 0.667] } },
+  // Turning the phone: how long the dex takes to roll to the new orientation, and its curve.
+  rotate: { duration: 480, curve: [0.3, 0, 0.15, 1] },
   // lights/toast: 1 on, 0 off. lid: how far it lifts while a toast is out, over lidMs.
   alerts: {
     lights: 1, toast: 1, blinkMs: 1000, glow: 12,
@@ -385,7 +427,7 @@ const PATHS = {
  */
 let arcKey = "", arcLen = [];
 function pathParam(e, dx, dy) {
-  const P = V.path, N = 128;
+  const P = cur().path, N = 128;
   dx = Math.abs(dx); dy = Math.abs(dy);
   const key = `${P.c1},${P.c2},${(dy / (dx + dy || 1)).toFixed(4)}`;
   if (key !== arcKey) {
@@ -431,6 +473,8 @@ function load(raw) {
     r.tracks.pressIn ??= { delay: p.delay, duration: half, curve: p.curve, depth: p.depth };
     r.tracks.pressOut ??= { delay: p.delay + half, duration: p.duration - half, curve: p.curve };
   }
+  // Before version 4 there was only portrait: landscape starts as a copy of it.
+  if (!r.landscape) r.landscape = { open: clone(r.open ?? DEFAULTS.open), path: clone(r.path ?? DEFAULTS.path) };
   return merge(clone(DEFAULTS), r);
 }
 const STORE = "dex-motion-v1";
@@ -511,12 +555,43 @@ const $ = (id) => document.getElementById(id);
 const stageWrap = $("stage-wrap"), stage = $("stage"), dexCanvas = $("dex"), worldCanvas = $("world"), pageEl = $("page"), dimEl = $("dim"), hint = $("hint");
 let framed = true;
 let SW = 390, SH = 844, stageScale = 1, zoom = 1, panX = 0, panY = 0;
+// ---------- Orientation ----------
+// How the phone is held, as the angle the dex rolls (degrees, anticlockwise on screen): 0 upright,
+// 90 turned left (anticlockwise), -90 turned right. The open dex lies at this angle; the closed one
+// stays upright. A change rolls it there over V.rotate, from wherever it was (even mid-roll).
+let heldAngle = 0;            // the frame's orientation now
+let frameAngle = 0;           // the one picked with ⟲ ▯ ⟳ (the phone frame)
+let roll = { from: 0, to: 0, start: -1e9 };
+const landscape = () => heldAngle !== 0;
+/** The values for how it's held now: portrait's (top level) or landscape's. */
+const cur = () => (landscape() ? V.landscape : V);
+function rollAngle(now = performance.now()) {
+  const u = Math.min(1, Math.max(0, (now - roll.start) / Math.max(1, V.rotate.duration)));
+  return lerp(roll.from, roll.to, bezier(V.rotate.curve)(u));
+}
+/** The phone's own orientation when the stage is the real window (full screen on a phone). */
+function deviceAngle(wide) {
+  if (!wide) return 0;
+  const a = screen.orientation?.angle ?? window.orientation ?? 90;
+  // Screen angle 90 is the phone turned anticlockwise; 270 (or -90) clockwise.
+  return a === 270 || a === -90 ? -90 : 90;
+}
+function setHeld(angle) {
+  if (angle === heldAngle) return;
+  const from = rollAngle();
+  heldAngle = angle;
+  roll = { from, to: angle, start: performance.now() };
+  pageSized = false;
+  for (const b of document.querySelectorAll("#turns .btn")) b.setAttribute("aria-pressed", String(+b.dataset.angle === frameAngle));
+  if (typeof buildFields === "function") { buildFields(); fillTrackFields(); }
+}
 function layoutStage() {
   const r = stageWrap.getBoundingClientRect();
   if (!r.width || !r.height) return;
   let fit;
-  if (framed) { SW = 390; SH = 844; fit = Math.min((r.width - 40) / SW, (r.height - 40) / SH); }
+  if (framed) { [SW, SH] = frameAngle ? [844, 390] : [390, 844]; fit = Math.min((r.width - 40) / SW, (r.height - 40) / SH); }
   else { SW = Math.round(r.width); SH = Math.round(r.height); fit = 1; }
+  setHeld(framed ? frameAngle : deviceAngle(SW > SH));
   stageScale = Math.max(0.1, fit * zoom);
   if (zoom <= 1) { panX = 0; panY = 0; }
   stage.style.width = SW + "px"; stage.style.height = SH + "px";
@@ -654,23 +729,31 @@ const deg = THREE.MathUtils.degToRad;
 const lerp = THREE.MathUtils.lerp;
 const tmp = new THREE.Vector3();
 let shut = 1;
+/** The open dex's scale for this frame with it rolled to `a` degrees: its screen fills the frame. */
+function openScale(a) {
+  const k = wpp(), c = Math.abs(Math.cos(deg(a))), sn = Math.abs(Math.sin(deg(a)));
+  const w = c * screenW + sn * screenH, h = sn * screenW + c * screenH;
+  return cur().open.fill * Math.min((SW * k) / w, (SH * k) / h);
+}
 function pose(ms) {
-  const b = buttonRect(), k = wpp();
+  const b = buttonRect(), k = wpp(), O = cur();
   const x0 = (b.x + b.w / 2 - SW / 2) * k, y0 = (SH / 2 - b.y - b.h / 2) * k;
-  const x1 = 0, y1 = -V.open.offsetY * k;
+  const x1 = 0, y1 = -O.open.offsetY * k;
+  const a = rollAngle();
   const s0 = (b.w * k) / shutW;
-  const s1 = V.open.fill * Math.min((SW * k) / screenW, (SH * k) / screenH);
+  const s1 = openScale(a);
 
   const pressIn = at("pressIn", ms), pressOut = at("pressOut", ms), move = at("move", ms), scale = at("scale", ms), turn = at("turn", ms), open = at("open", ms), page = at("page", ms), dim = at("dim", ms), blur = at("blur", ms);
   // The point of the device pinned to the path: the closed body's centre, sliding to the screen's.
   wrap.position.lerpVectors(shutCentre, screenCentre, Math.min(1, Math.max(0, scale.e))).negate();
-  const P = V.path;
+  const P = O.path;
   const ps = pathParam(move.e, x1 - x0, y1 - y0);
   device.position.set(lerp(x0, x1, bez1(P.c1[0], P.c2[0], ps)), lerp(y0, y1, bez1(P.c1[1], P.c2[1], ps)), 0);
   const squash = 1 - V.tracks.pressIn.depth * (pressIn.e - pressOut.e);
   device.scale.setScalar(s0 * Math.pow(s1 / s0, scale.e) * squash);
+  // Turn untilts it and rolls it from upright (the button) to the way the phone is held.
   const r = 1 - turn.e;
-  device.rotation.set(deg(V.closed.tiltX) * r, deg(V.closed.tiltY) * r + deg(V.tracks.turn.swing) * Math.sin(Math.PI * turn.u), deg(V.closed.tiltZ) * r);
+  device.rotation.set(deg(V.closed.tiltX) * r, deg(V.closed.tiltY) * r + deg(V.tracks.turn.swing) * Math.sin(Math.PI * turn.u), deg(V.closed.tiltZ) * r + deg(a) * turn.e);
   // News shows while it's shut and goes as soon as it starts to move.
   shut = Math.max(0, 1 - Math.max(move.e, scale.e) * 4);
   setOpen(Math.max(open.e, V.alerts.lid * lidV * shut));
@@ -682,24 +765,42 @@ function pose(ms) {
   worldCanvas.style.transform = px > 0.05 ? `scale(${1 + (4 * px) / Math.max(1, worldCanvas.clientWidth)})` : "";
   placeNews(b);
 
-  // The page over the screen.
+  // The page over the screen: the layout for how the phone is held, on the screen's corners taken
+  // round by the held angle so its top is up once the dex has rolled there. While it rolls, the
+  // other layout fades out on its own corners, so the content turns with the dex.
+  if (!pageSized) sizePages();
   const op = Math.min(1, Math.max(0, page.e));
-  pageEl.style.opacity = String(op);
-  if (op > 0) {
-    if (!pageSized) sizePage();
-    const quad = screenCorners.map((c) => {
-      tmp.copy(c).applyMatrix4(screenMesh.matrixWorld).project(camera);
-      return [((tmp.x + 1) / 2) * SW, ((1 - tmp.y) / 2) * SH];
-    });
-    pageEl.style.transform = quadTransform(pageW, pageH, quad);
-  }
+  // The swap happens over the middle half of the roll, so neither layout sits on its side for long.
+  const through = roll.from === roll.to ? 1 : Math.min(1, Math.max(0, ((a - roll.from) / (roll.to - roll.from) - 0.25) / 0.5));
+  const mix = through * through * (3 - 2 * through);
+  const showL = landscape(), fromL = roll.from !== 0 && Math.abs(roll.from) > 45;
+  const opL = showL ? (fromL ? 1 : mix) : fromL ? 1 - mix : 0;
+  placePage(pageEl, op * (1 - opL), 0);
+  placePage(pageLEl, op * opL, showL ? heldAngle : roll.from > 0 ? 90 : -90);
 }
-let pageSized = false, pageW = 300, pageH = 300;
-/** The page's layout size: the screen's size once in place, so text lays out once at its real size. */
-function sizePage() {
-  const s1 = V.open.fill * Math.min((SW * wpp()) / screenW, (SH * wpp()) / screenH);
-  pageW = Math.round((screenW * s1) / wpp()); pageH = Math.round((screenH * s1) / wpp());
-  pageEl.style.width = pageW + "px"; pageEl.style.height = pageH + "px";
+const pageLEl = $("page-l");
+let pageSized = false;
+/** Lays `el` over the screen with its top-left on the corner that's top-left at `angle`. */
+function placePage(el, op, angle) {
+  el.style.opacity = String(op);
+  if (op <= 0) return;
+  const turns = ((Math.round(angle / 90) % 4) + 4) % 4;
+  const quad = [0, 1, 2, 3].map((i) => {
+    tmp.copy(screenCorners[(i + turns) % 4]).applyMatrix4(screenMesh.matrixWorld).project(camera);
+    return [((tmp.x + 1) / 2) * SW, ((1 - tmp.y) / 2) * SH];
+  });
+  el.style.transform = quadTransform(+el.dataset.w, +el.dataset.h, quad);
+}
+/** Each page's layout size: the screen's size once in place, so text lays out once at its real size. */
+function sizePages() {
+  const size = (el, a) => {
+    const s1 = openScale(a), w = Math.round((screenW * s1) / wpp()), h = Math.round((screenH * s1) / wpp());
+    const [pw, ph] = a ? [h, w] : [w, h];
+    el.dataset.w = pw; el.dataset.h = ph;
+    el.style.width = pw + "px"; el.style.height = ph + "px";
+  };
+  size(pageEl, 0);
+  size(pageLEl, 90);
   pageSized = true;
 }
 // The same projective mapping as the game (device.ts quadTransform).
@@ -933,6 +1034,13 @@ const setFull = (on) => {
 };
 $("full").onclick = () => setFull(true);
 $("exit-full").onclick = () => setFull(false);
+for (const b of document.querySelectorAll("#turns .btn")) {
+  b.onclick = () => {
+    frameAngle = +b.dataset.angle;
+    if (!framed) { framed = true; $("framed").setAttribute("aria-pressed", "true"); }
+    panX = panY = 0; layoutStage();
+  };
+}
 $("reset").onclick = () => { V = clone(DEFAULTS); save(); buildAll(); };
 
 // The stage: a tap opens or closes the dex; a drag pans (once zoomed in); two fingers zoom.
@@ -1225,7 +1333,7 @@ function buildPathUI() {
         const r = stage.getBoundingClientRect(), { p0, p1 } = pathEnds();
         const lx = ((ev.clientX - r.left) / r.width) * SW, ly = ((ev.clientY - r.top) / r.height) * SH;
         const frac = (v, a, b) => (Math.abs(b - a) < 1 ? 0 : (v - a) / (b - a));
-        V.path["c" + (i + 1)] = [+unsquash(frac(lx, p0[0], p1[0])).toFixed(3), +unsquash(frac(ly, p0[1], p1[1])).toFixed(3)];
+        cur().path["c" + (i + 1)] = [+unsquash(frac(lx, p0[0], p1[0])).toFixed(3), +unsquash(frac(ly, p0[1], p1[1])).toFixed(3)];
         fillTrackFields(); writeJson();
       };
       h.onpointerup = () => { h.onpointermove = null; save(); };
@@ -1250,7 +1358,7 @@ function unsquash(s) {
 /** The path's ends in stage pixels: the closed button's centre and the open dex's. */
 function pathEnds() {
   const b = buttonRect();
-  return { p0: [b.x + b.w / 2, b.y + b.h / 2], p1: [SW / 2, SH / 2 + V.open.offsetY] };
+  return { p0: [b.x + b.w / 2, b.y + b.h / 2], p1: [SW / 2, SH / 2 + cur().open.offsetY] };
 }
 function drawPathUI() {
   const on = selected === "move";
@@ -1271,7 +1379,7 @@ function drawPathUI() {
     PATH.curve.setAttribute("stroke-width", 2.5 * sc);
     for (let i = 0; i <= DOTS; i++) PATH["d" + i].setAttribute("r", 2.2 * sc);
   }
-  const { p0, p1 } = pathEnds(), P = V.path;
+  const { p0, p1 } = pathEnds(), P = cur().path;
   const pt = (fx, fy) => [p0[0] + (p1[0] - p0[0]) * fx, p0[1] + (p1[1] - p0[1]) * fy];
   const c1 = pt(...P.c1), c2 = pt(...P.c2);
   const g1 = pt(squash(P.c1[0]), squash(P.c1[1])), g2 = pt(squash(P.c2[0]), squash(P.c2[1]));
@@ -1316,11 +1424,11 @@ function fillTrackFields() {
   ["x1", "y1", "x2", "y2"].forEach((n, i) => field(host, n, () => tr.curve[i], (v) => (tr.curve[i] = n[0] === "x" ? Math.min(1, Math.max(0, v)) : v), { step: 0.01 }));
   if (selected === "move") {
     const head = document.createElement("h4"); head.className = "sub"; head.textContent = "Path"; host.append(head);
-    ["c1", "c2"].forEach((c, ci) => ["x", "y"].forEach((a, ai) => field(host, `Handle ${ci + 1} ${a}`, () => V.path[c][ai], (v) => (V.path[c][ai] = v), { step: 0.01 })));
+    ["c1", "c2"].forEach((c, ci) => ["x", "y"].forEach((a, ai) => field(host, `Handle ${ci + 1} ${a}`, () => cur().path[c][ai], (v) => (cur().path[c][ai] = v), { step: 0.01 })));
     const chips = document.createElement("div"); chips.className = "presets"; chips.style.gridColumn = "1 / -1";
     for (const [name, p] of Object.entries(PATHS)) {
       const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = name;
-      b.onclick = () => { V.path.c1 = p.slice(0, 2); V.path.c2 = p.slice(2); save(); fillTrackFields(); writeJson(); };
+      b.onclick = () => { cur().path.c1 = p.slice(0, 2); cur().path.c2 = p.slice(2); save(); fillTrackFields(); writeJson(); };
       chips.append(b);
     }
     host.append(chips);
@@ -1339,8 +1447,18 @@ function buildFields() {
   field(c, "Tilt y °", () => V.closed.tiltY, (v) => (V.closed.tiltY = v), { wide: true, range: [-60, 60] });
   field(c, "Tilt z °", () => V.closed.tiltZ, (v) => (V.closed.tiltZ = v), { wide: true, range: [-45, 45] });
   const o = $("open-fields"); o.innerHTML = "";
-  field(o, "Screen fills", () => V.open.fill, (v) => (V.open.fill = Math.min(1.2, Math.max(0.3, v))), { step: 0.01, wide: true, range: [0.5, 1.1] });
-  field(o, "Offset y px", () => V.open.offsetY, (v) => (V.open.offsetY = v), { wide: true, range: [-200, 200] });
+  field(o, "Screen fills", () => cur().open.fill, (v) => (cur().open.fill = Math.min(1.2, Math.max(0.3, v))), { step: 0.01, wide: true, range: [0.5, 1.1] });
+  field(o, "Offset y px", () => cur().open.offsetY, (v) => (cur().open.offsetY = v), { wide: true, range: [-200, 200] });
+  $("open-orient").textContent = landscape() ? "Landscape" : "Portrait";
+  const rf = $("rotate-fields"); rf.innerHTML = "";
+  field(rf, "Roll ms", () => V.rotate.duration, (v) => (V.rotate.duration = Math.max(0, v)), { step: 10, wide: true, range: [0, 1200] });
+  const rc = document.createElement("div"); rc.className = "mini-curve";
+  const rh = document.createElement("h4"); rh.textContent = "Roll curve";
+  const rs = document.createElementNS(NS, "svg"); rs.setAttribute("class", "curve"); rs.setAttribute("viewBox", "0 0 300 300"); rs.setAttribute("aria-label", "Roll curve");
+  const rp = document.createElement("div"); rp.className = "presets";
+  rc.append(rh, rs, rp);
+  const box = document.createElement("div"); box.className = "mini-curves"; box.append(rc); rf.append(box);
+  curveEditor(rs, rp, { get: () => V.rotate.curve, colour: () => "var(--t-turn)", change: writeJson, commit: save }).build();
   const cl = $("close-fields"); cl.innerHTML = "";
   field(cl, "Speed ×", () => V.close.speed, (v) => (V.close.speed = Math.max(0.1, v)), { step: 0.05, wide: true, range: [0.5, 3] });
 }
@@ -1365,5 +1483,5 @@ buildAll();
 new ResizeObserver(() => placeBars()).observe(tl);
 requestAnimationFrame(frame);
 initThree().catch((e) => { $("loading").textContent = "The model didn't load: " + e.message; console.error(e); });
-window.__dexMotion = { get t() { return t; }, set t(v) { t = v; dir = 0; }, V: () => V, ready: () => ready, queue };
+window.__dexMotion = { get t() { return t; }, set t(v) { t = v; dir = 0; }, V: () => V, ready: () => ready, queue, roll: () => ({ ...roll, now: rollAngle() }), rollAt: (u) => (roll.start = performance.now() - u * V.rotate.duration) };
 </script>

@@ -2,7 +2,7 @@
   "name": "@pokehd/engine",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./world": "./src/world/index.ts", "./battle": "./src/battle/index.ts", "./dex": "./src/dex/device.ts" },
+  "exports": { ".": "./src/index.ts", "./world": "./src/world/index.ts", "./battle": "./src/battle/index.ts", "./dex": "./src/dex/device.ts", "./dex/motion": "./src/dex/motion.ts" },
   "scripts": { "typecheck": "tsc -p ." },
   "dependencies": {
     "@pokehd/rom": "workspace:*",
