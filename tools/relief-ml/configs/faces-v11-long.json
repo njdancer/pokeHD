@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v8-combined",
+  "title": "faces-v8, trained twice as long at a gentler learning rate",
+  "why": "Four v8 seeds land between 68% and 81%, so the result depends on luck. A longer, gentler schedule often makes runs settle on the same answer. If seeds still disagree, the data, not the training, is the problem.",
+  "changes": ["40 epochs instead of 20", "Peak learning rate 2e-3 → 1e-3"],
+  "train": {"epochs": 40, "lr": 0.001}
+}
