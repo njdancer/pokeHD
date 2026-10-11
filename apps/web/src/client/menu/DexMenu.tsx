@@ -293,6 +293,7 @@ function Dex({ open, onClose, place, layout: forced, side, setSide, floating, co
               {t.id === "people" && gifts > 0 && <i className="m-dot">{gifts}</i>}
             </span>
             <span className="m-tablabel">{t.label}</span>
+            <span className="m-tabmini" aria-hidden="true">{t.label}</span>
           </button>
         ))}
       </nav>

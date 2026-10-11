@@ -34,10 +34,10 @@
 /* Fills whatever it's drawn into (the dex's screen). The grid places the tabs: below the pages
    in portrait, beside them in landscape. */
 .m-dex {
-  /* --m-screen-r: the host's screen corner radius, inherited (44px if unset). */
-  --m-gap: 10px; --m-pad: 5px; --m-item: 58px;
-  --m-bar-r: max(0px, calc(var(--m-screen-r, 44px) - var(--m-gap))); --m-sel-r: max(0px, calc(var(--m-bar-r) - var(--m-pad)));
-  --m-side-full: clamp(150px, 26%, 196px); --m-side-rail: calc(var(--m-item) + 2 * var(--m-pad)); --m-side-w: var(--m-side-full);
+  /* --m-screen-r: the host's screen corner radius, inherited (34px if unset). */
+  --m-gap: 8px; --m-pad: 5px; --m-item: 58px;
+  --m-bar-r: max(0px, calc(var(--m-screen-r, 34px) - var(--m-gap))); --m-sel-r: max(0px, calc(var(--m-bar-r) - var(--m-pad)));
+  --m-side-full: clamp(150px, 26%, 196px); --m-side-rail: 76px; --m-side-w: var(--m-side-full);
   position: absolute; inset: 0; overflow: hidden; pointer-events: auto; container: dex / size;
   display: grid; grid-template: "screen" minmax(0, 1fr) "tabs" auto / minmax(0, 1fr);
   background: linear-gradient(#fffaf0, #f7ead0);
@@ -51,7 +51,7 @@
 /* No dex to draw into (dev pages, for now the game): a plain panel over the world. */
 .m-dex.floating {
   left: calc(var(--m-safe-left) + 12px); right: calc(var(--m-safe-right) + 12px); top: calc(var(--m-safe-top) + 12px); bottom: calc(var(--m-safe-bottom) + 12px);
-  border-radius: var(--m-screen-r, 44px); box-shadow: 0 22px 48px #3a1e0866;
+  border-radius: var(--m-screen-r, 34px); box-shadow: 0 22px 48px #3a1e0866;
   transform-origin: calc(100% - 30px) 30px; transition: transform .34s cubic-bezier(.2, .9, .25, 1.04), opacity .2s ease;
   transform: scale(.2); opacity: 0; pointer-events: none;
 }
@@ -432,12 +432,23 @@ img.m-sprite { width: 40px; height: 40px; }
   display: flex; flex-direction: column; gap: 3px; margin: var(--m-gap) 0 var(--m-gap) var(--m-gap); overflow: hidden auto; scrollbar-width: none;
 }
 .m-dex[data-layout="landscape"] .m-tabbar button {
-  flex-direction: row; justify-content: flex-start; gap: 12px; padding: 0 12px 0 calc((var(--m-item) - 32px) / 2); font-size: 16px; color: var(--m-ink);
+  flex-direction: row; justify-content: flex-start; gap: 12px; font-size: 16px; color: var(--m-ink);
+  /* The icon sits where the rail's centre will be, so it doesn't move sideways as it slims. */
+  padding: 0 12px 0 calc((var(--m-side-rail) - 2 * var(--m-pad) - 32px) / 2);
 }
 .m-dex[data-layout="landscape"] .m-tabbar button[aria-current="page"] { color: var(--m-accent-dark); }
 .m-dex[data-layout="landscape"] .m-tabbar button:last-child { margin-top: auto; }
 .m-tablabel { white-space: nowrap; overflow: hidden; transition: opacity .2s; }
+/* Slimming: the word beside the icon fades out as a small one fades in below it. */
+.m-tabmini { display: none; }
+.m-dex[data-layout="landscape"] .m-tabmini {
+  display: block; position: absolute; left: 0; bottom: 5px; width: calc(var(--m-side-rail) - 2 * var(--m-pad)); text-align: center;
+  font-size: 11px; white-space: nowrap; opacity: 0; transition: opacity .2s;
+}
+.m-dex[data-layout="landscape"] .m-tabicon { transition: translate .3s cubic-bezier(.3, .9, .3, 1); }
 .m-dex[data-layout="landscape"][data-side="rail"] .m-tablabel { opacity: 0; }
+.m-dex[data-layout="landscape"][data-side="rail"] .m-tabmini { opacity: 1; }
+.m-dex[data-layout="landscape"][data-side="rail"] .m-tabicon { translate: 0 -7px; }
 .m-dex[data-layout="landscape"] .m-sidegrip {
   display: grid; place-items: center; grid-area: tabs; justify-self: end; align-self: center; z-index: 2; width: 20px; height: 72px; margin-right: -14px;
   padding: 0; border: 0; background: none; cursor: col-resize; touch-action: none;

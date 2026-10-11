@@ -30,7 +30,7 @@
 }
 .md-opendex.open { transform: none; opacity: 1; pointer-events: auto; }
 .md-opendex-screen {
-  --m-screen-r: 44px;
+  --m-screen-r: 34px;
   position: absolute; left: 14px; right: 14px; top: 58px; bottom: 74px; overflow: hidden; border-radius: var(--m-screen-r);
   box-shadow: 0 0 0 4px #2b2b33, 0 0 0 6px #7a160f;
 }
