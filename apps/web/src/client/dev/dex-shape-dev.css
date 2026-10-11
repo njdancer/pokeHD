@@ -1,0 +1,70 @@
+/* /dev/dex/shape (DexShapeDev.tsx). On a computer: the model to turn round and its controls on the
+   left, an iPhone 13 Pro sized frame (390×844, notch and home bar) with the dex open on the right.
+   On a phone: the model fills the screen over a sheet of controls; "Try it" opens the dex. */
+.ds-page {
+  --s: .86;
+  position: fixed; inset: 0; overflow: auto; display: flex; gap: 40px; justify-content: center; align-items: flex-start;
+  padding: 28px 24px 40px; background: radial-gradient(120% 80% at 30% 0%, #fbf3e3, #ecdcbf); color: #3e2a1c;
+  font: 700 15px/1.45 Nunito, ui-rounded, system-ui, sans-serif;
+}
+.ds-left { flex: 0 1 620px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.ds-head h1 { margin: 2px 0 8px; font: 900 30px/1.1 Nunito, sans-serif; }
+.ds-head p { margin: 0; }
+.ds-kicker { color: #b9541a; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+.ds-view { position: relative; height: 440px; border-radius: 24px; background: radial-gradient(80% 70% at 50% 40%, #fffaf0, #e8d6b4); box-shadow: inset 0 0 0 2px #d6a86655; overflow: hidden; }
+.ds-inspect { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.ds-inspect:active { cursor: grabbing; }
+
+.ds-controls { display: grid; gap: 14px; }
+.ds-controls section { display: grid; gap: 6px; }
+.ds-controls h2 { margin: 0; display: flex; justify-content: space-between; gap: 8px; font: 900 16px/1.2 Nunito, sans-serif; }
+.ds-controls h2 small { color: #9a6c45; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+.ds-controls input[type="range"] { width: 100%; accent-color: #e0702a; }
+.ds-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ds-chips button { min-height: 34px; padding: 0 12px; border-radius: 99px; border: 2px solid #ecd3a6; background: #fffdf8; color: #3e2a1c; font: 800 14px/1 Nunito, sans-serif; cursor: pointer; }
+.ds-chips button[aria-pressed="true"] { background: #e0702a; border-color: #b9541a; color: #fff; }
+
+.ds-scale { flex: none; width: calc(390px * var(--s)); height: calc(844px * var(--s)); }
+.ds-phone {
+  position: relative; width: 390px; height: 844px; transform: scale(var(--s)); transform-origin: 0 0;
+  border-radius: 47.33px; overflow: hidden; isolation: isolate;
+  background: radial-gradient(90% 60% at 50% 40%, #9fcf8a, #6d9f5c); box-shadow: 0 0 0 12px #17161a, 0 0 0 14px #3a383f, 0 30px 70px #3a1e0866;
+}
+.ds-phone::before { content: ""; position: absolute; z-index: 40; left: 50%; top: 0; translate: -50% 0; width: 162px; height: 32px; border-radius: 0 0 20px 20px; background: #17161a; pointer-events: none; }
+.ds-phone::after { content: ""; position: absolute; z-index: 40; left: 50%; bottom: 8px; translate: -50% 0; width: 136px; height: 5px; border-radius: 3px; background: #17161acc; pointer-events: none; }
+
+/* On a phone. */
+.ds-small {
+  position: fixed; inset: 0; display: flex; flex-direction: column; color: #3e2a1c;
+  background: radial-gradient(80% 60% at 50% 30%, #fffaf0, #e8d6b4); font: 700 15px/1.45 Nunito, ui-rounded, system-ui, sans-serif;
+}
+.ds-small .ds-inspect { position: relative; flex: 1; min-height: 0; }
+.ds-sheet {
+  flex: none; display: grid; gap: 12px; padding: 14px 16px calc(env(safe-area-inset-bottom, 0px) + 12px);
+  border-radius: 22px 22px 0 0; background: #fffaf0f2; box-shadow: 0 -6px 20px #4a2a0a22;
+}
+.ds-try { min-height: 48px; border: 2px solid #b9541a; border-radius: 99px; background: linear-gradient(#f08a3e, #e0702a); color: #fff; font: 900 17px/1 Nunito, sans-serif; }
+.ds-try:disabled { opacity: .6; }
+.ds-full { position: fixed; inset: 0; z-index: 60; background: radial-gradient(90% 60% at 50% 40%, #9fcf8a, #6d9f5c); }
+
+/* One dex: a backdrop (tap to close or replay), the device's canvas, the menu over its screen. */
+.ds-stage { position: absolute; inset: 0; }
+.ds-backdrop { position: absolute; inset: 0; background: #2a1a0c38; }
+.ds-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.ds-screen { position: absolute; left: 0; top: 0; transform-origin: 0 0; visibility: hidden; overflow: hidden; }
+.ds-size { position: absolute; z-index: 41; left: 50%; bottom: 18px; translate: -50% 0; padding: 3px 10px; border-radius: 99px; background: #17161acc; color: #fff; font: 700 12px/1.4 Nunito, sans-serif; pointer-events: none; }
+.ds-status { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 24px; text-align: center; color: #fff; }
+
+/* The menu as it is today, minus its temporary panel chrome: the dex is the frame now. */
+.ds-screen .m-root { --m-safe-top: 0px; --m-safe-bottom: 0px; position: absolute; inset: 0; }
+.ds-screen .m-shade, .ds-screen .m-corner, .ds-screen .m-dex > .m-close { display: none; }
+.ds-screen .m-dex {
+  inset: 0; border: 0; border-radius: 0; box-shadow: none;
+  transform: none; opacity: 1; transition: none; pointer-events: auto;
+}
+.ds-screen .m-screen { border-radius: 0; }
+.ds-screen .m-head { padding-right: 18px; }
+.ds-back {
+  position: absolute; z-index: 70; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 4px); min-height: 34px; padding: 0 14px;
+  border: 0; border-radius: 99px; background: #fffaf0e6; color: #3e2a1c; font: 800 14px/1 Nunito, sans-serif; box-shadow: 0 2px 8px #0003;
+}

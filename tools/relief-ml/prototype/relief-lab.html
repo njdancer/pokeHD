@@ -1,0 +1,685 @@
+<title>Relief Training Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Silkscreen&display=swap">
+<style>
+/* Layout: run ledger on the left, the selected run's sheet on the right; stacks on phones. */
+:root {
+  --bg: #f4f5f0; --panel: #fbfcf8; --ink: #1c2117; --ink-2: #4c5444; --ink-3: #7d8574;
+  --line: #dde1d4; --line-2: #c9cfbd; --accent: #44612c; --accent-soft: #e3ead6;
+  --s1: #2a78d6; --s2: #eb6834; --good: #0ca30c; --warn: #c98500; --bad: #d03b3b;
+  --gb0: #e9eedc; --gb1: #a8b893; --gb2: #5d6f4c; --gb3: #1f2a17;
+  --f-display: "Silkscreen", "IBM Plex Mono", monospace;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13160f; --panel: #1a1e15; --ink: #e9ecdf; --ink-2: #b9c0aa; --ink-3: #868e78;
+  --line: #2b3123; --line-2: #3a422f; --accent: #9cc06f; --accent-soft: #263020;
+  --s1: #3987e5; --s2: #d95926; --good: #3cbc3c; --warn: #eda100; --bad: #e66767;
+  --gb0: #d7e0c3; --gb1: #93a77c; --gb2: #55663f; --gb3: #0e1309; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #13160f; --panel: #1a1e15; --ink: #e9ecdf; --ink-2: #b9c0aa; --ink-3: #868e78;
+  --line: #2b3123; --line-2: #3a422f; --accent: #9cc06f; --accent-soft: #263020;
+  --s1: #3987e5; --s2: #d95926; --good: #3cbc3c; --warn: #eda100; --bad: #e66767;
+  --gb0: #d7e0c3; --gb1: #93a77c; --gb2: #55663f; --gb3: #0e1309; color-scheme: dark }
+* { box-sizing: border-box }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--f-body); }
+.wrap { padding-inline: 20px; padding-block: 18px 40px; max-width: 1400px; margin: 0 auto; }
+header.top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; margin-bottom: 16px; }
+h1 { font: 22px/1.1 var(--f-display); letter-spacing: .02em; margin: 0; }
+.sub { color: var(--ink-2); max-width: 70ch; }
+.live { margin-left: auto; font: 12px var(--f-data); color: var(--ink-3); display: flex; gap: 10px; align-items: center; }
+button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line-2); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, .run:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.ledger { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px); }
+@media (max-width: 860px) { .ledger { position: static; } }
+.ledger h2 { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); margin: 0; padding: 12px 14px 8px; display: flex; justify-content: space-between; }
+.run { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 14px; border-top: 1px solid var(--line); cursor: pointer; background: none; width: 100%; text-align: left; border-radius: 0; border-left: 3px solid transparent; border-right: 0; border-bottom: 0; }
+.run:hover { background: var(--accent-soft); }
+.run[aria-current="true"] { background: var(--accent-soft); border-left-color: var(--accent); }
+.run .nm { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.run .meta { font: 11px var(--f-data); color: var(--ink-3); grid-column: 1; }
+.run .key { font: 12px var(--f-data); color: var(--ink-2); text-align: right; grid-row: 1 / span 2; grid-column: 2; align-self: center; }
+.chip { display: inline-block; font: 500 10px var(--f-data); text-transform: uppercase; letter-spacing: .06em; padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--ink-2); margin-right: 6px; vertical-align: 1px; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font: 500 11px var(--f-data); padding: 2px 8px; border-radius: 99px; border: 1px solid currentColor; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.st-running { color: var(--s1); } .st-running::before { animation: pulse 1.4s infinite; }
+.st-done { color: var(--good); } .st-failed { color: var(--bad); } .st-stopped { color: var(--warn); }
+@keyframes pulse { 50% { opacity: .25 } }
+@media (prefers-reduced-motion: reduce) { .st-running::before { animation: none } }
+.sheet { min-width: 0; display: grid; gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+.card h3 { font: 600 11px var(--f-body); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-3); margin: 0 0 10px; }
+.head h2 { font: 600 20px/1.25 var(--f-body); margin: 4px 0 6px; text-wrap: balance; overflow-wrap: anywhere; }
+.head .note { color: var(--ink-2); max-width: 75ch; margin: 0; }
+.head .times { font: 12px var(--f-data); color: var(--ink-3); margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.finding { margin-top: 12px; padding: 10px 12px; background: var(--accent-soft); border-radius: 8px; max-width: 80ch; }
+.finding b { font-weight: 600; }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+dl.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0; font-size: 13px; }
+dl.kv dt { color: var(--ink-3); } dl.kv dd { margin: 0; font-family: var(--f-data); font-size: 12px; overflow-wrap: anywhere; }
+.chart { width: 100%; overflow-x: auto; position: relative; }
+.chart svg { display: block; width: 100%; height: auto; }
+.chart text { fill: var(--ink-3); font: 11px var(--f-data); }
+.chart .lab { fill: var(--ink-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--ink-2); margin: 0 0 6px; }
+.legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; vertical-align: 3px; margin-right: 6px; }
+.legend i.sq { height: 10px; width: 10px; vertical-align: -1px; border: 1px solid var(--line-2); }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--panel); font: 11px/1.4 var(--f-data); padding: 6px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -110%); z-index: 2; }
+.gallery { display: grid; gap: 14px; }
+.gallery figure { margin: 0; }
+.gallery .img { overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px; }
+.gallery img { image-rendering: pixelated; display: block; max-width: none; height: auto; }
+.gallery figcaption { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+.arch-detail { font: 12px var(--f-data); color: var(--ink-2); margin-top: 8px; min-height: 1.5em; overflow-wrap: anywhere; }
+.arch svg .node { cursor: pointer; }
+.arch svg .node rect { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.5; }
+.arch svg .node.sel rect, .arch svg .node:hover rect { fill: var(--accent); }
+.arch svg .node.sel text, .arch svg .node:hover text { fill: var(--panel); }
+.arch svg .node text { fill: var(--ink); font: 11px var(--f-data); }
+.arch svg .flow { stroke: var(--ink-3); stroke-width: 1.5; fill: none; }
+.arch svg .skip { stroke: var(--s2); stroke-width: 1.5; stroke-dasharray: 4 3; fill: none; }
+.empty { padding: 28px 18px; color: var(--ink-2); }
+.empty p { max-width: 60ch; }
+table.t { border-collapse: collapse; font-size: 12px; width: 100%; }
+table.t th, table.t td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--line); font-family: var(--f-data); font-variant-numeric: tabular-nums; }
+table.t th:first-child, table.t td:first-child { text-align: left; font-family: var(--f-body); }
+table.t th { color: var(--ink-3); font-weight: 500; }
+.tbl { overflow-x: auto; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 6px 0 2px; }
+.bar > span { display: block; height: 100%; background: var(--accent); }
+.muted { color: var(--ink-3); }
+.tabs { display: flex; gap: 6px; margin: 0 0 16px; position: sticky; top: env(safe-area-inset-top, 0px); background: var(--bg); padding-block: 8px; z-index: 3; }
+.tabs button { border-radius: 99px; padding: 6px 14px; }
+.tabs button[aria-selected="true"] { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+.story { display: grid; gap: 16px; max-width: 820px; }
+.story .card p { margin: 0 0 10px; max-width: 68ch; }
+.story .card p:last-child { margin-bottom: 0; }
+.story h2.step { font: 600 18px/1.3 var(--f-body); margin: 0 0 8px; text-wrap: balance; display: flex; gap: 10px; align-items: baseline; }
+.story h2.step .n { font: 12px var(--f-display); color: var(--accent); flex: none; }
+.keyrow { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 14px; align-items: center; margin: 10px 0; }
+@media (max-width: 520px) { .keyrow { grid-template-columns: 110px minmax(0, 1fr); } }
+.keyrow canvas { width: 100%; height: auto; border-radius: 50%; }
+.keys { display: grid; gap: 4px; font-size: 13px; }
+.keys span i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 8px; border: 1px solid var(--line-2); }
+.measure { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: start; margin: 12px 0; }
+@media (max-width: 520px) { .measure { grid-template-columns: minmax(0, 1fr); } .measure svg { max-width: 160px; } }
+.measure svg { width: 100%; height: auto; }
+.measure svg text { fill: var(--ink-2); font: 11px var(--f-data); }
+.bench { display: grid; gap: 6px; margin-top: 8px; font-size: 13px; }
+.bench div { display: grid; grid-template-columns: 120px 48px minmax(0, 1fr); gap: 10px; align-items: center; }
+.bench .track { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden; }
+.bench .track span { display: block; height: 100%; border-radius: 5px; }
+.bench b { font: 500 12px var(--f-data); text-align: right; }
+.now { display: grid; gap: 10px; }
+.now .row { display: grid; gap: 4px; }
+.steps { display: grid; gap: 0; }
+.stepc { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; padding-bottom: 16px; position: relative; }
+.stepc::before { content: ""; position: absolute; left: 10px; top: 20px; bottom: 0; width: 2px; background: var(--line-2); }
+.stepc:last-child::before { display: none; }
+.stepc .dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--accent); background: var(--panel); margin-top: 2px; }
+.stepc.running .dot { border-color: var(--s1); }
+.stepc h4 { margin: 0; font: 600 14px var(--f-body); overflow-wrap: anywhere; }
+.stepc .k { font: 12px var(--f-data); color: var(--ink-3); }
+.stepc p { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); max-width: 68ch; }
+.stepc p.learn { color: var(--ink); }
+.stepc button { margin-top: 6px; font-size: 12px; padding: 2px 10px; }
+.pics { display: grid; gap: 14px; }
+.pics img, .gallery img { width: 100%; max-width: 100%; image-rendering: pixelated; display: block; height: auto; }
+.gallery .img { overflow: visible; }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Relief Lab</h1>
+    <span class="live"><span id="status">Connecting to project files…</span><button id="refresh" type="button">Refresh</button></span>
+  </header>
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" id="tab-story" aria-selected="true">Walkthrough</button>
+    <button type="button" role="tab" id="tab-runs" aria-selected="false">All runs</button>
+  </div>
+  <div id="view-story" class="story">
+    <section class="card"><h2 class="step"><span class="n">00</span>The question</h2>
+      <p>Can a small network look at a Game Boy sprite and tell which way each pixel's surface faces? If it can, every tile and Pokémon gets 3D relief straight from the ROM, with nothing hand-made.</p>
+      <p>Nobody has labelled the game's art with directions, so we make our own training data: random 3D objects, drawn in the game's style, where we know the right answer for every pixel.</p>
+      <div id="now" class="now"></div>
+    </section>
+    <section class="card"><h2 class="step"><span class="n">01</span>What the model outputs</h2>
+      <p>For every pixel, a direction: the way that bit of surface faces. Pictures show a direction as a colour, so a whole sprite's answer becomes a colour picture called a normal map.</p>
+      <div class="keyrow"><canvas id="ball" width="160" height="160" aria-label="A ball coloured by the direction each point faces"></canvas>
+        <div class="keys">
+          <span><i style="background:rgb(128,255,128)"></i>Green: faces up (floors, table tops)</span>
+          <span><i style="background:rgb(128,128,255)"></i>Blue-violet: faces you (walls, fronts)</span>
+          <span><i style="background:rgb(230,128,200)"></i>Pink: faces right</span>
+          <span><i style="background:rgb(40,140,200)"></i>Teal: faces left</span>
+          <span><i style="background:rgb(128,200,220)"></i>Pale blue-green: a roof sloping back</span>
+        </div></div>
+      <p class="muted">The ball shows every direction at once: its top is green, its middle faces you, and its sides turn left and right.</p>
+    </section>
+    <section class="card"><h2 class="step"><span class="n">02</span>Where the training data comes from</h2>
+      <p>A script builds random scenes of boxes, houses, shelves, trees, tables, stairs and boulders. It draws them in the game's 4 shades, with outlines, dither and drop shadows, and records the true direction of every pixel. Each pair below is a drawn sprite and its answer.</p>
+      <div class="pics" id="pic-gen"><p class="muted">Loading samples…</p></div>
+      <p>The drawing style was tuned against the real maps first. Real Game Boy art lights fronts almost as brightly as tops, and only uses black for outlines. Our first renders didn't do that, and the first model learned the wrong habits.</p>
+    </section>
+    <section class="card"><h2 class="step"><span class="n">03</span>How we measure error</h2>
+      <div class="measure">
+        <svg viewBox="0 0 120 100" role="img" aria-label="Two arrows with the angle between them marked">
+          <line x1="20" y1="85" x2="20" y2="15" stroke="var(--good)" stroke-width="3"/><path d="M14 22 L20 10 L26 22Z" fill="var(--good)"/>
+          <line x1="20" y1="85" x2="72" y2="35" stroke="var(--s1)" stroke-width="3"/><path d="M64 34 L76 31 L72 43Z" fill="var(--s1)"/>
+          <path d="M20 50 A35 35 0 0 1 45 60" fill="none" stroke="var(--ink-2)" stroke-width="1.5"/>
+          <text x="50" y="62">angle</text><text x="4" y="98">true</text><text x="60" y="98">guess</text>
+        </svg>
+        <div><p><b>Practice test (made-up scenes).</b> Here we know the exact answer, so we measure the angle between the true direction and the model's guess, averaged over pixels. 0° is perfect and 90° means facing completely the wrong way. We hold back 5% of the scenes the model never trains on, and score those.</p></div>
+      </div>
+      <div class="measure">
+        <svg viewBox="0 0 120 100" role="img" aria-label="Three tiles: floor facing up, wall facing you, roof at 45 degrees">
+          <rect x="6" y="60" width="32" height="30" rx="3" fill="rgb(128,255,128)"/><text x="8" y="56">floor</text>
+          <rect x="44" y="60" width="32" height="30" rx="3" fill="rgb(128,128,255)"/><text x="48" y="56">wall</text>
+          <rect x="82" y="60" width="32" height="30" rx="3" fill="rgb(128,218,218)"/><text x="86" y="56">roof</text>
+          <text x="8" y="20">tile labels →</text><text x="8" y="36">rough answers</text>
+        </svg>
+        <div><p><b>Real test (the actual game).</b> Nobody knows the exact shapes in the game, but our tile labels say roughly: floors and grass face up, walls and shelves face you, roofs slope at 45°. For each pixel we check which of those three the model's guess is closest to, and count how often it's right. Floors are most of every map, so we average the three kinds equally.</p>
+          <p>Two yardsticks: <b>chance</b> (33%) and <b>shade alone</b>, the best you could do by looking only at each pixel's shade and ignoring its surroundings. Beating shade alone means the model is using shape, not just brightness.</p></div>
+      </div>
+    </section>
+    <section class="card"><h2 class="step"><span class="n">04</span>Progress so far</h2>
+      <p>Each dot is one finished model of the game maps, oldest on the left. Tap or hover a dot for its numbers.</p>
+      <h3>Real test: share of pixels facing the right way</h3><div id="prog-real"></div>
+      <h3 style="margin-top:14px">Practice test: average error on objects</h3><div id="prog-synth"></div>
+      <h3 style="margin-top:14px" id="live-title">Latest training run, epoch by epoch</h3><div id="prog-live"></div>
+    </section>
+    <section class="card"><h2 class="step"><span class="n">05</span>How it looks on the real game</h2>
+      <p>Each strip shows the real map, the model's guess, and the rough answer from our labels. Dark areas in the answer aren't scored.</p>
+      <div class="pics" id="pic-real"><p class="muted">Loading pictures…</p></div>
+    </section>
+    <section class="card"><h2 class="step"><span class="n">06</span>What we tried, step by step</h2>
+      <div class="steps" id="steps"></div>
+    </section>
+  </div>
+  <div class="grid" id="view-runs" hidden>
+    <nav class="ledger" aria-label="Runs">
+      <h2><span>Runs</span><span id="count"></span></h2>
+      <div id="runs"><div class="empty"><p>Runs appear here as the scripts write them to <code>relief-synth/runs</code> in the project files.</p></div></div>
+    </nav>
+    <main class="sheet" id="sheet">
+      <section class="card empty">
+        <h3>No run selected</h3>
+        <p>Pick a run to see its curves, architecture and outputs. Running ones refresh on their own.</p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+(() => {
+  const CANDIDATES = ["relief-synth/runs", "/relief-synth/runs", "mnt/project-files/relief-synth/runs"];
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const fmt = (v, d = 3) => typeof v === "number" ? (Math.abs(v) >= 1000 ? v.toLocaleString() : Number.isInteger(v) ? String(v) : v.toFixed(d)) : v;
+  const pct = (v) => (v * 100).toFixed(1) + "%";
+  const when = (iso) => { if (!iso) return ""; const d = new Date(iso); return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); };
+  const dur = (a, b) => { if (!a) return ""; const s = ((b ? new Date(b) : new Date()) - new Date(a)) / 1000; if (s < 90) return Math.round(s) + "s"; if (s < 5400) return Math.round(s / 60) + " min"; return (s / 3600).toFixed(1) + " h"; };
+  const dec = new TextDecoder();
+
+  let unreadable = 0, errCodes = {}, lastSig = "", files = null, root = null, runs = new Map(), selected = null, metricsCache = new Map(), imgCache = new Map(), archSel = null;
+  try { selected = localStorage.getItem("relief-lab-run"); } catch {}
+  const status = (t) => { $("#status").textContent = t; };
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function retry(fn, tries = 5) {
+    for (let i = 0; ; i++) {
+      try { return await fn(); }
+      catch (e) { if (e?.code !== "rate_limited" || i >= tries - 1) throw e; await sleep(e.retryAfterMs ?? 800 * (i + 1)); }
+    }
+  }
+  async function readText(path) { const r = await retry(() => files.read(path)); return { text: dec.decode(r.bytes), rev: r.revision }; }
+
+  async function findRoot() {
+    for (const p of CANDIDATES) { try { await files.list({ path: p }); return p; } catch (e) { if (e?.code === "not_granted") throw e; } }
+    // Fall back to searching the top level for the folder.
+    const top = await files.list();
+    const hit = top.entries.find((e) => /relief-synth$/.test(e.path));
+    if (hit) return hit.path.replace(/\/$/, "") + "/runs";
+    throw { code: "not_found" };
+  }
+
+  async function listRuns(full) {
+    // index.json (written by the scripts) names every run; fall back to the folder listing without it.
+    let ids = null;
+    try { ids = JSON.parse((await readText(root + "/index.json")).text).runs; } catch {}
+    let paths;
+    if (ids) paths = ids.map((id) => root + "/" + id);
+    else {
+      let entries = [], cursor;
+      do { const r = await retry(() => files.list({ path: root, cursor })); entries = entries.concat(r.entries); cursor = r.cursor; } while (cursor);
+      paths = entries.filter((e) => e.isDirectory).map((e) => e.path.replace(/\/$/, ""));
+    }
+    unreadable = 0; errCodes = {};
+    // One at a time: reading every run at once trips the files rate limit.
+    for (const path of paths) {
+      const prev = runs.get(path);
+      if (prev && prev.h.status !== "running" && !full) continue; // finished runs only re-read on the slow refresh
+      try {
+        const { text, rev } = await readText(path + "/run.json");
+        if (prev && prev.rev === rev) continue;
+        runs.set(path, { path, h: JSON.parse(text), rev });
+      } catch (e) {
+        if (!prev) { unreadable++; const c = e?.code || "error"; errCodes[c] = (errCodes[c] || 0) + 1; }
+      }
+    }
+  }
+
+  function keyNumber(h) {
+    const r = h.results || {};
+    if (r.real_maps?.model?.balanced != null) return "real " + pct(r.real_maps.model.balanced);
+    if (r.val_angle_objects != null) return fmt(r.val_angle_objects, 1) + "° on objects";
+    if (r.val_angle != null) return fmt(r.val_angle, 1) + "°";
+    if (r.best_distance != null) return "L1 " + fmt(r.best_distance, 2);
+    if (r.map_scenes) return fmt(r.map_scenes) + " scenes";
+    return "";
+  }
+
+  function renderList() {
+    const list = [...runs.values()].sort((a, b) => (b.h.started || "").localeCompare(a.h.started || ""));
+    $("#count").textContent = list.length ? list.length + (list.length === 1 ? " run" : " runs") : "";
+    if (!list.length) return;
+    $("#runs").innerHTML = list.map((r) => `
+      <button class="run" type="button" data-path="${esc(r.path)}" aria-current="${r.path === selected}">
+        <span class="nm"><span class="chip">${esc(r.h.kind)}</span>${esc(r.h.name)}</span>
+        <span class="key">${esc(keyNumber(r.h))}<br><span class="pill st-${esc(r.h.status)}">${esc(r.h.status)}</span></span>
+        <span class="meta">${esc(when(r.h.started))} · ${esc(dur(r.h.started, r.h.finished || (r.h.status === "running" ? null : r.h.updated)))}</span>
+      </button>`).join("");
+    if (!selected || !runs.has(selected)) { selected = list[0].path; renderSheet(); }
+  }
+
+  $("#runs").addEventListener("click", (e) => {
+    const b = e.target.closest(".run"); if (!b) return;
+    selected = b.dataset.path; archSel = null; lastSig = "";
+    try { localStorage.setItem("relief-lab-run", selected); } catch {}
+    document.querySelectorAll(".run").forEach((x) => x.setAttribute("aria-current", String(x.dataset.path === selected)));
+    renderSheet(true);
+  });
+
+  async function loadMetrics(run) {
+    try {
+      const { text, rev } = await readText(run.path + "/metrics.jsonl");
+      const c = metricsCache.get(run.path);
+      if (c && c.rev === rev) return c.rows;
+      const rows = text.split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      metricsCache.set(run.path, { rev, rows }); return rows;
+    } catch { return []; }
+  }
+
+  async function imageUrl(path, attempt = 0) {
+    try {
+      const r = await retry(() => files.read(path));
+      const c = imgCache.get(path);
+      if (c && c.rev === r.revision) return c;
+      const bytes = r.bytes.slice();
+      let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      const out = { rev: r.revision, url: URL.createObjectURL(new Blob([bytes], { type: "image/png" })), data: "data:image/png;base64," + btoa(bin) };
+      imgCache.set(path, out); return out;
+    } catch (e) {
+      if ((e?.code === "rate_limited" || e?.code === "not_found" || e?.code === "changed") && attempt < 3) {
+        await new Promise((res) => setTimeout(res, e?.retryAfterMs || 1500 * (attempt + 1)));
+        return imageUrl(path, attempt + 1);
+      }
+      return { error: e?.code || String(e) };
+    }
+  }
+
+  // ---------- charts ----------
+  let tipEl = null;
+  function tip(container, x, y, html) {
+    if (!tipEl || tipEl.parentNode !== container) { tipEl?.remove(); tipEl = document.createElement("div"); tipEl.className = "tip"; container.appendChild(tipEl); }
+    tipEl.hidden = !html; if (html) { tipEl.innerHTML = html; tipEl.style.left = x + "px"; tipEl.style.top = y + "px"; }
+  }
+  function ticks(lo, hi, n = 5) {
+    const span = hi - lo || 1, step0 = span / n, mag = 10 ** Math.floor(Math.log10(step0));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= step0);
+    const out = []; for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(+v.toFixed(10)); return out;
+  }
+  function lineChart(el, series, { x = "x", xLabel = "", yLabel = "", yZero = false, unit = "", xNames = null, yMin = null, yMax = null } = {}) {
+    const W = Math.max(300, Math.min(760, el.clientWidth || 560)), H = 220, m = { l: 46, r: 14, t: 10, b: 32 };
+    const pts = series.flatMap((s) => s.points);
+    if (!pts.length) { el.innerHTML = `<p class="muted">No points yet.</p>`; return; }
+    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x0 === x1) x1 = x0 + 1;
+    let y0 = yZero ? 0 : Math.min(...ys), y1 = Math.max(...ys); const pad = (y1 - y0) * 0.08 || 1; y0 = yZero ? 0 : y0 - pad; y1 += pad;
+    if (yMin != null) y0 = yMin; if (yMax != null) y1 = yMax;
+    const X = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r), Y = (v) => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+    const yt = ticks(y0, y1, 4), xt = xNames ? xNames.map((_, i) => i + 1) : ticks(x0, x1, 6);
+    const xName = (v) => xNames ? (xNames[Math.round(v) - 1] ?? "") : fmt(v, 1);
+    if (xNames && xNames.length === 1) { x0 = 0.5; x1 = 1.5; }
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)} by ${esc(xLabel)}">`;
+    svg += yt.map((v) => `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmt(v, 2)}</text>`).join("");
+    svg += xt.map((v) => `<text x="${X(v)}" y="${H - m.b + 16}" text-anchor="${xNames && xt.length > 1 ? (v === xt[0] ? "start" : v === xt[xt.length - 1] ? "end" : "middle") : "middle"}">${esc(xName(v))}</text>`).join("");
+    if (!xNames) svg += `<text x="${W - m.r}" y="${H - 4}" text-anchor="end" class="lab">${esc(xLabel)}</text>`;
+    for (const s of series) {
+      if (!s.points.length) continue;
+      svg += `<path d="${s.points.map((p, i) => (i ? "L" : "M") + X(p[0]).toFixed(1) + " " + Y(p[1]).toFixed(1)).join("")}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>`;
+      const dots = s.points.length <= 12 ? s.points : [s.points[s.points.length - 1]];
+      svg += dots.map((p) => `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="4" fill="${s.color}" stroke="var(--panel)" stroke-width="2"/>`).join("");
+    }
+    svg += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--ink-3)" stroke-width="1" visibility="hidden"/><rect x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" fill="transparent" class="hit"/></svg>`;
+    el.innerHTML = (series.length > 1 ? `<div class="legend">${series.map((s) => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")}</div>` : "") + `<div class="chart">${svg}</div>`;
+    const box = $(".chart", el), svgEl = $("svg", box), xh = $(".xh", svgEl);
+    $(".hit", svgEl).addEventListener("pointermove", (e) => {
+      const r = svgEl.getBoundingClientRect(), vx = (e.clientX - r.left) / r.width * W;
+      const xv = x0 + (vx - m.l) / (W - m.l - m.r) * (x1 - x0);
+      const rows = series.map((s) => { let best = null; for (const p of s.points) if (!best || Math.abs(p[0] - xv) < Math.abs(best[0] - xv)) best = p; return best && { s, p: best }; }).filter(Boolean);
+      if (!rows.length) return;
+      const px = rows[0].p[0]; xh.setAttribute("x1", X(px)); xh.setAttribute("x2", X(px)); xh.setAttribute("visibility", "visible");
+      tip(box, X(px) / W * r.width, Y(Math.max(...rows.map((q) => q.p[1]))) / H * r.height, `${xNames ? esc(xName(px)) : esc(xLabel) + " " + fmt(px, 2)}<br>` + rows.map((q) => `${esc(q.s.name)}: ${fmt(q.p[1], 3)}${unit}`).join("<br>"));
+    });
+    $(".hit", svgEl).addEventListener("pointerleave", () => { xh.setAttribute("visibility", "hidden"); tip(box, 0, 0, ""); });
+  }
+
+  function groupedBars(el, cats, series, { ref = null, refLabel = "" } = {}) {
+    const W = 560, H = 210, m = { l: 40, r: 10, t: 12, b: 30 }, gw = (W - m.l - m.r) / cats.length, bw = Math.min(28, (gw - 18) / series.length);
+    const Y = (v) => H - m.b - v * (H - m.t - m.b);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="accuracy by class">`;
+    svg += [0, .25, .5, .75, 1].map((v) => `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end">${v * 100}%</text>`).join("");
+    cats.forEach((c, i) => {
+      const gx = m.l + i * gw + (gw - bw * series.length - 2 * (series.length - 1)) / 2;
+      series.forEach((s, j) => {
+        const v = s.values[i]; if (v == null) return;
+        const x = gx + j * (bw + 2), y = Y(v), h = Y(0) - y;
+        svg += `<path class="bar-m" data-tip="${esc(s.name)} · ${esc(c)}: ${pct(v)}" d="M${x} ${Y(0)}V${y + Math.min(4, h)}q0 -4 4 -4h${bw - 8}q4 0 4 4V${Y(0)}Z" fill="${s.color}"/>`;
+      });
+      svg += `<text x="${m.l + i * gw + gw / 2}" y="${H - m.b + 16}" text-anchor="middle" class="lab">${esc(c)}</text>`;
+    });
+    if (ref != null) svg += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(ref)}" y2="${Y(ref)}" stroke="var(--ink-2)" stroke-dasharray="5 4"/><text x="${W - m.r}" y="${Y(ref) - 5}" text-anchor="end" class="lab">${esc(refLabel)}</text>`;
+    svg += `</svg>`;
+    el.innerHTML = `<div class="legend">${series.map((s) => `<span><i class="sq" style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")}</div><div class="chart">${svg}</div>`;
+    hoverTips($(".chart", el));
+  }
+
+  const SHADES = ["White", "Light grey", "Dark grey", "Black"];
+  function shadeBars(el, rows) {
+    const W = 560, rh = 22, m = { l: 150, r: 10, t: 4 }, H = m.t + rows.length * (rh + 6) + 4;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="shade mix">`;
+    rows.forEach((r, i) => {
+      const y = m.t + i * (rh + 6); let x = m.l; const tot = r.values.reduce((a, b) => a + b, 0) || 1;
+      svg += `<text x="${m.l - 8}" y="${y + rh / 2 + 4}" text-anchor="end" class="lab">${esc(r.label)}</text>`;
+      r.values.forEach((v, k) => {
+        const w = v / tot * (W - m.l - m.r); if (w <= 0) return;
+        svg += `<rect class="bar-m" data-tip="${esc(r.label)} · ${SHADES[k]}: ${pct(v / tot)}" x="${x + (k ? 1 : 0)}" y="${y}" width="${Math.max(0, w - (k ? 1 : 0))}" height="${rh}" fill="var(--gb${k})" stroke="var(--line-2)" stroke-width="${k ? 0 : 1}"/>`;
+        x += w;
+      });
+    });
+    svg += `</svg>`;
+    el.innerHTML = `<div class="legend">${SHADES.map((s, k) => `<span><i class="sq" style="background:var(--gb${k})"></i>${s}</span>`).join("")}</div><div class="chart">${svg}</div>`;
+    hoverTips($(".chart", el));
+  }
+
+  function hoverTips(box) {
+    box.addEventListener("pointermove", (e) => {
+      const t = e.target.closest("[data-tip]"); const r = box.getBoundingClientRect();
+      tip(box, e.clientX - r.left, e.clientY - r.top - 4, t ? esc(t.dataset.tip) : "");
+    });
+    box.addEventListener("pointerleave", () => tip(box, 0, 0, ""));
+  }
+
+  function archDiagram(el, arch) {
+    const nodes = arch.nodes || []; if (!nodes.length) { el.innerHTML = `<p class="muted">No architecture recorded.</p>`; return; }
+    const inH = arch.input?.[1] || 48;
+    const W = 640, H = 300, top = 30, levelH = 62, n = nodes.length;
+    const pos = {}; const colW = (W - 40) / n;
+    nodes.forEach((nd, i) => {
+      const h = nd.out?.[1] || inH, level = Math.round(Math.log2(inH / h));
+      const bh = Math.max(16, 70 * h / inH), bw = Math.max(26, Math.min(colW - 10, 10 + 6 * Math.log2(nd.out?.[0] || 1) * 1.2));
+      pos[nd.id] = { x: 20 + i * colW + colW / 2, y: top + level * levelH + 35, bw, bh, nd };
+    });
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="network architecture">`;
+    svg += `<defs><marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="var(--ink-3)"/></marker><marker id="as" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L8 4L0 8z" fill="var(--s2)"/></marker></defs>`;
+    for (let i = 1; i < n; i++) { const a = pos[nodes[i - 1].id], b = pos[nodes[i].id]; svg += `<path class="flow" marker-end="url(#ah)" d="M${a.x + a.bw / 2} ${a.y} C ${(a.x + b.x) / 2} ${a.y}, ${(a.x + b.x) / 2} ${b.y}, ${b.x - b.bw / 2 - 2} ${b.y}"/>`; }
+    for (const [s, d] of arch.skips || []) { const a = pos[s], b = pos[d]; if (!a || !b) continue; const y = a.y - a.bh / 2 - 8; svg += `<path class="skip" marker-end="url(#as)" d="M${a.x} ${a.y - a.bh / 2} V${y} H${b.x} V${b.y - b.bh / 2 - 2}"/>`; }
+    for (const p of Object.values(pos)) {
+      const o = p.nd.out || [];
+      svg += `<g class="node${archSel === p.nd.id ? " sel" : ""}" data-id="${esc(p.nd.id)}" tabindex="0"><rect x="${p.x - p.bw / 2}" y="${p.y - p.bh / 2}" width="${p.bw}" height="${p.bh}" rx="4"/><text x="${p.x}" y="${p.y + 4}" text-anchor="middle">${esc(p.nd.id)}</text></g>`;
+      svg += `<text x="${p.x}" y="${p.y + p.bh / 2 + 14}" text-anchor="middle">${o[0] ?? ""}ch</text><text x="${p.x}" y="${p.y + p.bh / 2 + 27}" text-anchor="middle">${o[1] ?? ""}×${o[2] ?? ""}</text>`;
+    }
+    svg += `<text x="20" y="18" class="lab">input 4 shades (one-hot) × ${arch.input?.[1]}×${arch.input?.[2]}</text><text x="${W - 20}" y="18" text-anchor="end" class="lab">output: normal (x, y, z) per pixel</text></svg>`;
+    el.innerHTML = `<div class="legend"><span><i style="background:var(--ink-3)"></i>main path</span><span><i style="background:var(--s2)"></i>skip connection</span></div><div class="chart arch">${svg}</div><div class="arch-detail" id="arch-detail"></div>`;
+    const show = (id) => {
+      const nd = nodes.find((q) => q.id === id); if (!nd) return;
+      archSel = id; el.querySelectorAll(".node").forEach((g) => g.classList.toggle("sel", g.dataset.id === id));
+      const counts = {}; (nd.layers || []).forEach((l) => counts[l] = (counts[l] || 0) + 1);
+      $("#arch-detail", el).textContent = `${nd.id}: ${nd.type} · out ${nd.out.join("×")} · ${nd.params.toLocaleString()} params · ` + Object.entries(counts).map(([k, v]) => `${v}× ${k}`).join(", ");
+    };
+    el.querySelectorAll(".node").forEach((g) => { g.addEventListener("click", () => show(g.dataset.id)); g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(g.dataset.id); } }); });
+    show(archSel || nodes[0].id);
+  }
+
+  function kvList(obj) {
+    return `<dl class="kv">${Object.entries(obj || {}).map(([k, v]) => `<dt>${esc(k.replace(/_/g, " "))}</dt><dd>${esc(typeof v === "object" && v !== null ? JSON.stringify(v) : fmt(v))}</dd>`).join("")}</dl>`;
+  }
+
+  // ---------- run sheet ----------
+  let renderToken = 0;
+  async function renderSheet(fromClick = false) {
+    const run = runs.get(selected); if (!run) return;
+    const h = run.h, my = ++renderToken, r = h.results || {};
+    const rows = await loadMetrics(run); if (my !== renderToken) return;
+    const sheet = $("#sheet");
+    const scrollKeep = window.scrollY;
+    let html = `<section class="card head">
+      <div><span class="chip">${esc(h.kind)}</span><span class="pill st-${esc(h.status)}">${esc(h.status)}</span></div>
+      <h2>${esc(h.name)}</h2>
+      ${h.note ? `<p class="note">${esc(h.note)}</p>` : ""}
+      <div class="times"><span>started ${esc(when(h.started))}</span><span>${h.status === "running" ? "running for" : "took"} ${esc(dur(h.started, h.finished || (h.status === "running" ? null : h.updated)))}</span><span>updated ${esc(when(h.updated))}</span>${h.parent ? `<span>from ${esc(h.parent)}</span>` : ""}</div>
+      ${r.finding ? `<div class="finding"><b>Finding.</b> ${esc(r.finding)}</div>` : ""}
+      ${r.error ? `<div class="finding"><b>Error.</b> ${esc(r.error)}</div>` : ""}
+    </section>`;
+    const blocks = [];
+    if (h.kind === "train") {
+      const ep = rows.filter((x) => x.val_angle != null), st = rows.filter((x) => x.train_loss != null);
+      const planned = h.config?.epochs;
+      if (planned) html += `<section class="card"><h3>Progress</h3><div>${ep.length} of ${planned} epochs</div><div class="bar"><span style="width:${Math.min(100, ep.length / planned * 100)}%"></span></div></section>`;
+      blocks.push(["Training loss", "c-loss"]); blocks.push(["Validation error (mean angle, synthetic)", "c-val"]);
+      if (r.real_maps) blocks.push(["Real maps: share of pixels facing the right way", "c-real"]);
+      html += `<div class="two">${blocks.map(([t, id]) => `<section class="card"><h3>${t}</h3><div id="${id}"></div></section>`).join("")}</div>`;
+      if (h.arch) html += `<section class="card"><h3>Architecture · ${h.arch.params?.toLocaleString()} parameters · ${(h.arch.bytes_fp16 / 1024).toFixed(0)} KB at fp16</h3><div id="c-arch"></div></section>`;
+      sheet.innerHTML = html + `<div class="two"><section class="card"><h3>Settings</h3>${kvList(h.config)}</section><section class="card"><h3>Results</h3>${kvList(Object.fromEntries(Object.entries(r).filter(([k]) => !["real_maps", "finding", "error"].includes(k))))}</section></div>` + `<section class="card"><h3>Pictures</h3><div class="gallery" id="gal"></div></section>`;
+      lineChart($("#c-loss"), [{ name: "train loss", color: "var(--s1)", points: (st.length ? st : rows.filter((x) => x.epoch_loss != null).map((x) => ({ ...x, train_loss: x.epoch_loss }))).map((x) => [st.length ? x.epoch : x.epoch, x.train_loss]) }], { xLabel: "epoch", yLabel: "loss" });
+      lineChart($("#c-val"), [{ name: "all pixels", color: "var(--s1)", points: ep.map((x) => [x.epoch, x.val_angle]) }, ...(ep.some((x) => x.val_angle_objects != null) ? [{ name: "object pixels", color: "var(--s2)", points: ep.filter((x) => x.val_angle_objects != null).map((x) => [x.epoch, x.val_angle_objects]) }] : [])], { xLabel: "epoch", yLabel: "degrees", unit: "°" });
+      if (r.real_maps) {
+        const cats = ["TOP", "FRONT", "SLOPE", "balanced"];
+        groupedBars($("#c-real"), ["Top", "Front", "Slope", "Balanced"], [{ name: "model", color: "var(--s1)", values: cats.map((c) => r.real_maps.model?.[c]) }, { name: "shade alone (oracle)", color: "var(--s2)", values: cats.map((c) => r.real_maps.shade_oracle?.[c]) }], { ref: r.real_maps.chance, refLabel: "chance" });
+      }
+      if (h.arch) archDiagram($("#c-arch"), h.arch);
+    } else if (h.kind === "generate") {
+      const sh = rows.filter((x) => x.shard);
+      const done = sh.reduce((a, x) => a + (x.samples || 0), 0), planned = (h.config?.planned || 0) + (h.config?.planned_map || 0) + (h.config?.planned_front || 0);
+      html += `<section class="card"><h3>Progress</h3><div>${done.toLocaleString()} ${planned ? "of " + planned.toLocaleString() : ""} scenes in ${sh.length} shards${sh.length ? ` · ${fmt(sh.reduce((a, x) => a + (x.secs_each || 0), 0) / Math.max(1, sh.filter((x) => x.secs_each).length), 2)} s each` : ""}</div>${planned ? `<div class="bar"><span style="width:${Math.min(100, done / planned * 100)}%"></span></div>` : ""}</section>`;
+      html += `<div class="two"><section class="card"><h3>Shade mix per shard</h3><div id="c-shades"></div></section><section class="card"><h3>Share of pixels on objects</h3><div id="c-obj"></div></section></div>`;
+      sheet.innerHTML = html + `<div class="two"><section class="card"><h3>Settings</h3>${kvList(h.config)}</section><section class="card"><h3>Results</h3>${kvList(r)}</section></div><section class="card"><h3>Pictures</h3><div class="gallery" id="gal"></div></section>`;
+      shadeBars($("#c-shades"), sh.slice(-16).map((x) => ({ label: x.shard.replace(".npz", ""), values: x.shade_hist || [0, 0, 0, 0] })));
+      lineChart($("#c-obj"), [{ name: "object pixels", color: "var(--s1)", points: sh.map((x, i) => [i + 1, x.object_fraction]) }], { xLabel: "shard", yLabel: "share", yZero: true });
+    } else if (h.kind === "calibrate") {
+      if (r.real_hist) html += `<section class="card"><h3>Shade mix by surface direction: real maps vs renderer</h3><div id="c-cal"></div></section>`;
+      if (r.fits) html += `<section class="card"><h3>Light fits</h3><div class="tbl"><table class="t"><tr><th>Proxy</th><th>Agreement</th><th>Azimuth</th><th>Elevation</th></tr>${r.fits.map((f) => `<tr><td>${esc(f.proxy)}</td><td>${pct(f.accuracy)}</td><td>${f.azimuth}°</td><td>${f.elevation}°</td></tr>`).join("")}<tr><td class="muted">all one shade</td><td>${pct(r.constant_baseline)}</td><td></td><td></td></tr></table></div></section>`;
+      if (r.top_styles) html += `<section class="card"><h3>Best-fitting styles</h3><div class="tbl"><table class="t"><tr><th>#</th><th>L1</th><th>Light az / el</th><th>Wrap</th><th>Ambient</th><th>Direct</th><th>Shadow</th><th>AO</th><th>Thresholds</th></tr>${r.top_styles.map((s, i) => { const AZ = [-15, 15, 45, 75], EL = [20, 40, 60, 80]; return `<tr><td>${i + 1}</td><td>${fmt(s.d, 3)}</td><td>${AZ[s.li >> 2]}° / ${EL[s.li & 3]}°</td><td>${fmt(s.wrap, 2)}</td><td>${fmt(s.amb, 2)}</td><td>${fmt(s.kd, 2)}</td><td>${fmt(s.shs, 2)}</td><td>${fmt(s.aos, 2)}</td><td>${s.th.map((t) => fmt(t, 2)).join(" ")}</td></tr>`; }).join("")}</table></div></section>`;
+      sheet.innerHTML = html + `<section class="card"><h3>Settings</h3>${kvList(h.config)}</section><section class="card"><h3>Pictures</h3><div class="gallery" id="gal"></div></section>`;
+      if (r.real_hist) {
+        const rowsC = [];
+        for (const k of ["TOP", "FRONT", "SLOPE"]) {
+          rowsC.push({ label: `${k.toLowerCase()} · real`, values: r.real_hist[k] });
+          if (r.before_hist) { const b = r.before_hist[k] || r.before_hist[k + "_object"]; if (b) rowsC.push({ label: `${k.toLowerCase()} · before`, values: b }); }
+          if (r.best_hist) rowsC.push({ label: `${k.toLowerCase()} · fitted`, values: r.best_hist[k] });
+        }
+        shadeBars($("#c-cal"), rowsC);
+      }
+    } else {
+      sheet.innerHTML = html + `<section class="card"><h3>Settings</h3>${kvList(h.config)}</section><section class="card"><h3>Results</h3>${kvList(r)}</section><section class="card"><h3>Pictures</h3><div class="gallery" id="gal"></div></section>`;
+    }
+    if (!fromClick) window.scrollTo(0, scrollKeep);
+    const gal = $("#gal");
+    if (gal) {
+      if (!h.images?.length) gal.innerHTML = `<p class="muted">No pictures for this run yet.</p>`;
+      else {
+        gal.innerHTML = h.images.map((im, i) => `<figure><div class="img" id="im${i}"><span class="muted">Loading ${esc(im.file)}…</span></div><figcaption>${esc(im.caption)}</figcaption></figure>`).join("");
+        for (const [i, im] of h.images.entries()) {
+          const got = await imageUrl(run.path + "/" + im.file); if (my !== renderToken) return;
+          const box = $("#im" + i); if (!box) continue;
+          if (got.error) { box.innerHTML = `<span class="muted">Couldn't read ${esc(im.file)} (${esc(got.error)}).</span>`; continue; }
+          const img = new Image(); img.alt = im.caption || im.file;
+          img.onerror = () => { if (img.src !== got.data) img.src = got.data; };
+          img.src = got.url; box.replaceChildren(img);
+        }
+      }
+    }
+  }
+
+  // ---------- walkthrough ----------
+  function drawBall() {
+    const c = $("#ball"), g = c.getContext("2d"), n = c.width, im = g.createImageData(n, n);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const nx = (x + 0.5) / n * 2 - 1, ny = 1 - (y + 0.5) / n * 2, r2 = nx * nx + ny * ny, i = (y * n + x) * 4;
+      if (r2 > 1) { im.data[i + 3] = 0; continue; }
+      const nz = Math.sqrt(1 - r2);
+      im.data[i] = (nx * 0.5 + 0.5) * 255; im.data[i + 1] = (ny * 0.5 + 0.5) * 255; im.data[i + 2] = (nz * 0.5 + 0.5) * 255; im.data[i + 3] = 255;
+    }
+    g.putImageData(im, 0, 0);
+  }
+  drawBall();
+
+  const LABEL = (h) => h.name.replace(/-unet\d+$/, "").replace(/-/g, " ");
+  let storySig = "";
+  async function renderStory() {
+    const all = [...runs.values()].sort((a, b) => (a.h.started || "").localeCompare(b.h.started || ""));
+    const sig = all.map((r) => r.rev).join("|");
+    const live = all.filter((r) => r.h.kind === "train").pop();
+    const liveRows = live ? await loadMetrics(live) : [];
+    const liveSig = sig + "|" + liveRows.length;
+    if (liveSig === storySig) return; storySig = liveSig;
+
+    // What's happening now
+    const running = all.filter((r) => r.h.status === "running");
+    $("#now").innerHTML = running.length ? `<h3>Running now</h3>` + running.map((r) => {
+      let p = null, label = "";
+      if (r.h.kind === "train") { const eps = (metricsCache.get(r.path)?.rows || []).filter((x) => x.val_angle != null).length; p = eps / (r.h.config?.epochs || 1); label = `${eps} of ${r.h.config?.epochs} epochs`; }
+      return `<div class="row"><div><span class="chip">${esc(r.h.kind)}</span>${esc(LABEL(r.h))} <span class="muted">${label}</span></div><div class="muted" style="font-size:13px">${esc(r.h.note || "")}</div>${p != null ? `<div class="bar"><span style="width:${Math.min(100, p * 100)}%"></span></div>` : ""}</div>`;
+    }).join("") : `<p class="muted">Nothing running right now.</p>`;
+    for (const r of running.filter((r) => r.h.kind === "train")) await loadMetrics(r);
+
+    // Progress across trained map models
+    const trained = all.filter((r) => r.h.kind === "train" && r.h.config?.view === "map" && r.h.results?.real_maps);
+    const xs = trained.map((r, i) => i + 1);
+    const names = trained.map((r) => LABEL(r.h));
+    const progReal = $("#prog-real");
+    if (trained.length) {
+      lineChart(progReal, [
+        { name: "model", color: "var(--s1)", points: trained.map((r, i) => [i + 1, r.h.results.real_maps.model.balanced * 100]) },
+        { name: "shade alone", color: "var(--s2)", points: trained.map((r, i) => [i + 1, r.h.results.real_maps.shade_oracle.balanced * 100]) },
+        { name: "chance", color: "var(--ink-3)", points: trained.map((r, i) => [i + 1, 33.3]) },
+      ], { xLabel: "model", yLabel: "% right", unit: "%", xNames: names, yMin: 0, yMax: 100 });
+      const last = trained[trained.length - 1].h.results.real_maps;
+      progReal.insertAdjacentHTML("beforeend", `<div class="bench">${[["Floors and grass", last.model.TOP, last.shade_oracle.TOP], ["Walls and shelves", last.model.FRONT, last.shade_oracle.FRONT], ["Roofs", last.model.SLOPE, last.shade_oracle.SLOPE]].map(([k, m, o]) => `<div><span>${k}</span><b>${pct(m)}</b><span class="track"><span style="width:${m * 100}%;background:var(--s1)"></span></span></div><div><span class="muted">shade alone</span><b class="muted">${pct(o)}</b><span class="track"><span style="width:${o * 100}%;background:var(--s2)"></span></span></div>`).join("")}</div><p class="muted" style="font-size:12px;margin-top:6px">Breakdown for the latest model, ${esc(names[names.length - 1])}.</p>`);
+    } else progReal.innerHTML = `<p class="muted">No scored models yet.</p>`;
+    const withVal = all.filter((r) => r.h.kind === "train" && r.h.config?.view === "map" && r.h.status === "done");
+    const sp = [];
+    for (const r of withVal) {
+      const rows = (await loadMetrics(r)).filter((x) => x.val_angle != null);
+      const v = rows.length ? rows[rows.length - 1] : null;
+      if (v) sp.push([sp.length + 1, v.val_angle_objects ?? v.val_angle, LABEL(r.h)]);
+    }
+    if (sp.length) lineChart($("#prog-synth"), [{ name: "error on objects", color: "var(--s1)", points: sp.map((p) => [p[0], p[1]]) }], { xLabel: "model", yLabel: "degrees", unit: "°", yZero: true, xNames: sp.map((p) => p[2]) });
+    else $("#prog-synth").innerHTML = `<p class="muted">No practice scores yet.</p>`;
+    if (live) {
+      $("#live-title").textContent = `Latest training run (${LABEL(live.h)}), epoch by epoch`;
+      const ep = liveRows.filter((x) => x.val_angle != null);
+      lineChart($("#prog-live"), [
+        { name: "all pixels", color: "var(--s1)", points: ep.map((x) => [x.epoch, x.val_angle]) },
+        ...(ep.some((x) => x.val_angle_objects != null) ? [{ name: "object pixels", color: "var(--s2)", points: ep.filter((x) => x.val_angle_objects != null).map((x) => [x.epoch, x.val_angle_objects]) }] : []),
+      ], { xLabel: "epoch", yLabel: "degrees", unit: "°", yZero: true });
+      $("#prog-live").insertAdjacentHTML("beforeend", `<p class="muted" style="font-size:12px;margin-top:6px">Practice-test error after each pass over the training scenes. It falls as the model learns; when it flattens, more passes stop helping.</p>`);
+    }
+
+    // Pictures
+    const gen = all.filter((r) => r.h.kind === "generate" && r.h.images?.length).pop();
+    await showPics($("#pic-gen"), gen ? [[gen, gen.h.images[0]]] : []);
+    const lastMap = trained[trained.length - 1], lastFront = all.filter((r) => r.h.kind === "train" && r.h.config?.view === "front" && r.h.images?.some((i) => i.file === "real-pokemon.png")).pop();
+    const pics = [];
+    if (lastMap) for (const f of ["real-viridian.png", "real-pallet.png", "real-lab.png"]) { const im = lastMap.h.images.find((i) => i.file === f); if (im) pics.push([lastMap, im]); }
+    if (lastFront) pics.push([lastFront, { ...lastFront.h.images.find((i) => i.file === "real-pokemon.png"), caption: "Battle pictures: each sprite and the model's guess. This model only ever saw made-up blobs." }]);
+    await showPics($("#pic-real"), pics);
+
+    // Timeline
+    $("#steps").innerHTML = all.map((r) => {
+      const h = r.h, res = h.results || {};
+      return `<div class="stepc ${h.status === "running" ? "running" : ""}"><span class="dot" aria-hidden="true"></span><div>
+        <h4>${esc(LABEL(h))} <span class="pill st-${esc(h.status)}">${esc(h.status)}</span></h4>
+        <div class="k">${esc(h.kind)} · ${esc(when(h.started))}${keyNumber(h) ? " · " + esc(keyNumber(h)) : ""}</div>
+        ${h.note ? `<p>${esc(h.note)}</p>` : ""}${res.finding ? `<p class="learn"><b>Learned:</b> ${esc(res.finding)}</p>` : ""}
+        <button type="button" data-open="${esc(r.path)}">Open details</button></div></div>`;
+    }).reverse().join("");
+  }
+
+  async function showPics(box, list) {
+    if (!list.length) { box.innerHTML = `<p class="muted">No pictures yet.</p>`; return; }
+    box.innerHTML = list.map(([r, im], i) => `<figure style="margin:0"><div id="${box.id}-${i}" class="muted">Loading…</div><figcaption class="muted" style="font-size:12px;margin-top:4px">${esc(im.caption)}</figcaption></figure>`).join("");
+    for (const [i, [r, im]] of list.entries()) {
+      const got = await imageUrl(r.path + "/" + im.file); const slot = $(`#${box.id}-${i}`); if (!slot) continue;
+      if (got.error) { slot.textContent = `Couldn't read ${im.file} (${got.error}).`; continue; }
+      const img = new Image(); img.alt = im.caption || im.file; img.onerror = () => { if (img.src !== got.data) img.src = got.data; }; img.src = got.url; slot.replaceChildren(img);
+    }
+  }
+
+  $("#steps").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-open]"); if (!b) return;
+    selected = b.dataset.open; lastSig = ""; archSel = null; showTab("runs"); renderList(); renderSheet(true);
+  });
+  function showTab(t) {
+    $("#view-story").hidden = t !== "story"; $("#view-runs").hidden = t !== "runs";
+    $("#tab-story").setAttribute("aria-selected", String(t === "story")); $("#tab-runs").setAttribute("aria-selected", String(t === "runs"));
+    try { localStorage.setItem("relief-lab-tab", t); } catch {}
+    window.scrollTo(0, 0);
+  }
+  $("#tab-story").addEventListener("click", () => showTab("story"));
+  $("#tab-runs").addEventListener("click", () => showTab("runs"));
+
+  // ---------- boot ----------
+  async function refresh(full = true) {
+    try {
+      await listRuns(full); renderList();
+      await renderStory();
+      const sel = runs.get(selected);
+      if (sel) {
+        let mrev = "";
+        try { mrev = (await retry(() => files.read(sel.path + "/metrics.jsonl", { length: 1 }))).revision; } catch {}
+        const sig = sel.rev + "|" + mrev;
+        if (sig !== lastSig) { lastSig = sig; await renderSheet(); }
+      }
+      status((unreadable ? `${unreadable} run${unreadable === 1 ? "" : "s"} not readable yet (${Object.entries(errCodes).map(([k, v]) => k.replace("_", " ")).join(", ")}) · ` : "") + `Updated ${new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`);
+    } catch (e) {
+      if (e?.code === "rate_limited") status("Busy, retrying shortly");
+      else status("Couldn't read the runs folder");
+    }
+  }
+  $("#refresh").addEventListener("click", () => refresh(true));
+
+  (async () => {
+    try { if (localStorage.getItem("relief-lab-tab") === "runs") showTab("runs"); } catch {}
+    files = await window.claude?.use?.("files");
+    if (!files) { status("Project files aren't available in this view"); return; }
+    try { root = await findRoot(); }
+    catch (e) {
+      status(e?.code === "not_granted" ? "Access to project files was declined" : "No runs folder yet");
+      return;
+    }
+    await refresh();
+    setInterval(() => {
+      if (document.hidden) return;
+      const anyRunning = [...runs.values()].some((r) => r.h.status === "running");
+      if (anyRunning) refresh(false);
+    }, 20000);
+    setInterval(() => { if (!document.hidden) refresh(); }, 120000);
+  })();
+})();
+</script>

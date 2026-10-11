@@ -1,5 +1,5 @@
 {
- "version": 3,
+ "version": 4,
  "tracks": {
   "pressIn": {
    "delay": 0,
@@ -120,6 +120,31 @@
  },
  "close": {
   "speed": 1.4
+ },
+ "landscape": {
+  "open": {
+   "fill": 0.94,
+   "offsetY": 0
+  },
+  "path": {
+   "c1": [
+    2.006,
+    0.424
+   ],
+   "c2": [
+    1.184,
+    0.819
+   ]
+  }
+ },
+ "rotate": {
+  "duration": 480,
+  "curve": [
+   0.3,
+   0,
+   0.15,
+   1
+  ]
  },
  "alerts": {
   "lights": 1,

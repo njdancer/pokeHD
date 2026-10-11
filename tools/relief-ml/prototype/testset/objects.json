@@ -1,0 +1,16 @@
+{"about": "Hand-made test set for the top/front split, drawn by Claude from zoomed crops on 2026-10-11, independent of the tile labels. Coordinates are map pixels; y and x ranges are inclusive. Not used for training.",
+ "objects": [
+  {"name": "Red's house bookshelves", "map": "REDS_HOUSE_1F", "x": [0, 31], "top": [0, 7], "front": [8, 31]},
+  {"name": "Red's TV", "map": "REDS_HOUSE_1F", "x": [48, 63], "top": [16, 21], "front": [22, 30]},
+  {"name": "Red's table", "map": "REDS_HOUSE_1F", "x": [48, 79], "top": [64, 85], "front": [86, 91]},
+  {"name": "Red's chair, top left", "map": "REDS_HOUSE_1F", "x": [34, 47], "top": [69, 75], "front": [76, 79]},
+  {"name": "Red's chair, top right", "map": "REDS_HOUSE_1F", "x": [81, 94], "top": [69, 75], "front": [76, 79]},
+  {"name": "Red's chair, bottom left", "map": "REDS_HOUSE_1F", "x": [34, 47], "top": [85, 91], "front": [92, 95]},
+  {"name": "Red's chair, bottom right", "map": "REDS_HOUSE_1F", "x": [81, 94], "top": [85, 91], "front": [92, 95]},
+  {"name": "Oak's lab table", "map": "OAKS_LAB", "x": [96, 143], "top": [48, 65], "front": [66, 69]},
+  {"name": "Oak's lab desk", "map": "OAKS_LAB", "x": [34, 63], "top": [16, 33], "front": [34, 37]},
+  {"name": "Oak's lab shelves, top", "map": "OAKS_LAB", "x": [96, 159], "top": [0, 7], "front": [8, 31]},
+  {"name": "Oak's lab shelves, bottom left", "map": "OAKS_LAB", "x": [0, 63], "top": [96, 103], "front": [104, 127]},
+  {"name": "Oak's lab shelves, bottom right", "map": "OAKS_LAB", "x": [96, 159], "top": [96, 103], "front": [104, 127]},
+  {"name": "Pokecentre counter", "map": "VIRIDIAN_POKECENTER", "x": [16, 47], "top": [34, 41], "front": [42, 47]}
+ ]}
