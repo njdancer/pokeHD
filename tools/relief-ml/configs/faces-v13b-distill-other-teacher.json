@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v13-distill",
+  "title": "Distilled from the second router pair",
+  "why": "Check the distilled model doesn't depend on one lucky teacher: use the router built from the second seeds of v7 and v4 (80%).",
+  "changes": ["Teacher: faces-v7 seed 1 + faces-v4 seed 1"],
+  "real": {"teacher": {"labelled": "20261011-2322-faces-v7-trusted-labels-seed1", "free": "20261011-2322-faces-v4-context-seed1"}}
+}
