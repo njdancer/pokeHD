@@ -129,7 +129,7 @@ export function DexMenu({ env: base, open, onClose, start, request, onRequestDon
   const dex = { open, onClose, place, side: sideNow, setSide: chooseSide };
   return (
     <Env.Provider value={env}>
-      <div className={`m-root${open ? " open" : ""}${request ? " asked" : ""}`}>
+      <div className={`m-root${open ? " open" : ""}${request ? " asked" : ""}${screen ? " hosted" : ""}`}>
         <div className="m-shade" onClick={request ? undefined : onClose} />
         {screen ? createPortal(<Dex {...dex} layout={layout} />, screen) : <Dex {...dex} layout={layout} floating />}
         {also && createPortal(<Dex {...dex} layout={also.layout} copy />, also.screen)}

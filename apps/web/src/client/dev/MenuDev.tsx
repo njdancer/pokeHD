@@ -2,16 +2,18 @@
 // real menu components over the live HD world, in an iPhone 13 Pro sized frame (full screen on a
 // phone). A sample adventure stands in for the game; "Under the hood" logs the game routine each
 // tap would call. URL options for screenshots: ?open=1, ?tab=map, ?moment=wild, ?world=0,
-// ?turn=1 (the phone on its side), ?rail=1 (start with the slim sidebar), ?r=4 (screen radius). The menu draws into a
-// stand-in for the open dex's screen, so its layout follows the screen's shape: tabs below in
-// portrait, a sidebar in landscape.
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+// ?turn=1 (the phone on its side), ?desk=1 (a big monitor), ?rail=1 (start with the slim sidebar),
+// ?r=4 (the display's corner radius). The menu draws on the modelled dex's screen as it opens
+// (DexHost), so its layout follows the screen's shape: tabs below in portrait, a sidebar in
+// landscape.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEngine, DEFAULT_CYCLE, type Engine } from "@pokehd/engine";
 import { createLiveWorld, standingState, type LiveWorld } from "@pokehd/engine/world";
 import { MAP_NAMES, parseWorld, trainerClasses, type TrainerClass, type WorldData } from "@pokehd/rom";
 import { fetchDevRom } from "../dev-rom.ts";
 import { loadStoredRom } from "../rom-store.ts";
 import { buildCatalogue, type Catalogue } from "../dex/catalogue.ts";
+import { DexHost, type DexHostProps } from "../dex/DexHost.tsx";
 import { DexMenu } from "../menu/DexMenu.tsx";
 import type { TabId } from "../menu/icons.tsx";
 import { inBattle, type MenuActions, type MenuModel, type Moment, type Request } from "../menu/model.ts";
@@ -30,6 +32,28 @@ const MOMENTS: [Moment, string, string][] = [
   ["pc", "At the PC", "Bill's PC. Deposit and Withdraw open a sheet over the game, not the dex."],
   ["shop", "At the Mart", "The Poké Mart. Buy and Sell open a sheet; Sell shows your Bag with one action."],
 ];
+
+type Hold = "upright" | "side" | "desk";
+
+/** The mock frame's safe area, display radius and how it's held (none of it on a real phone, which has its own). */
+function frameOf(hold: Hold, onPhone: boolean): Pick<DexHostProps, "insets" | "radius" | "held"> {
+  if (onPhone) return {};
+  if (hold === "desk") return { insets: { top: 0, right: 0, bottom: 0, left: 0 }, radius: 4, held: 90 };
+  const r = query.get("r");
+  const radius = r ? +r : 47.33;
+  return hold === "side" ? { insets: { top: 0, right: 47, bottom: 21, left: 47 }, radius, held: 90 } : { insets: { top: 47, right: 0, bottom: 34, left: 0 }, radius, held: 0 };
+}
+
+function useMedia(q: string): boolean {
+  const [on, setOn] = useState(() => matchMedia(q).matches);
+  useEffect(() => {
+    const mq = matchMedia(q);
+    const change = () => setOn(mq.matches);
+    mq.addEventListener("change", change);
+    return () => mq.removeEventListener("change", change);
+  }, [q]);
+  return on;
+}
 
 const initialMoment = (query.get("moment") as Moment | null) ?? "explore";
 
@@ -69,9 +93,9 @@ export function MenuDev() {
   const [log, setLog] = useState<Log[]>([]);
   const [pending, setPending] = useState<{ label: string; run(): void } | null>(null);
   const [panel, setPanel] = useState(false);
-  const [turned, setTurned] = useState(query.get("turn") === "1");
+  const [hold, setHold] = useState<Hold>(query.get("turn") === "1" ? "side" : query.get("desk") === "1" ? "desk" : "upright");
+  const onPhone = useMedia("(max-width: 860px)");
   const rail = query.get("rail") === "1";
-  const [screenEl, setScreenEl] = useState<HTMLDivElement | null>(null);
   const holder = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -296,20 +320,26 @@ export function MenuDev() {
   return (
     <div className="md-page">
       <div className="md-phone-col">
-        <div className={`md-phone${turned ? " turned" : ""}`} ref={holder}>
+        <div className={`md-phone${hold === "side" ? " turned" : hold === "desk" ? " desk" : ""}`} ref={holder}>
           {!env && <div className="md-status">{status}</div>}
           {env && (
             <>
               <div className="md-place">Vermilion City</div>
               <GameMock moment={moment} model={env.model} onAsk={ask} onEndTalk={endTalk} pending={pending?.label ?? null} onCancelPending={() => setPending(null)} />
-              <button type="button" className={`md-dexbtn${env.model.friends.some((f) => f.gift) ? " alert" : ""}`} aria-label="Open the Pokédex" onClick={() => setOpen(true)} />
-              {/* A stand-in for the open dex (its own threads own the real one and its motion). */}
-              <div className={`md-opendex${open ? " open" : ""}`} aria-hidden="true">
-                <div className="md-opendex-screen" ref={setScreenEl} style={query.get("r") ? ({ "--m-screen-r": `${query.get("r")}px` } as CSSProperties) : undefined} />
-                <i className="md-opendex-lights" />
-                <i className="md-opendex-pad" />
-              </div>
-              {screenEl && <DexMenu env={env} open={open} onClose={() => setOpen(false)} start={tab ? { tab } : undefined} request={request} onRequestDone={() => setRequest(null)} screen={screenEl} {...(rail ? { side: "rail" as const } : {})} />}
+              <DexHost open={open} onOpen={() => setOpen(true)} onClose={() => setOpen(false)} alert={env.model.friends.some((f) => f.gift)} {...frameOf(hold, onPhone)}>
+                {(slots) => (
+                  <DexMenu
+                    env={env}
+                    open={open}
+                    onClose={() => setOpen(false)}
+                    start={tab ? { tab } : undefined}
+                    request={request}
+                    onRequestDone={() => setRequest(null)}
+                    {...(slots ?? {})}
+                    {...(rail ? { side: "rail" as const } : {})}
+                  />
+                )}
+              </DexHost>
             </>
           )}
         </div>
@@ -326,8 +356,9 @@ export function MenuDev() {
         <section>
           <h2>Hold the phone</h2>
           <div className="md-chips">
-            <button type="button" aria-pressed={!turned} onClick={() => setTurned(false)}>Upright</button>
-            <button type="button" aria-pressed={turned} onClick={() => setTurned(true)}>On its side</button>
+            <button type="button" aria-pressed={hold === "upright"} onClick={() => setHold("upright")}>Upright</button>
+            <button type="button" aria-pressed={hold === "side"} onClick={() => setHold("side")}>On its side</button>
+            <button type="button" aria-pressed={hold === "desk"} onClick={() => setHold("desk")}>A big monitor</button>
           </div>
           <p className="md-hint">The menu fills the dex's screen and picks its layout from the screen's shape. On a real phone, just turn it. On its side, drag the grip on the sidebar's edge (or tap it) to slim it to icons.</p>
         </section>

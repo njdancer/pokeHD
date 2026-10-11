@@ -1308,9 +1308,6 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           }}
         />
       )}
-      {menu && ready && !menuOpen && !ask && !onboarding && !nameAsk && world && (
-        <button type="button" className="dm-open" aria-label="Pokédex" onClick={() => setMenuOpen({ tab: "dex" })} />
-      )}
       {menu && world && catalogue && (
         <LiveMenu
           rom={rom}
@@ -1321,6 +1318,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           ask={ask}
           onAskDone={() => setAsk(null)}
           open={!!menuOpen}
+          // The modelled dex is the button: shut in the corner, it opens with the menu on its screen.
+          onOpen={() => setMenuOpen({ tab: "dex" })}
+          away={!ready || !!ask || !!onboarding || !!nameAsk}
           {...(menuOpen ? { start: menuOpen } : {})}
           onClose={closeMenu}
           journal={playJournal}

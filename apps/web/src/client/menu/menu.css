@@ -29,6 +29,8 @@
   opacity: 0; transition: opacity .25s ease;
 }
 .m-root.open .m-shade, .m-root.asked .m-shade { opacity: 1; pointer-events: auto; }
+/* On a real dex screen the host dims and blurs the world itself; sheets over the game keep this one. */
+.m-root.hosted:not(.asked) .m-shade { display: none; }
 
 /* ---------------------------------------------------------------- the open dex's screen */
 /* Fills whatever it's drawn into (the dex's screen). The grid places the tabs: below the pages
