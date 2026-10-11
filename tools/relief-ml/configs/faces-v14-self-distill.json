@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v13-distill",
+  "title": "Distilled from three faces-v13 students averaged",
+  "why": "Three faces-v13 runs score 83-87% and make different small mistakes. Averaging them gives a better teacher than the router; a new student copying that average may beat each of them (a second round of distillation).",
+  "changes": ["Teacher: the average of faces-v13 seeds 0, 1 and 2, on every real training pixel"],
+  "real": {"teacher": {"models": ["20261012-0257-faces-v13-distill", "20261012-0257-faces-v13-distill-seed1", "20261012-0523-faces-v13-distill-seed2"]}}
+}

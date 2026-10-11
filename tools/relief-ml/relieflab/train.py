@@ -23,8 +23,16 @@ EVAL_MAPS = ["PALLET_TOWN", "VIRIDIAN_CITY", "PEWTER_CITY", "CERULEAN_CITY", "VE
 def teacher_faces(teacher, name):
     """Router teacher's faces and confidence for a whole real map (labelled model on clear-cut tiles,
     label-free model elsewhere)."""
-    from .ensemble import Router
+    from .ensemble import Router, Ensemble
     from .runner import _load_model
+    if "models" in teacher:   # an ensemble of single networks (e.g. earlier students)
+        if not hasattr(teacher_faces, "ens"):
+            cfgs = [lab.read_json(f"runs/{r}/run.json")["config"] for r in teacher["models"]]
+            teacher_faces.ens = Ensemble([_load_model(c, r) for c, r in zip(cfgs, teacher["models"])]).eval()
+            teacher_faces.cfg = dict(cfgs[0], model=dict(cfgs[0]["model"], tileFlag=False))
+        img, _ = tasks.map_img(name)
+        p = tasks.predict(teacher_faces.ens, teacher_faces.cfg, img)
+        return p["faces"].astype(np.int64), p["faceProb"].max(0).astype(np.float32)
     if not hasattr(teacher_faces, "router"):
         cl = lab.read_json(f"runs/{teacher['labelled']}/run.json")["config"]; cf = lab.read_json(f"runs/{teacher['free']}/run.json")["config"]
         teacher_faces.router = Router(_load_model(cl, teacher["labelled"]), _load_model(cf, teacher["free"])).eval()
