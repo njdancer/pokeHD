@@ -6,6 +6,7 @@ import { cleanEmail, type CodeKind, type Player } from "./directory/store.ts";
 import { PLAYER_ID_HEADER, PLAYER_NAME_HEADER } from "./room/do.ts";
 import { locksApi } from "./locks/api.ts";
 import { savesApi } from "./saves/saves.ts";
+import { labApi } from "./lab/lab.ts";
 
 export { Directory } from "./directory/do.ts";
 export { Room } from "./room/do.ts";
@@ -216,6 +217,11 @@ app.put("/admin/relief", async (c) => {
   await c.env.PRIVATE.put(RELIEF_KEY, text, { httpMetadata: { contentType: "application/json" } });
   return c.json({ ok: true, savedAt: new Date().toISOString() });
 });
+
+// The relief lab (/admin/lab): the trainer on Nick's Mac mirrors its runs here with ADMIN_TOKEN,
+// and the dashboard reads them. A file store under `lab/` in the private bucket
+// (docs/relief-ml/LAB-CONTRACT.md).
+app.route("/admin/lab", labApi<Bindings>());
 
 /** A fresh sign-in link for a player, e.g. when the first one expired. */
 app.post("/admin/players/:id/link", async (c) => {
