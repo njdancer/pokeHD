@@ -1,0 +1,7 @@
+{
+  "extends": "front-v6-depth-grad",
+  "title": "front-v6, seed 1",
+  "why": "Map runs vary a lot between seeds; measure how much picture runs do before comparing them.",
+  "changes": ["Different random seed"],
+  "train": {"seed": 1}
+}
