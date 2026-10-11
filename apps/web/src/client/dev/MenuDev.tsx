@@ -2,8 +2,9 @@
 // real menu components over the live HD world, in an iPhone 13 Pro sized frame (full screen on a
 // phone). A sample adventure stands in for the game; "Under the hood" logs the game routine each
 // tap would call. URL options for screenshots: ?open=1, ?tab=map, ?moment=wild, ?world=0,
-// ?turn=1 (the phone on its side), ?rail=1 (landscape's icon rail). The menu draws into a stand-in for the open dex's screen, so
-// its layout follows the screen's shape: tabs below in portrait, a sidebar in landscape.
+// ?turn=1 (the phone on its side), ?rail=1 (start with the slim sidebar). The menu draws into a
+// stand-in for the open dex's screen, so its layout follows the screen's shape: tabs below in
+// portrait, a sidebar in landscape.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createEngine, DEFAULT_CYCLE, type Engine } from "@pokehd/engine";
 import { createLiveWorld, standingState, type LiveWorld } from "@pokehd/engine/world";
@@ -69,7 +70,7 @@ export function MenuDev() {
   const [pending, setPending] = useState<{ label: string; run(): void } | null>(null);
   const [panel, setPanel] = useState(false);
   const [turned, setTurned] = useState(query.get("turn") === "1");
-  const [rail, setRail] = useState(query.get("rail") === "1");
+  const rail = query.get("rail") === "1";
   const [screenEl, setScreenEl] = useState<HTMLDivElement | null>(null);
   const holder = useRef<HTMLDivElement>(null);
 
@@ -308,7 +309,7 @@ export function MenuDev() {
                 <i className="md-opendex-lights" />
                 <i className="md-opendex-pad" />
               </div>
-              {screenEl && <DexMenu env={env} open={open} onClose={() => setOpen(false)} start={tab ? { tab } : undefined} request={request} onRequestDone={() => setRequest(null)} screen={screenEl} side={rail ? "rail" : "full"} />}
+              {screenEl && <DexMenu env={env} open={open} onClose={() => setOpen(false)} start={tab ? { tab } : undefined} request={request} onRequestDone={() => setRequest(null)} screen={screenEl} {...(rail ? { side: "rail" as const } : {})} />}
             </>
           )}
         </div>
@@ -328,11 +329,7 @@ export function MenuDev() {
             <button type="button" aria-pressed={!turned} onClick={() => setTurned(false)}>Upright</button>
             <button type="button" aria-pressed={turned} onClick={() => setTurned(true)}>On its side</button>
           </div>
-          <div className="md-chips" style={{ marginTop: 8 }}>
-            <button type="button" aria-pressed={!rail} onClick={() => setRail(false)}>Sidebar</button>
-            <button type="button" aria-pressed={rail} onClick={() => setRail(true)}>Icon rail</button>
-          </div>
-          <p className="md-hint">The menu fills the dex's screen and picks its layout from the screen's shape. On a real phone, just turn it.</p>
+          <p className="md-hint">The menu fills the dex's screen and picks its layout from the screen's shape. On a real phone, just turn it. On its side, drag the grip on the sidebar's edge (or tap it) to slim it to icons.</p>
         </section>
         <section>
           <h2>The game's moment</h2>

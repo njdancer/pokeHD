@@ -1,7 +1,7 @@
 // The Pokédex menu (p2-menu): one menu around the Pokédex, replacing Start and Select. Five tabs
 // (Pokémon, People, Inventory, Map, Me), each keeping its own place; and the game's requests
 // (battle Team and Bag, who's next, PC, Mart) as a sheet over the game instead. Storybook look.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { Env, useEnv, type MenuEnv } from "./env.tsx";
 import { CloseIcon, TabIcon, type TabId } from "./icons.tsx";
@@ -62,13 +62,26 @@ export interface DexMenuProps {
   screen?: HTMLElement | null;
   /** Forces a layout; by default the screen's shape picks it (wider than tall: the sidebar). */
   layout?: Layout;
-  /** Landscape's tabs: a sidebar with words (default), or a narrow rail of icons. */
-  side?: "full" | "rail";
+  /** Landscape's sidebar to start with: words (default) or icons only. The player can drag it. */
+  side?: Side;
   /**
    * A second copy to draw at the same time in the other layout, for crossfading while the dex
    * turns. It shows the same tab and page as the main one, and can't be tapped.
    */
   also?: { screen: HTMLElement; layout: Layout } | null;
+}
+
+/** Landscape's sidebar: icons and words, or a slim rail of icons. */
+export type Side = "full" | "rail";
+
+const SIDE_KEY = "pokehd.menu.sidebar";
+function storedSide(): Side | null {
+  try {
+    const v = localStorage.getItem(SIDE_KEY);
+    return v === "full" || v === "rail" ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Portrait: tabs along the bottom. Landscape: a sidebar, and wide pages in two columns. */
@@ -98,7 +111,22 @@ export function DexMenu({ env: base, open, onClose, start, request, onRequestDon
     if (start?.screen) s[start.tab] = [rootOf(start.tab), start.screen];
     return { tab: start?.tab ?? ("dex" as TabId), stacks: s, motion: "none" as Motion };
   });
-  const dex = { open, onClose, place, side };
+  // The sidebar's width is the player's to choose, so it's remembered on this device.
+  const [sideNow, setSideNow] = useState<Side>(() => storedSide() ?? side ?? "full");
+  const [shownSide, setShownSide] = useState(side);
+  if (side !== shownSide) {
+    setShownSide(side);
+    if (side) setSideNow(side);
+  }
+  const chooseSide = useCallback((s: Side) => {
+    setSideNow(s);
+    try {
+      localStorage.setItem(SIDE_KEY, s);
+    } catch {
+      // Private browsing: it just isn't remembered.
+    }
+  }, []);
+  const dex = { open, onClose, place, side: sideNow, setSide: chooseSide };
   return (
     <Env.Provider value={env}>
       <div className={`m-root${open ? " open" : ""}${request ? " asked" : ""}`}>
@@ -137,14 +165,80 @@ function useShape(forced?: Layout) {
   return [ref, forced ?? shape] as const;
 }
 
+/**
+ * The sidebar's grip: drag it to any width between the rail and full, and on letting go it
+ * settles on whichever is nearer; a tap swaps them. The width follows the finger while dragging.
+ */
+function useSideGrip(dexRef: RefObject<HTMLDivElement | null>, side: Side, setSide: (s: Side) => void) {
+  /** While dragging: the width, and the midpoint between rail and full. */
+  const [now, setNow] = useState<{ width: number; mid: number } | null>(null);
+  const drag = useRef<{ x: number; from: number; rail: number; full: number; moved: boolean } | null>(null);
+  /** The two widths, read from the dex's own CSS so there's one source for them. */
+  const widths = () => {
+    const dex = dexRef.current!;
+    const probe = (v: string) => {
+      const el = document.createElement("div");
+      el.style.cssText = `position:absolute;visibility:hidden;width:${v}`;
+      dex.append(el);
+      const w = el.getBoundingClientRect().width;
+      el.remove();
+      return w;
+    };
+    return { rail: probe("var(--m-side-rail)"), full: probe("var(--m-side-full)") };
+  };
+  const midpoint = (d: NonNullable<typeof drag.current>) => (d.rail + d.full) / 2;
+  return {
+    side: now ? (now.width < now.mid ? "rail" : "full") : side,
+    dragging: !!now,
+    style: now ? ({ "--m-side-w": `${now.width}px` } as CSSProperties) : undefined,
+    handlers: {
+      onPointerDown(e: ReactPointerEvent<HTMLButtonElement>) {
+        const { rail, full } = widths();
+        drag.current = { x: e.clientX, from: side === "rail" ? rail : full, rail, full, moved: false };
+        e.currentTarget.setPointerCapture(e.pointerId);
+      },
+      onPointerMove(e: ReactPointerEvent<HTMLButtonElement>) {
+        const d = drag.current;
+        if (!d) return;
+        const dx = e.clientX - d.x;
+        if (!d.moved && Math.abs(dx) < 4) return;
+        d.moved = true;
+        // A little give past either end, like a rubber band.
+        const w = d.from + dx;
+        const give = (over: number) => Math.sign(over) * Math.sqrt(Math.abs(over)) * 2;
+        setNow({ width: w < d.rail ? d.rail + give(w - d.rail) : w > d.full ? d.full + give(w - d.full) : w, mid: midpoint(d) });
+      },
+      onPointerUp(e: ReactPointerEvent<HTMLButtonElement>) {
+        const d = drag.current;
+        if (!d) return;
+        if (d.moved) setSide(d.from + (e.clientX - d.x) < midpoint(d) ? "rail" : "full");
+        else setSide(side === "rail" ? "full" : "rail");
+        drag.current = null;
+        setNow(null);
+      },
+      onPointerCancel() {
+        drag.current = null;
+        setNow(null);
+      },
+      onKeyDown(e: ReactKeyboardEvent<HTMLButtonElement>) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setSide(side === "rail" ? "full" : "rail");
+        }
+      },
+    },
+  };
+}
+
 type Place = { tab: TabId; stacks: Record<TabId, Screen[]>; motion: Motion };
 
-function Dex({ open, onClose, place, layout: forced, side, floating, copy }: {
+function Dex({ open, onClose, place, layout: forced, side, setSide, floating, copy }: {
   open: boolean;
   onClose(): void;
   place: [Place, Dispatch<SetStateAction<Place>>];
   layout?: Layout;
-  side?: DexMenuProps["side"];
+  side: Side;
+  setSide(s: Side): void;
   floating?: boolean;
   /** The extra copy drawn while the dex turns: looks the same, can't be used. */
   copy?: boolean;
@@ -168,6 +262,7 @@ function Dex({ open, onClose, place, layout: forced, side, floating, copy }: {
   const top = stack[stack.length - 1]!;
   const gifts = env.model.friends.filter((f) => f.gift).length;
   const [ref, layout] = useShape(forced);
+  const grip = useSideGrip(ref, side, setSide);
   useEffect(() => {
     if (!open || copy) return;
     const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -175,14 +270,13 @@ function Dex({ open, onClose, place, layout: forced, side, floating, copy }: {
     return () => removeEventListener("keydown", key);
   }, [open, onClose, copy]);
   return (
-    <div ref={ref} className={`m-dex${floating ? " floating" : ""}${open ? " open" : ""}`} data-layout={layout} data-side={side ?? "full"} role="dialog" aria-label="Pokédex" aria-hidden={!open || copy} inert={!open || copy}>
+    <div ref={ref} className={`m-dex${floating ? " floating" : ""}${open ? " open" : ""}`} data-layout={layout} data-side={grip.side} data-dragging={grip.dragging || undefined} style={grip.style} role="dialog" aria-label="Pokédex" aria-hidden={!open || copy} inert={!open || copy}>
       <NavContext.Provider value={nav}>
         <div className={`m-screen m-${motion}`} key={`${tab} ${stack.length} ${top.k}`}>
           {render(top)}
         </div>
       </NavContext.Provider>
       <nav className="m-tabbar" aria-label="Pokédex">
-        <span className="m-side-head" aria-hidden="true">Pokédex</span>
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -199,10 +293,15 @@ function Dex({ open, onClose, place, layout: forced, side, floating, copy }: {
               {t.id === "people" && gifts > 0 && <i className="m-dot">{gifts}</i>}
             </span>
             <span className="m-tablabel">{t.label}</span>
-            {t.id === "people" && gifts > 0 && <i className="m-dot side">{gifts}</i>}
           </button>
         ))}
       </nav>
+      <button
+        type="button"
+        className="m-sidegrip"
+        aria-label={side === "full" ? "Make the sidebar slim" : "Show the sidebar's words"}
+        {...grip.handlers}
+      />
     </div>
   );
 }

@@ -30,7 +30,8 @@
 }
 .md-opendex.open { transform: none; opacity: 1; pointer-events: auto; }
 .md-opendex-screen {
-  position: absolute; left: 14px; right: 14px; top: 58px; bottom: 74px; overflow: hidden; border-radius: 18px;
+  --m-screen-r: 44px;
+  position: absolute; left: 14px; right: 14px; top: 58px; bottom: 74px; overflow: hidden; border-radius: var(--m-screen-r);
   box-shadow: 0 0 0 4px #2b2b33, 0 0 0 6px #7a160f;
 }
 .md-opendex-lights { position: absolute; left: 22px; top: 18px; width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #bfe8ff, #2c8fd6 55%, #135a8f); border: 3px solid #f4f1ea; }
