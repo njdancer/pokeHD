@@ -15,6 +15,7 @@ const Errors = lazy(() => import("./admin/Errors.tsx").then((m) => ({ default: m
 const Explorer = lazy(() => import("./explore/Explorer.tsx").then((m) => ({ default: m.Explorer })));
 // The Pokédex's looks, side by side while Nick picks (p2-dex).
 const DexDev = lazy(() => import("./dev/DexDev.tsx").then((m) => ({ default: m.DexDev })));
+const DexShapeDev = lazy(() => import("./dev/DexShapeDev.tsx").then((m) => ({ default: m.DexShapeDev })));
 const MenuDev = lazy(() => import("./dev/MenuDev.tsx").then((m) => ({ default: m.MenuDev })));
 const SavesDev = lazy(() => import("./dev/SavesDev.tsx").then((m) => ({ default: m.SavesDev })));
 // The Pokédex menu in the real game (p2-dex-menu), until Nick picks it.
@@ -48,6 +49,7 @@ export function Root() {
   if (path === "/dev/ui") return <Suspense><UiLooks /></Suspense>;
   if (path === "/dev/bench") return <Suspense><Bench /></Suspense>;
   if (path === "/dev/dex") return <Suspense><DexDev /></Suspense>;
+  if (path === "/dev/dex/shape") return <Suspense><DexShapeDev /></Suspense>;
   if (path === "/dev/menu") return <Suspense><MenuDev /></Suspense>;
   if (path === "/dev/saves") return <Suspense><SavesDev /></Suspense>;
   if (path === "/dev/menu/live") return <Suspense><MenuLive /></Suspense>;
