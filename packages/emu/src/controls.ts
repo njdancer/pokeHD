@@ -48,6 +48,15 @@ export class Controls {
   readonly #options: ControlsOptions;
   readonly #removeHooks: (() => void)[] = [];
   #player = 0;
+  /**
+   * Buttons the player pressed that no frame has run with yet. A tap pressed and let go between
+   * two frames (a quick touch, a busy page) would otherwise never reach the game: each is held
+   * as long as a tap is (TAP_DOWN frames), since the game reads the joypad in its VBlank handler,
+   * which runs just after the frame the press went in with.
+   */
+  #unseen = 0;
+  /** Frames left before `#unseen` is let go. */
+  #unseenFrames = 0;
   #sent = -1;
   /** Button presses queued by taps, frame by frame. */
   #steps: Step[] = [];
@@ -120,6 +129,10 @@ export class Controls {
     // A message on the page: A or B reads on there.
     const pressed = mask & ~this.#player;
     if (this.#script?.holding && pressed & (Button.A | Button.B)) this.#options.script?.press();
+    if (pressed) {
+      this.#unseen |= pressed;
+      this.#unseenFrames = TAP_DOWN;
+    }
     this.#player = mask;
     this.#apply();
   }
@@ -186,6 +199,8 @@ export class Controls {
     const step = this.#steps[0];
     if (step && --step.frames <= 0) this.#steps.shift();
     this.#apply(step?.mask);
+    // These frames run with them; after, the buttons as they are by then.
+    if (this.#unseenFrames > 0 && --this.#unseenFrames === 0) this.#unseen = 0;
   }
 
   dispose(): void {
@@ -216,7 +231,7 @@ export class Controls {
 
   /** Sends the buttons for this frame: the page's press, else nothing while it drives, else the player's. */
   #apply(press?: number): void {
-    let mask = this.#player;
+    let mask = this.#player | this.#unseen;
     if (press !== undefined) mask = press;
     else if (this.#pressing) mask = this.#tapping(this.#pressing);
     else if (this.#asking || this.#name || this.#steps.length || this.#select || this.#script?.holding) mask = 0;

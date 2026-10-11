@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CloseCode, type Presence, type ServerMessage } from "@pokehd/protocol";
-import { join, leave, receive, type Peer } from "./room.ts";
+import { CloseCode, ROOM_QUIET_MS, type Presence, type ServerMessage } from "@pokehd/protocol";
+import { join, leave, quietPeers, receive, type Peer } from "./room.ts";
 
 const here: Presence = {
   mapId: 0,
@@ -164,5 +164,14 @@ describe("link relay", () => {
     receive(r.peers, sam, JSON.stringify({ type: "link", to: "alex", message: { kind: "nybble", value: 256 } }));
     expect(alex.inbox).toEqual([]);
     expect(sam.inbox.at(-1)).toEqual({ type: "error", reason: "bad-message" });
+  });
+});
+
+describe("quiet connections", () => {
+  it("are the ones not heard from for a while", () => {
+    const heard = new Map([["phone", 0], ["mac", 9_000]]);
+    expect(quietPeers(["phone", "mac"], (p) => heard.get(p)!, ROOM_QUIET_MS - 1)).toEqual([]);
+    expect(quietPeers(["phone", "mac"], (p) => heard.get(p)!, ROOM_QUIET_MS)).toEqual(["phone"]);
+    expect(quietPeers(["phone", "mac"], (p) => heard.get(p)!, 9_000 + ROOM_QUIET_MS)).toEqual(["phone", "mac"]);
   });
 });

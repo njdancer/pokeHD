@@ -133,17 +133,17 @@ export function mountLookdevPanel(engine: Engine, hooks: { before?: () => void; 
     applyCycle();
   });
 
-  // Day cycle: blend three presets across the day. Panel edits to blended fields are
+  // Day cycle: blend presets across the day, then into dusk. Panel edits to blended fields are
   // overwritten while it's on; turn it off to tweak a preset, save it, then pick it here.
   const dayFolder = pane.addFolder({ title: "Day cycle" });
-  const day: { on: boolean; morning: string; midday: string; evening: string } = { on: look.cycle !== null, ...DEFAULT_CYCLE_NAMES };
+  const day: { on: boolean; morning: string; midday: string; evening: string; dusk: string } = { on: look.cycle !== null, ...DEFAULT_CYCLE_NAMES };
   const applyCycle = () => {
-    const [m, d, a] = [lookup(day.morning), lookup(day.midday), lookup(day.evening)];
-    look.setCycle(day.on && m && d && a ? { morning: m, midday: d, evening: a } : null);
+    const [m, d, a, k] = [lookup(day.morning), lookup(day.midday), lookup(day.evening), lookup(day.dusk)];
+    look.setCycle(day.on && m && d && a && k ? { morning: m, midday: d, evening: a, dusk: k } : null);
     pane.refresh();
   };
   dayFolder.addBinding(day, "on", { label: "blend presets" }).on("change", applyCycle);
-  for (const slot of ["morning", "midday", "evening"] as const) {
+  for (const slot of ["morning", "midday", "evening", "dusk"] as const) {
     dayFolder.addBinding(day, slot, { options: presetOptions() }).on("change", applyCycle);
   }
   presets.addButton({ title: "Capture PNG" }).on("click", async () => {

@@ -7,6 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { sameTrainer, saveSummary } from "./autosave.ts";
 import { Button, GameBoy } from "./core.ts";
 import { EraseGuard } from "./erase-guard.ts";
+import { fuzzSeeds, rng } from "./fuzz.ts";
 import { saveGame } from "./gifts/gifts.ts";
 import { SafePoint, type Step } from "./gifts/safepoint.ts";
 import { playIntro } from "./testing.ts";
@@ -85,6 +86,40 @@ describe.skipIf(!existsSync(ROM_PATH))("erase guard", () => {
     expect(sameTrainer(after, saveSummary(oldSave)!)).toBe(false);
     const id = gb.readBytes(SYMBOLS.wPlayerID.address, 2);
     expect(after.id).toBe((id[0]! << 8) | id[1]!);
+  }, 60_000);
+
+  // Any buttons at all from the player, the page's answer at any moment: the old save goes only
+  // if the page said yes.
+  it.each(fuzzSeeds(4))("erases only on the page's yes, whatever the player presses (seed %i)", async (seed) => {
+    const r = rng(seed);
+    const erase = r.chance(0.5);
+    const delay = r.int(400);
+    const gb = await GameBoy.create({ rom, wasmBinary: wasm, sram: oldSave });
+    gb.loadState(newGame);
+    let answered: boolean | undefined;
+    let askedAt = -1;
+    const guard = new EraseGuard(gb, { rom, onPrompt: () => {}, onAnswered: (e) => (answered = e) });
+    const safe = SafePoint.of(gb);
+    safe.enqueue({ scratch: [], steps: [saveMenu] });
+    const buttons = [0, Button.A, Button.B, Button.Up, Button.Down, Button.Start, Button.A | Button.Down];
+    let mask = 0;
+    // Until the question has had its answer and time to take it (or never comes).
+    for (let frame = 0; frame < (askedAt < 0 ? 3000 : askedAt + delay + 600) && answered === undefined; frame++) {
+      if (r.chance(0.2)) mask = r.pick(buttons);
+      guard.setButtons(mask);
+      if (guard.asking && askedAt < 0) askedAt = frame;
+      if (guard.asking && frame - askedAt >= delay) guard.answer(erase);
+      guard.frame();
+      gb.runFrame();
+    }
+    guard.setButtons(0);
+    for (let i = 0; i < 600 && safe.pending > 0; i++) gb.runFrame();
+    for (let i = 0; i < 120; i++) gb.runFrame();
+    const kept = sameTrainer(saveSummary(gb.saveSram())!, saveSummary(oldSave)!);
+    // The player can back out of SAVE before the question (B on "Would you like to save?").
+    if (askedAt < 0) return expect(kept).toBe(true);
+    expect(answered, `seed ${seed}`).toBe(erase);
+    expect(kept, `seed ${seed}`).toBe(!erase);
   }, 60_000);
 
   it("summarises a save", () => {

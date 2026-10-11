@@ -15,6 +15,7 @@
 // A menu taking input, the message box closing or a new message also end it.
 import { decodeText, hasText, readMessage, romOffset, SYMBOLS, waitsOf, type Message, type MessageFill } from "@pokehd/rom";
 import type { GameBoy } from "./core.ts";
+import { acting } from "./game/acting.ts";
 
 export interface ScriptMessage {
   id: number;
@@ -115,6 +116,8 @@ export class ScriptText {
   }
 
   #start(g: GameBoy): void {
+    // Printed by one of our own calls (the Pokédex menu's actions): those answer their own waits.
+    if (acting.has(g)) return;
     const { hl } = g.registers;
     const bank = hl < 0x4000 ? 0 : g.read(SYMBOLS.hLoadedROMBank.address);
     const message = readMessage(this.#options.rom, bank, hl, this.#fill(g));

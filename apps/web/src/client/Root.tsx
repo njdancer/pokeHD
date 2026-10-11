@@ -9,10 +9,16 @@ const TextDebug = lazy(() => import("./dev/TextDebug.tsx").then((m) => ({ defaul
 const BattleDev = lazy(() => import("./dev/BattleDev.tsx").then((m) => ({ default: m.BattleDev })));
 const UiLooks = lazy(() => import("./dev/UiLooks.tsx").then((m) => ({ default: m.UiLooks })));
 const Bench = lazy(() => import("./dev/Bench.tsx").then((m) => ({ default: m.Bench })));
+// Crash reports (/admin/errors), for Nick.
+const Errors = lazy(() => import("./admin/Errors.tsx").then((m) => ({ default: m.Errors })));
 // The ROM explorer (/explore), with its ~850 KB label table, only loads when opened.
 const Explorer = lazy(() => import("./explore/Explorer.tsx").then((m) => ({ default: m.Explorer })));
 // The Pokédex's looks, side by side while Nick picks (p2-dex).
 const DexDev = lazy(() => import("./dev/DexDev.tsx").then((m) => ({ default: m.DexDev })));
+const MenuDev = lazy(() => import("./dev/MenuDev.tsx").then((m) => ({ default: m.MenuDev })));
+const SavesDev = lazy(() => import("./dev/SavesDev.tsx").then((m) => ({ default: m.SavesDev })));
+// The Pokédex menu in the real game (p2-dex-menu), until Nick picks it.
+const MenuLive = lazy(() => import("./dev/MenuLive.tsx").then((m) => ({ default: m.MenuLive })));
 const DialogDev = lazy(() => import("./dev/DialogDev.tsx").then((m) => ({ default: m.DialogDev })));
 // The relief editor: paint which way each pixel faces, for training data only (never used in play).
 const ReliefEditor = lazy(() => import("./tools/relief/ReliefEditor.tsx").then((m) => ({ default: m.ReliefEditor })));
@@ -33,6 +39,7 @@ export function Root() {
   const path = location.pathname.replace(/\/$/, "");
   // `/join` was the D19 page; old bookmarks still land on sign-in.
   if (path === "/login" || path === "/join") return <Suspense><Login /></Suspense>;
+  if (path === "/admin/errors") return <Suspense><Errors /></Suspense>;
   if (path === "/explore") return <Suspense><Explorer /></Suspense>;
   if (path === "/dev/emu") return <Suspense><EmuDebug /></Suspense>;
   if (path === "/dev/live") return <Suspense><LivePlayback /></Suspense>;
@@ -41,6 +48,9 @@ export function Root() {
   if (path === "/dev/ui") return <Suspense><UiLooks /></Suspense>;
   if (path === "/dev/bench") return <Suspense><Bench /></Suspense>;
   if (path === "/dev/dex") return <Suspense><DexDev /></Suspense>;
+  if (path === "/dev/menu") return <Suspense><MenuDev /></Suspense>;
+  if (path === "/dev/saves") return <Suspense><SavesDev /></Suspense>;
+  if (path === "/dev/menu/live") return <Suspense><MenuLive /></Suspense>;
   if (path === "/dev/dialog") return <Suspense><DialogDev /></Suspense>;
   if (path === "/tools/relief") return <Suspense><ReliefEditor /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;

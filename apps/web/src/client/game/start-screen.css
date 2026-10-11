@@ -52,3 +52,7 @@
   .start-screen { align-items: center; padding-block: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-bottom)); }
   .start-panel { --tile: clamp(13px, 3.8vh, 18px); }
 }
+
+/* One device per save (D40): above the loading screen, which may still be up behind it. */
+.lock-screen { z-index: 60; align-items: center; background: #1a1006b0; }
+.lock-note { margin: 0 0 12px; max-width: 28ch; text-align: center; color: var(--hd-ink); }

@@ -2,6 +2,7 @@ import * as THREE from "three/webgpu";
 import { FIRST_INDOOR_MAP, type MapData, type MapId, type WorldData } from "@pokehd/rom";
 import type { CameraView, LookController, WorldContent } from "../index.ts";
 import { arenaPlacement } from "../battle/placement.ts";
+import { settingOfTileset } from "../look/setting.ts";
 import { createBattleLayer, type ArenaStyle, type BattleLayer, type BattleView } from "../battle/layer.ts";
 import type { BlockRect } from "./chunk.ts";
 import { createChunkBuilder, type ChunkBuilder, type ChunkResult } from "./chunk-builder.ts";
@@ -79,7 +80,7 @@ const DEFAULT_VIEW: CameraView = { pitch: 38, yaw: 0, distance: 30, fov: 24 };
 export interface LiveWorldOptions {
   style?: StyleId;
   params?: StyleParams;
-  /** Lets fades to black wrap the day to morning when it's due (D16). Or call `setLook` later. */
+  /** The look whose camera battles swing back to. Or call `setLook` later. */
   look?: LookLike;
   /** How friends' ghosts are drawn; see `GHOST_LOOKS`. */
   ghostLook?: GhostLook;
@@ -93,7 +94,7 @@ export interface LiveWorldOptions {
   builder?: ChunkBuilder;
 }
 
-type LookLike = Pick<LookController, "params" | "wrapToMorning">;
+type LookLike = Pick<LookController, "params">;
 
 export interface LiveWorld extends WorldContent {
   /** Hands over the state decoded after an emulator frame. `at` is in seconds (performance clock). */
@@ -358,7 +359,6 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   let prev: Sample | null = null;
   let last: Sample | null = null;
   let latest: LiveState | null = null;
-  let wrapped = false;
   /**
    * Not ready at the start and after a warp, until the new map is drawn (`ready`). Walking across
    * a connection never unreadies it.
@@ -466,6 +466,10 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     get chunks() {
       return new Map([...chunks].map(([id, c]) => [id, c.group ? "built" : "queued"] as const));
     },
+    get setting() {
+      const map = current === null ? undefined : world.maps[current];
+      return settingOfTileset(map ? world.tilesets[map.tileset]?.name : undefined);
+    },
     get placeTint() {
       return current === null ? null : placeColours(world, current, outside).tint;
     },
@@ -529,17 +533,12 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         }
         for (const [slot, s] of npcSprites) if (!seen.has(slot)) s.mesh.visible = false;
 
-        // Fades: the game's own fade drawn over the HD view; the day wraps inside a black one.
+        // Fades: the game's own fade drawn over the HD view.
         if (holding && loaded()) holding = false;
         const fade = latest.fade;
         fadeQuad.visible = fade !== 0;
         fadeMaterial.color.set(fade > 0 ? 0x000000 : 0xffffff);
         fadeMaterial.opacity = Math.min(Math.abs(fade), 1);
-        if (fade >= 1 && !wrapped && look && look.params.time.phase >= 1) {
-          look.wrapToMorning(true);
-          wrapped = true;
-        }
-        if (fade < 1) wrapped = false;
       }
 
       // Battles: swing the camera between the walk and the battle, and hide the walk while it's on.

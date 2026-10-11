@@ -23,6 +23,9 @@ data (`p2-text-read`, `p2-battle-read`); battles draw in HD (`p2-battles`, D28).
 | `p1-transitions` | Hitches between maps, and the slow first frame without WebGPU | — |
 | `p2-text` | HD text boxes and menus | Nick's pick of font and box style |
 | `p2-tapfirst` | Tap-first UI (D32): own start screen, Oak in HD, keyboard names, real buttons | Nick's pick of panel look (`/dev/ui`) |
+| `p2-slots` | Any number of saves per ROM, a save manager and a new intro with Resume (D39) | Nick's pick of the intro (`/dev/saves`); settings wait on the Pokédex menu's |
+| `p2-dex-menu` | One menu around the Pokédex (D40): game hooks, play journal and world map, the menu on `/dev/menu` | Nick's pick of the hi-fi design |
+| `p2-save-lock` | One device per save: a lease with a heartbeat, takeover, quiet ghosts leave (D41) | Done |
 | `p4-bundle` | Code-splitting and Playwright screenshot regression tests | — |
 | `p4-vlm-colour` | Sprite colour and relief models, on Nick's Mac (brief: project file `plan/vision-model.md`) | Bake-off results for Nick |
 
@@ -199,6 +202,18 @@ The page's own start screen, Oak's introduction in HD, names typed on the device
 (Oak checks the invited name and a change renames the player) and real buttons on every HD
 menu, all pressing the game's own buttons (`Controls`). Next: tappable battle menus (FIGHT,
 moves, PKMN, ITEM, RUN), which still show on the Game Boy screen.
+### p2-slots: save slots and the intro (D39)
+Any number of saves per ROM, each with its own battery save, resume point and earlier saves;
+duplicate, delete (to a bin), rename and start new at any time. First load opens an intro with
+Resume (the last-played save's latest point), the save manager and settings. Done: slot storage
+on the device and in the cloud, the existing save kept in place as the main slot. Next: the
+intro and save manager on `/dev/saves`; settings reuse the Pokédex menu's panel.
+### p2-dex-menu: one menu around the Pokédex (D40)
+The closed Pokédex replaces Start and Select; tabs Pokémon, People, Inventory, Map and Me
+(prototype and handoff in the project files, `dex-menu/`). Done: the game hooks in
+`packages/emu/src/game/` (actions run with the game's own routines at the idle point; the game's
+own questions answered by the page). Next: the play journal and stitched world map, then the menu
+on `/dev/menu`; wired into the game only once Nick has picked.
 ### p2-battles: HD battle scenes
 3D arenas per environment, lit billboarded battle sprites, move effects keyed off the
 animation the game is playing. Built screen-driven (D28): pictures, sprites, flashes and shakes

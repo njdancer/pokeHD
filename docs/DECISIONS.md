@@ -133,7 +133,7 @@ miniature feel, soft shadows, light haze and gentle bloom. Clear day (flat, satu
 blur) was dropped. Every value stays tunable in the `?lookdev` panel; refine within this
 direction rather than reopening it.
 
-## D16. The day runs forwards into a low evening, and wraps to morning out of sight
+## D16. The day runs forwards into a low evening, and wraps to morning out of sight (wrap superseded by D42)
 
 Supersedes D9's "drifting between morning and late afternoon". Ping-ponging the clock made the
 sun visibly reverse and shadows swing back, and Nick wanted an evening with long, low shadows.
@@ -601,3 +601,92 @@ picture pixel) and see the 3D shape it makes. The edits are saved to his browser
 (`/api/admin/relief`, in the private bucket), and can be exported for local processing. The game
 never reads them, and they aren't committed as game data: they're teaching material for the small
 runtime model (D37).
+
+## D39. Save slots: any number of saves per ROM; the save everyone had becomes the main slot in place
+
+**Status:** asked for by Nick on 2026-10-10 (multiple saves with duplicate, delete and new; checkpoints
+belong to a save; an intro with Resume). The storage choices below were made while he was away.
+
+- **Keys, not moves.** Every slot's data sits under its own key, the way the one save did: battery
+  save, resume point, earlier saves, Pokédex journal and gift ledger, on the device and in R2. The
+  main slot's key is the ROM's SHA-1, so the save players already had is the main slot without a
+  byte moving; other slots are `<sha1>-<8 letters/digits>`. Nothing in the game had to learn about
+  slots: it's handed a slot's key.
+- **The list merges, never replaces.** The slot list is kept in IndexedDB and, signed in, in R2
+  (`saves/<player>/<rom>.slots.json`). A PUT merges into the stored list (per slot, the newer
+  rename or bin change wins and the latest play wins), so two devices that each changed it never
+  drop a slot. Resume plays the slot played last.
+- **Delete is a bin.** Deleting only marks a slot; its data stays, and it can be brought back
+  (D25: nothing a child taps loses a save). Emptying the bin for good is left for later, behind
+  the grown-ups check.
+- **Duplicate** copies the battery save, resume point, journal and gift ledger, but not gifts still
+  on their way out (they'd be sent twice) or earlier saves (they stay with the original).
+
+Until Nick picks the intro, the live game plays the main slot as before.
+
+## D40. The Pokédex menu works the game through its routines, never its menus
+
+**Status:** Nick's rule, 2026-10-10 ("inject code to interact with the fundamental routines of
+the mechanism", not orchestrate the existing UI). Mechanism chosen by Claude.
+
+- **Actions** (`GameActions`) run at the overworld idle point (SafePoint, D20) as calls of the
+  game's own routine for the job: `UseItem` with wCurItem and the item's place in the bag, inside
+  the frame any person's message gets (`DisplayTextIDInit` … `CloseTextDisplay`); toss is
+  `RemoveItemFromInventory`; team order is the party menu's data swap
+  (`SwitchPartyMon_InitVarOrSwapData`) without its drawing. With no routine of the game's own
+  (moves and bag order outside battle, options), the data is changed directly, the same change the
+  game's in-battle or menu code makes.
+- **Stand-ins** (`ffi.ts`): where a routine would draw a menu and wait for buttons
+  (`DisplayPartyMenu`, `DisplayListMenuID`, `DisplayChooseQuantityMenu`, a yes/no), a hook at its
+  first instruction writes the outputs its callers read and returns, or idles the CPU through
+  `DelayFrame` until the page answers. During our own actions the answers come from the action;
+  otherwise (`GameAsks`) the page is asked, so the battle bag, the Poké Mart and Bill's PC become
+  sheets while the game's rules decide what happens. Lists the page doesn't ask are left to the game.
+- **Opt-in.** Only a page that passes `onAsk` to `EmulatorHost` turns them on; the live game is
+  unchanged until Nick picks the menu.
+
+## D41. One device per save: a lease with a heartbeat, handed over on request
+
+**Status:** asked for by Nick on 2026-10-10 (two devices must not play the same save at once; a
+heartbeat; a quiet device loses the save and its ghost quickly). The details below are Claude's
+calls, flagged for his review.
+
+- **A lease per save, per player.** A device (a browser tab: its ID lives in sessionStorage, so a
+  reload still holds what it held) claims a save before the game starts and renews it every 5 s
+  (`POST /api/saves/:key/lock`). Without a renewal for 15 s the lease lapses. Leases live in a
+  `SaveLocks` Durable Object, one per player, so two claims can't both win. Different saves (or
+  different players' copies) never block each other.
+- **Busy means wait or take over.** A device that finds the save busy says where ("Playing on the
+  iPhone") and starts by itself once that device closes it. "Play here" takes it over: the holder
+  hears on its next heartbeat, stops, keeps its progress (a resume point, the save to the cloud),
+  and lets go; the taker then starts from that spot. A holder that heard but never lets go loses
+  the save after 10 s; one that never heard (asleep) keeps it until its lease lapses, so two
+  devices never play at once.
+- **Holding the save means the cloud is the latest.** With the save held, a newer cloud save can
+  only be another device's later play, so the game carries on from it by itself (what this device
+  had goes to Earlier saves). Before, it was offered to grown-ups.
+- **Never stop a child for the network.** Signed out or offline there's no service to ask: the
+  game plays as before. A device that can't reach the service keeps playing; if another device
+  took the save meanwhile, the first stops when it's back online.
+- **Ghosts go with the heartbeat.** Devices ping the room every 5 s; the room checks every 5 s and
+  closes a connection not heard from for 15 s, so a phone put in a pocket leaves the world.
+
+## D42. The day settles into dusk and lifts back into morning; indoors and caves have no day
+
+Nick asked on 2026-10-10 for the end of the day not to "flash dark and start again" (D16's wrap
+fade, which outdoors happened on its own once the evening hold ran out). Now, after the evening
+(phase 1), `time.dusk` rises from 0 to 1 over `duskSeconds`: the look blends toward a Dusk preset,
+a sunset without the sun. The sun goes (so no direct shadows), but a warm, glowing sky light and
+haze keep the scene about as bright as golden hour; Nick didn't want it to read as night
+("a sunset look with a warm glowing sky ... will trick you into accepting the sun resetting"). Full dusk holds for `eveningHold`, then the sun moves back to the east while
+it's gone (full dusk looks the same at any phase, by construction and by test), and the dusk
+lifts over `dawnSeconds` as the morning sun rises. Nothing fades to black any more, so the clock no longer
+hides a wrap inside the game's warp fades. Still never night.
+
+The day only shows outdoors. The game has no indoor flag, but every map names a tileset, and the
+game's own CheckIfInOutsideMap counts OVERWORLD and PLATEAU as outside; FOREST (Viridian Forest,
+the Safari Zone) is open sky too, so it keeps the day. CAVERN is every cave (Mt Moon, Rock
+Tunnel, Diglett's Cave, Seafoam Islands, Victory Road, the Cerulean Cave), which take a fixed,
+darker, cooler Cave look; every other tileset is a building, lit by the midday look with the sun
+overhead. The clock keeps running while the player is inside. The light switches at once on a
+map change, since the game changes maps behind its own fade to black.

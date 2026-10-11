@@ -125,3 +125,6 @@
 .battle-bar[data-colour="yellow"] span { background: #f2c94c; }
 .battle-bar[data-colour="red"] span { background: #eb5757; }
 .battle-hp { margin-top: .25rem; text-align: right; font-size: .85rem; font-variant-numeric: tabular-nums; }
+
+/* Behind a menu (the intro): only the world and the loading screen show. */
+.game.held > :not(.scene) { visibility: hidden; pointer-events: none; }

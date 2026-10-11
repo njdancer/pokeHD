@@ -12,8 +12,17 @@ export interface LookParams {
     drift: boolean;
     /** Seconds from morning to evening while drifting. */
     cycleSeconds: number;
-    /** Seconds the evening holds before the clock wraps to morning behind a fade. */
+    /**
+     * 0 = the phase's own light, 1 = full dusk: no sun, low warm light. The clock raises it after
+     * the evening and lowers it again into the next morning (D42).
+     */
+    dusk: number;
+    /** Seconds from evening into full dusk. */
+    duskSeconds: number;
+    /** Seconds full dusk holds before the light starts lifting into morning. */
     eveningHold: number;
+    /** Seconds from full dusk back to a clear morning. */
+    dawnSeconds: number;
     /** Pause the placeholder sprites to compare presets on an identical frame. */
     animate: boolean;
   };
@@ -169,7 +178,10 @@ export const LOOK_SCHEMA: { [G in Group]: { [K in keyof LookParams[G]]: FieldSpe
     phase: n(0, 1, 0.001),
     drift: b,
     cycleSeconds: n(10, 1200, 1, "day (s)"),
-    eveningHold: n(0, 300, 1, "evening hold (s)"),
+    dusk: n(0, 1, 0.001),
+    duskSeconds: n(1, 300, 1, "into dusk (s)"),
+    eveningHold: n(0, 300, 1, "dusk hold (s)"),
+    dawnSeconds: n(1, 300, 1, "dusk to morning (s)"),
     animate: b,
   },
   sun: {

@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { cloudflare } from "@cloudflare/vite-plugin";
 import react from "@vitejs/plugin-react";
@@ -62,8 +63,20 @@ function devShots(): Plugin {
   };
 }
 
+/** Which build is running, for crash reports: the short commit and the build date. */
+function buildId(): string {
+  let commit = "unknown";
+  try {
+    commit = execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  } catch {
+    // Not a git checkout.
+  }
+  return `${commit} ${new Date().toISOString().slice(0, 16)}Z`;
+}
+
 export default defineConfig({
   plugins: [devRom(), devShots(), react(), cloudflare()],
+  define: { __POKEHD_BUILD__: JSON.stringify(buildId()) },
   environments: {
     client: {
       build: {

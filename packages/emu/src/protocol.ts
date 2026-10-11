@@ -5,7 +5,10 @@ import type { NameAsk } from "./controls.ts";
 import type { ScriptMessage } from "./script-text.ts";
 import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { DexOpened } from "./dex-guard.ts";
+import type { JournalEvent } from "./journal-hooks.ts";
 import type { LinkRole } from "./link.ts";
+import type { ActionResult, GameAction } from "./game/actions.ts";
+import type { AskAnswer, GameAsk } from "./game/asks.ts";
 
 /** A memory range read after every frame and sent with it: [address, length]. */
 export type Watch = readonly [address: number, length: number];
@@ -15,7 +18,9 @@ export type ToWorker =
   /** `guardErase` turns on EraseGuard: the page answers the "older file will be erased" question. */
   /** `askNames` has the page answer name questions (Controls) instead of the game's own screens. */
   /** `guardDex` turns on DexGuard: the page shows its own Pokédex over the game's. */
-  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean }
+  /** `menu` turns on the Pokédex menu's game hooks: page actions, and the game's questions asked of the page. */
+  /** `journal` turns on JournalHooks (read-only): "journal" messages for the play journal. */
+  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean; menu?: boolean; journal?: boolean }
   /** Switches pacing to the audio clock; the port talks to the audio worklet. */
   | { type: "audio"; port: MessagePort }
   | { type: "buttons"; mask: number }
@@ -55,6 +60,12 @@ export type ToWorker =
   | { type: "read"; id: number; ranges: readonly Watch[] }
   /** A friend's gift, for the next overworld idle point (D20). */
   | { type: "gift-give"; id: string; gift: Gift }
+  /** A Pokédex menu action, run with the game's own routine at the next idle point. */
+  | { type: "action"; id: number; action: GameAction }
+  /** Takes back a queued action that hasn't started. */
+  | { type: "action-cancel"; id: number }
+  /** The page's answer to the game's question `id`. */
+  | { type: "ask-answer"; id: number; answer: AskAnswer }
   /** Takes a gift out of the game at the next idle point, then saves. */
   | { type: "gift-take"; id: number; spec: GiftSpec };
 
@@ -100,13 +111,18 @@ export type FromWorker =
   /** Someone on the map is speaking: the map and their index in its objects. */
   | { type: "talk"; map: number; npc: number }
   | { type: "beat"; map: number; npc: number }
+  /** Something for the play journal happened in the game (JournalHooks). */
+  | { type: "journal"; event: JournalEvent }
   /** An outbound link message for the friend. */
   | { type: "link-send"; message: LinkMessage }
   | { type: "read"; id: number; bytes: Uint8Array[] }
   | { type: "gift"; event: GiftEvent }
   /** On success, `sram` is the save the game just wrote: store it before sending the gift. */
   | { type: "gift-taken"; id: number; result: TakeResult; sram?: Uint8Array }
-  | { type: "error"; message: string };
+  | { type: "action-done"; id: number; result: ActionResult }
+  /** The game asks the player something (a list, the party, a quantity, yes or no): the page answers. */
+  | { type: "ask"; id: number; ask: GameAsk }
+  | { type: "error"; message: string; stack?: string };
 
 /** Worker → audio worklet: interleaved stereo float32. Worklet → worker: frames consumed. */
 export type ToWorklet = { samples: Float32Array };

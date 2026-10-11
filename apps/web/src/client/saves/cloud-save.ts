@@ -47,7 +47,7 @@ export async function uploadCloudSave(key: string, sram: Uint8Array, f: Fetch = 
 const markerKey = (key: string) => `${key}:cloud`;
 export const readSynced = (key: string) =>
   run<{ savedAt: number } | undefined>("saves", "readonly", (s) => s.get(markerKey(key))).then((m) => m?.savedAt);
-const writeSynced = (key: string, savedAt: number) => run("saves", "readwrite", (s) => s.put({ savedAt }, markerKey(key)));
+export const writeSynced = (key: string, savedAt: number) => run("saves", "readwrite", (s) => s.put({ savedAt }, markerKey(key)));
 
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((v, i) => v === b[i]);
 
@@ -93,11 +93,18 @@ export class CloudBackup {
       if (savedAt === "signed-out") this.signedOut = true;
       else await writeSynced(this.key, savedAt);
     });
-    this.queue = next.catch((err) => console.warn("[pokeHD] cloud backup failed", err));
+    this.queue = next.catch((err) => {
+      // Offline: it goes with the next flush, unless a newer save has taken its place.
+      this.pending ??= sram;
+      console.warn("[pokeHD] cloud backup failed", err);
+    });
     return this.queue.then(() => undefined);
   }
 
-  /** Compares the cloud copy with this device's save. Backs up a local save the cloud lacks. */
+  /**
+   * Compares the cloud copy with this device's save. Backs up a local save the cloud lacks, or
+   * one made since this device last synced that never got there (saved offline or signed out).
+   */
   async status(): Promise<CloudStatus> {
     await this.flush();
     let cloud: CloudSave | null | "signed-out";
@@ -117,7 +124,14 @@ export class CloudBackup {
       return { kind: "none" };
     }
     const synced = await readSynced(this.key);
-    if (synced !== undefined && cloud.savedAt <= synced) return { kind: "in-sync" };
+    if (synced !== undefined && cloud.savedAt <= synced) {
+      // The cloud holds what this device last sent or restored; anything newer here goes up.
+      if (local && !sameBytes(local, cloud.sram)) {
+        this.onSram(local);
+        await this.flush();
+      }
+      return { kind: "in-sync" };
+    }
     if (local && sameBytes(local, cloud.sram)) {
       await writeSynced(this.key, cloud.savedAt);
       return { kind: "in-sync" };

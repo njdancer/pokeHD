@@ -158,6 +158,11 @@ export class GameBoy {
     });
   }
 
+  /** Native hooks in use (distinct instructions hooked); the core has a fixed number of slots. */
+  get hookCount(): number {
+    return this.#hookIds.size;
+  }
+
   /**
    * Calls `callback` whenever the CPU reaches `target` (a symbol name or `{ bank, address }`),
    * before that instruction runs. Returns a function that removes the hook.

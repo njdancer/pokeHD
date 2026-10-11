@@ -11,7 +11,10 @@
 // - a step up that has to come back down within 15 s waits twice as long before trying again,
 //   so a device on the edge of a rung settles below it instead of flickering between the two;
 // - a window with many stalls (startup, shader compiles, a hidden tab) is thrown away whole, so
-//   its few surviving frames can't pass for the steady load.
+//   its few surviving frames can't pass for the steady load;
+// - but a device that is slow all the time (an old iPad at 5-10 fps: every frame over 100 ms)
+//   isn't stalling. After SLOW_S of nothing but such frames it goes straight to the bottom rung,
+//   and the usual rules take over from there (step back up, or undo it if it bought nothing).
 // Pure logic, no three.js: the engine feeds it frame intervals and applies the rung it returns.
 
 export interface Rung {
@@ -67,8 +70,15 @@ const CLEAN = 0.03;
 const STALL_MS = 100;
 /** A window with more stalls than this share of its frames says nothing about the steady load. */
 const STALLY = 0.1;
-/** Main-thread work over this share of the budget (median) makes a window CPU-bound. */
+/**
+ * Main-thread work over this share of the budget (median) makes a window CPU-bound, as long as
+ * that work explains its frame times: frames far longer than the CPU's share are GPU-bound.
+ */
 const CPU_BOUND = 0.8;
+/** A window this long with too few regular frames to judge is a slow one if most of it is stalls. */
+const SLOW_WINDOW_S = 2;
+/** Seconds of slow windows in a row before the governor believes it (startup can be this slow). */
+const SLOW_S = 6;
 /** A step down within this many seconds of a step up marks that step up as failed. */
 const PROBE_S = 15;
 
@@ -95,6 +105,10 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
   /** When the governor last arrived at the current rung by stepping up. */
   let cameUpAt = -Infinity;
   let stalls = 0;
+  /** Every interval in the window, stalls included, to tell a slow device from a stall. */
+  let all: number[] = [];
+  /** When the current run of slow windows began. */
+  let slowSince = -1;
   /** Where the current run of steps down started, and the mean frame time there. */
   let descent: { from: number; meanMs: number } | null = null;
 
@@ -129,27 +143,39 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
       cleanSince = -1;
       frames = [];
       cpu = [];
+      all = [];
       stalls = 0;
+      slowSince = -1;
       windowStart = -1;
     },
     sample(intervalMs, now, cpuMs) {
       if (now < quietUntil || intervalMs <= 0) return null;
       if (windowStart < 0) windowStart = now;
+      all.push(intervalMs);
       if (intervalMs > STALL_MS) stalls++;
-      else {
-        frames.push(intervalMs);
-        if (cpuMs !== undefined) cpu.push(cpuMs);
-      }
-      if (now - windowStart < windowS || frames.length < 8) return null;
+      else frames.push(intervalMs);
+      if (cpuMs !== undefined) cpu.push(cpuMs);
+      const elapsed = now - windowStart;
+      if (elapsed < windowS || (frames.length < 8 && elapsed < SLOW_WINDOW_S)) return null;
 
-      const stally = stalls > (frames.length + stalls) * STALLY;
-      const missed = frames.filter((ms) => ms > budget * MISS).length / frames.length;
-      const meanMs = frames.reduce((a, b) => a + b, 0) / frames.length;
-      const cpuBound = cpu.length > 0 && cpu.sort((a, b) => a - b)[cpu.length >> 1]! > budget * CPU_BOUND;
+      const medianOf = (xs: number[]) => xs.sort((a, b) => a - b)[xs.length >> 1]!;
+      const allMs = medianOf(all);
+      const cpuMedian = cpu.length > 0 ? medianOf(cpu) : 0;
+      const slow = frames.length < 8 && allMs > STALL_MS;
+      const stally = !slow && (frames.length < 8 || stalls > all.length * STALLY);
+      const missed = slow ? 1 : frames.filter((ms) => ms > budget * MISS).length / Math.max(1, frames.length);
+      const meanMs = slow ? all.reduce((a, b) => a + b, 0) / all.length : frames.reduce((a, b) => a + b, 0) / Math.max(1, frames.length);
+      const frameMs = slow ? allMs : medianOf(frames.length > 0 ? frames : all);
+      // CPU-bound only if the main thread's work, rounded up to whole frames, explains the frame
+      // time: 22 ms of work showing as 33 ms frames is, 30 ms of work in 150 ms frames isn't.
+      const cpuBound = cpuMedian > budget * CPU_BOUND && frameMs < (Math.ceil(cpuMedian / budget) + 1) * budget;
       frames = [];
       cpu = [];
+      all = [];
       stalls = 0;
       windowStart = now;
+      if (!slow) slowSince = -1;
+      else if (slowSince < 0) slowSince = now - elapsed;
       if (stally) return null;
       if (now >= floorUntil) floor = RUNGS.length - 1;
 
@@ -165,6 +191,14 @@ export function createGovernor(options: GovernorOptions = {}): Governor {
         return rung;
       }
 
+      if (slow) {
+        if (now - slowSince < SLOW_S || rung >= floor || cpuBound) return null;
+        // Far too slow to feel the way down a rung at a time: straight to the bottom.
+        descent ??= { from: rung, meanMs };
+        cameUpAt = -Infinity;
+        slowSince = -1;
+        return move(floor, now, meanMs);
+      }
       if (missed > DOWN) {
         if (rung >= floor || cpuBound) return null;
         return move(rung + 1, now, meanMs);

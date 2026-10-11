@@ -4,18 +4,23 @@
 // sound queued in the worklet and runs a frame whenever the queue drops below that, so sound
 // never starves and video follows at the core's own ~59.73 Hz. Without audio (no user gesture
 // yet, or muted), a wall-clock timer runs frames at FRAME_RATE instead.
-import { AutoSave, loadResumePoint } from "./autosave.ts";
+import { AutoSave, hasSave, loadResumePoint } from "./autosave.ts";
 import { Controls } from "./controls.ts";
 import { FRAME_RATE, GameBoy } from "./core.ts";
 import { DexGuard } from "./dex-guard.ts";
 import { EraseGuard } from "./erase-guard.ts";
+import { GameActions } from "./game/actions.ts";
+import { GameAsks } from "./game/asks.ts";
 import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
+import { JournalHooks } from "./journal-hooks.ts";
 import { LinkPort } from "./link.ts";
 import type { FromWorker, FromWorklet, ToWorker, ToWorklet, Watch } from "./protocol.ts";
 
 const AUDIO_LEAD_FRAMES = 3;
 const SRAM_FLUSH_MS = 1000;
+/** How long a broken save file is held back before it is handed out anyway (see flushSram). */
+const TORN_MAX_MS = 5000;
 
 interface WorkerScope {
   onmessage: ((e: MessageEvent<ToWorker>) => void) | null;
@@ -31,13 +36,21 @@ let paused = false;
 let frames = 0;
 let watches: Record<string, Watch> = {};
 let lastSramFlush = 0;
+/** The save the page has is one the game would load; and since when the game's hasn't been. */
+let handedWhole = false;
+let tornSince: number | undefined;
 let link: LinkPort | undefined;
 let desk: GiftDesk | undefined;
 let autosave: AutoSave | undefined;
 let guard: EraseGuard | undefined;
 let controls: Controls | undefined;
 let dex: DexGuard | undefined;
+let journal: JournalHooks | undefined;
 let rom: Uint8Array | undefined;
+let actions: GameActions | undefined;
+/** Queued actions' cancels, by the page's id. */
+const cancels = new Map<number, () => void>();
+let asks: GameAsks | undefined;
 let scriptText = false;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
@@ -67,18 +80,38 @@ function runOneFrame() {
   if (gb.sramDirty && performance.now() - lastSramFlush > SRAM_FLUSH_MS) flushSram();
 }
 
-/** Hands the save to the page; gifts that landed before it are now in a save. */
-function flushSram() {
-  if (!gb) return;
+/**
+ * Hands the save to the page; gifts that landed before it are now in a save. Returns false if
+ * the game is part-way through writing its save over a whole one: the save file's checksum is
+ * wrong for a few frames then, and a page closed before the next flush would have lost
+ * CONTINUE. It's handed out once whole again, or once it has stayed broken for TORN_MAX_MS
+ * (the title screen's erase, which the game means).
+ */
+function flushSram(): boolean {
+  if (!gb) return true;
+  const sram = gb.saveSram();
+  const whole = hasSave(sram);
+  const now = performance.now();
+  if (!whole && handedWhole) {
+    tornSince ??= now;
+    if (now - tornSince < TORN_MAX_MS) return false;
+  }
+  tornSince = undefined;
+  handedWhole = whole;
   gb.clearSramDirty();
-  lastSramFlush = performance.now();
-  post({ type: "sram", sram: gb.saveSram() });
+  lastSramFlush = now;
+  post({ type: "sram", sram });
   desk?.saved();
+  return true;
 }
 
-/** Audio-driven pacing: top the worklet's queue up to the lead. */
+/**
+ * Audio-driven pacing: top the worklet's queue up to the lead. Without a worklet nothing fills
+ * the queue, so this would never stop: the timer paces the game then (an unpause before any
+ * sound, as when /dev/saves lets its game go on the very tap that starts the sound).
+ */
 function fillAudio() {
-  while (!paused && gb && queuedSamples < samplesPerFrame * AUDIO_LEAD_FRAMES) runOneFrame();
+  while (!paused && gb && audio && queuedSamples < samplesPerFrame * AUDIO_LEAD_FRAMES) runOneFrame();
 }
 
 /** Timer pacing when there's no audio clock. */
@@ -93,7 +126,8 @@ function tick() {
       nextFrameAt += 1000 / FRAME_RATE;
     }
   }
-  setTimeout(tick, Math.max(0, nextFrameAt - performance.now()));
+  // Paused, there's no frame due: look again a frame from now rather than spin.
+  setTimeout(tick, paused || !gb ? 1000 / FRAME_RATE : Math.max(0, nextFrameAt - performance.now()));
 }
 
 // "start" awaits the core. Messages that need the Game Boy (a friend's gift, a read) wait for
@@ -114,6 +148,7 @@ async function handle(data: ToWorker) {
         const reason = data.resume && loadResumePoint(gb, data.resume, data.sram);
         // A failed load may have left half a state behind: start clean on the save instead.
         if (reason) gb = await create();
+        handedWhole = hasSave(gb.saveSram());
         desk = new GiftDesk(gb, {
           rom: data.rom,
           emit: (event) => {
@@ -121,6 +156,8 @@ async function handle(data: ToWorker) {
             post({ type: "gift", event });
           },
         });
+        // After the gift desk, so its SafePoint calls are known as the page's.
+        journal = data.journal ? new JournalHooks(gb, { rom: data.rom, emit: (event) => post({ type: "journal", event }) }) : undefined;
         autosave = new AutoSave(gb, {
           rom: data.rom,
           skipped: (why) => post({ type: "autosave-skipped", reason: why }),
@@ -152,6 +189,10 @@ async function handle(data: ToWorker) {
             press: () => post({ type: "script-press" }),
           },
         });
+        if (data.menu) {
+          const act = (actions = new GameActions(gb, { rom: data.rom }));
+          asks = new GameAsks(gb, { rom: data.rom, busy: () => act.pending > 0 && SafePoint.of(g).calling, onAsk: (id, ask) => post({ type: "ask", id, ask }) });
+        }
         rom = data.rom;
         if (scriptText) controls.setScriptText(rom);
         samplesPerFrame = data.sampleRate / FRAME_RATE;
@@ -223,15 +264,17 @@ async function handle(data: ToWorker) {
         break;
       case "load-state":
         gb?.loadState(data.state);
+        journal?.resync();
         break;
       case "resume-point": {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.
         // Signed-in players always have a port open (RoomLink keeps one ready), so it's the
         // session that counts, not the port.
-        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !dex?.open && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
-        // Hand over any newer save first, so the stored save matches the one in the state.
-        if (g?.sramDirty) flushSram();
-        post({ type: "resume-point", id: data.id, state: g ? g.saveState() : null });
+        const g = gb && !link?.inSession && !guard?.asking && !controls?.busy && !dex?.open && !asks?.asking && !actions?.pending && !SafePoint.of(gb).calling && (desk?.unsettled ?? 0) === 0 ? gb : undefined;
+        // Hand over any newer save first, so the stored save matches the one in the state. None
+        // while the game is part-way through saving: neither is a save it would load.
+        const whole = g && (!g.sramDirty || flushSram());
+        post({ type: "resume-point", id: data.id, state: g && whole ? g.saveState() : null });
         break;
       }
       case "autosave":
@@ -258,6 +301,25 @@ async function handle(data: ToWorker) {
           post({ type: "read", id: data.id, bytes: data.ranges.map(([address, length]) => g.readBytes(address, length)) });
         }
         break;
+      case "action": {
+        const { id } = data;
+        if (!actions) post({ type: "action-done", id, result: { ok: false, reason: "menu hooks are off", messages: [] } });
+        else
+          cancels.set(
+            id,
+            actions.run(data.action, (result) => {
+              cancels.delete(id);
+              post({ type: "action-done", id, result });
+            }),
+          );
+        break;
+      }
+      case "action-cancel":
+        cancels.get(data.id)?.();
+        break;
+      case "ask-answer":
+        asks?.answer(data.id, data.answer);
+        break;
       case "gift-give":
         desk?.give(data.id, data.gift);
         break;
@@ -268,13 +330,17 @@ async function handle(data: ToWorker) {
           // The game has just saved: the page stores this save before the gift goes out.
           gb.clearSramDirty();
           lastSramFlush = performance.now();
-          post({ type: "gift-taken", id, result, sram: gb.saveSram() });
+          const sram = gb.saveSram();
+          handedWhole = hasSave(sram);
+          tornSince = undefined;
+          post({ type: "gift-taken", id, result, sram });
           desk?.saved();
         });
         break;
       }
     }
   } catch (err) {
-    post({ type: "error", message: err instanceof Error ? err.message : String(err) });
+    const stack = err instanceof Error ? err.stack : undefined;
+    post({ type: "error", message: err instanceof Error ? err.message : String(err), ...(stack ? { stack } : {}) });
   }
 }
