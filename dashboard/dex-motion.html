@@ -143,7 +143,7 @@ select.btn { padding-right: 6px; }
 .fields h4.sub { grid-column: 1 / -1; margin: 6px 0 0; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .mini-curve h4 { margin: 0; font-size: .82rem; color: var(--muted); }
 .mini-curve .chip { font-size: .7rem; padding: 2px 7px; }
-.path-ui { position: absolute; left: 0; top: 0; z-index: 5; pointer-events: none; overflow: visible; }
+.path-ui { position: absolute; left: 0; top: 0; z-index: 5; transform-origin: 0 0; pointer-events: none; overflow: visible; }
 .path-ui .h { pointer-events: auto; cursor: grab; touch-action: none; }
 .chip { border: 1px solid var(--line); background: var(--raised); border-radius: 99px; padding: 3px 9px; font-size: .78rem; font-weight: 800; }
 .chip:hover { border-color: var(--muted); }
@@ -216,13 +216,13 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
 
   <div class="left">
     <div class="stage-wrap" id="stage-wrap">
+      <svg class="path-ui" id="path-ui" aria-label="Motion path"></svg>
       <div class="stage framed" id="stage">
         <canvas id="world"></canvas>
         <div class="toasts" id="toasts"></div>
         <div class="dim" id="dim"></div>
         <canvas id="dex"></canvas>
         <div id="glows"></div>
-        <svg class="path-ui" id="path-ui" aria-label="Motion path"></svg>
         <div class="page" id="page">
           <h2>Menu</h2>
           <div class="rowlist">
@@ -1197,7 +1197,7 @@ function buildPathUI() {
       h.onpointermove = (ev) => {
         const r = stage.getBoundingClientRect(), { p0, p1 } = pathEnds();
         const lx = ((ev.clientX - r.left) / r.width) * SW, ly = ((ev.clientY - r.top) / r.height) * SH;
-        const frac = (v, a, b) => (Math.abs(b - a) < 1 ? 0 : +((v - a) / (b - a)).toFixed(3));
+        const frac = (v, a, b) => (Math.abs(b - a) < 1 ? 0 : +Math.min(3, Math.max(-2, (v - a) / (b - a))).toFixed(3));
         V.path["c" + (i + 1)] = [frac(lx, p0[0], p1[0]), frac(ly, p0[1], p1[1])];
         fillTrackFields(); writeJson();
       };
@@ -1215,7 +1215,10 @@ function drawPathUI() {
   pathUI.style.display = on ? "" : "none";
   if (!on) return;
   if (!PATH.curve) buildPathUI();
+  // It sits beside the stage, not in it, so the path can run past the phone's edges; it copies the
+  // stage's placement so its pixels are the stage's.
   pathUI.setAttribute("width", SW); pathUI.setAttribute("height", SH);
+  pathUI.style.left = stage.style.left; pathUI.style.top = stage.style.top; pathUI.style.transform = stage.style.transform;
   // Keep the handles finger-sized however small the stage is drawn.
   const sc = 1 / Math.max(0.2, stage.getBoundingClientRect().width / SW);
   if (PATH.sc !== sc) {
