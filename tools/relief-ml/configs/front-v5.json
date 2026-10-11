@@ -4,8 +4,8 @@
   "why": "Re-establish the best picture model on the new pipeline: depth layering (Snorlax's head behind his belly).",
   "changes": ["Rerun of the cloud front-v5 on the new pipeline (Mac GPU)"],
   "datasets": [
-    {"label": "Creatures with flat-white parts", "view": "front", "seed": 700000, "n": 6000, "shard": 250, "shares": {"white": 0.35}},
-    {"label": "Creatures posed in depth", "view": "front", "seed": 800000, "n": 4000, "shard": 250, "shares": {"posed": 1, "white": 0.35}}
+    {"label": "Creatures with flat-white parts", "view": "front", "seed": 700000, "n": 6000, "shard": 100, "shares": {"white": 0.35}},
+    {"label": "Creatures posed in depth", "view": "front", "seed": 800000, "n": 4000, "shard": 100, "shares": {"posed": 1, "white": 0.35}}
   ],
   "model": {"width": 40, "occ": true, "depth": true},
   "train": {"epochs": 22},

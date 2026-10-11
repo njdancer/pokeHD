@@ -25,6 +25,7 @@ def main(argv=None):
     s = sp.add_parser("stop"); s.add_argument("run")
     s = sp.add_parser("ops"); s.add_argument("doing"); s.add_argument("--why", default=""); s.add_argument("--next", action="append", default=[]); s.add_argument("--run", action="append", default=[])
     s = sp.add_parser("event"); s.add_argument("kind"); s.add_argument("title"); s.add_argument("--body"); s.add_argument("--run", action="append")
+    s = sp.add_parser("audit"); s.add_argument("run", help="a run trained without rule labels")
     sp.add_parser("flags")
     s = sp.add_parser("flag-reply"); s.add_argument("id"); s.add_argument("status"); s.add_argument("reply")
     a = ap.parse_args(argv)
@@ -59,6 +60,10 @@ def main(argv=None):
         lab.set_ops(a.doing, a.why, a.next, a.run)
     elif a.cmd == "event":
         lab.event(a.kind, a.title, body=a.body, runs=a.run)
+    elif a.cmd == "audit":
+        from . import audit
+        for l, r in sorted(audit.run(a.run).items(), key=lambda kv: kv[1]["agreement"]):
+            print(f"{l:14s} rule {r['ruleFace']:6s} agree {r['agreement']:.2f}  pixels {r['pixels']:7d}  tiles {r['distinctTiles']}")
     elif a.cmd == "flags":
         for p in sorted((LAB / "flags").glob("*.json")) if (LAB / "flags").exists() else []:
             f = json.loads(p.read_text()); print(f"{f['id']} [{f['status']}] {f['kind']}: {f['note']}")

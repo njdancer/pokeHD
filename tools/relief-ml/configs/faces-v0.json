@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v3",
+  "title": "Five faces from made-up scenes only (no tile labels)",
+  "why": "An honest model that never saw the rule: where it disagrees with the rule, per label, tells us which labels to check first. Its real-map score is not circular.",
+  "changes": ["No real maps in training at all (rule labels off for every label)"],
+  "real": {"share": 0}
+}

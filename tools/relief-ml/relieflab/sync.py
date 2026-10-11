@@ -27,7 +27,7 @@ def _req(method, rel, body=None, headers=None):
     tok = _token()
     if not tok: raise RuntimeError("no admin token (POKEHD_ADMIN_TOKEN or ~/.config/pokehd/admin-token)")
     r = urllib.request.Request(f"{BASE}/api/admin/lab/{rel}", data=body, method=method,
-                               headers={"Authorization": f"Bearer {tok}", **(headers or {})})
+                               headers={"Authorization": f"Bearer {tok}", "User-Agent": "relieflab/1", **(headers or {})})
     with urllib.request.urlopen(r, timeout=60) as resp:
         return resp.status, resp.read()
 
