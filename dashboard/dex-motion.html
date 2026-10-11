@@ -1197,7 +1197,7 @@ function buildPathUI() {
       h.onpointermove = (ev) => {
         const r = stage.getBoundingClientRect(), { p0, p1 } = pathEnds();
         const lx = ((ev.clientX - r.left) / r.width) * SW, ly = ((ev.clientY - r.top) / r.height) * SH;
-        const frac = (v, a, b) => (Math.abs(b - a) < 1 ? 0 : +Math.min(3, Math.max(-2, (v - a) / (b - a))).toFixed(3));
+        const frac = (v, a, b) => (Math.abs(b - a) < 1 ? 0 : +((v - a) / (b - a)).toFixed(3));
         V.path["c" + (i + 1)] = [frac(lx, p0[0], p1[0]), frac(ly, p0[1], p1[1])];
         fillTrackFields(); writeJson();
       };
