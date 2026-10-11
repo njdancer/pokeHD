@@ -3,7 +3,7 @@ import * as THREE from "three/webgpu";
 import { fakeWorld } from "../world/fake-world.ts";
 import { createLiveWorld } from "../world/live.ts";
 import { createBattleLayer, type BattleView } from "./layer.ts";
-import { backgroundMask, shade } from "./picture.ts";
+import { backgroundMask, paint, pixelTexture, shade } from "./picture.ts";
 import { arenaPlacement } from "./placement.ts";
 
 const RAMP = [0xffffff, 0xaaaaaa, 0x555555, 0x000000] as const;
@@ -134,5 +134,19 @@ describe("LiveWorld battles", () => {
     }
     expect(live.view).toBeNull();
     live.dispose();
+  });
+});
+
+describe("hand-coloured pictures (D43)", () => {
+  it("paints the art's colour where it has one and the ramp elsewhere", () => {
+    const { pixels } = picture();
+    const art = new Uint8ClampedArray(56 * 56 * 4);
+    art.set([200, 40, 10, 255], (25 * 56 + 25) * 4);
+    const tex = pixelTexture(56, 56);
+    paint(tex, pixels, 0b11100100, RAMP, () => false, art);
+    const data = tex.image.data as Uint8Array;
+    const at = (x: number, y: number) => Array.from(data.subarray(((55 - y) * 56 + x) * 4, ((55 - y) * 56 + x) * 4 + 4));
+    expect(at(25, 25)).toEqual([200, 40, 10, 255]);
+    expect(at(26, 25)).toEqual([0, 0, 0, 255]);
   });
 });
