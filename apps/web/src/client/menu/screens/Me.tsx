@@ -15,28 +15,30 @@ export function MeScreen() {
   const got = trainer.badges.filter(Boolean).length;
   return (
     <Page title="Me" meta={trainer.name}>
-      <div className="m-tcard">
-        <div className="m-tcard-pic">
-          <Pixel src={spritePic(env, SPRITE_NAMES.indexOf("RED"))} />
+      <div className="m-idcol">
+        <div className="m-tcard">
+          <div className="m-tcard-pic">
+            <Pixel src={spritePic(env, SPRITE_NAMES.indexOf("RED"))} />
+          </div>
+          <div className="m-tcard-text">
+            <span className="m-no">Trainer card</span>
+            <h3>{trainer.name}</h3>
+            <dl>
+              <div><dt>ID No.</dt><dd>{trainer.id}</dd></div>
+              <div><dt>Money</dt><dd>₽{trainer.money.toLocaleString()}</dd></div>
+              <div><dt>Time</dt><dd>{trainer.played}</dd></div>
+            </dl>
+          </div>
         </div>
-        <div className="m-tcard-text">
-          <span className="m-no">Trainer card</span>
-          <h3>{trainer.name}</h3>
-          <dl>
-            <div><dt>ID No.</dt><dd>{trainer.id}</dd></div>
-            <div><dt>Money</dt><dd>₽{trainer.money.toLocaleString()}</dd></div>
-            <div><dt>Time</dt><dd>{trainer.played}</dd></div>
-          </dl>
+        <div className="m-card m-badges" aria-label={`${got} of 8 badges`}>
+          {BADGES.map((b, i) => (
+            <span key={b.name} className={`m-badge${trainer.badges[i] ? " got" : ""}`} title={trainer.badges[i] ? `${b.name} Badge` : "Not yet"}>
+              <svg viewBox="0 0 32 32" aria-hidden="true">
+                <path d={b.shape} fill={trainer.badges[i] ? b.colour : "none"} stroke={trainer.badges[i] ? "#3e2a1c" : "#d6bf96"} strokeWidth="2" strokeDasharray={trainer.badges[i] ? undefined : "3 3"} strokeLinejoin="round" />
+              </svg>
+            </span>
+          ))}
         </div>
-      </div>
-      <div className="m-card m-badges" aria-label={`${got} of 8 badges`}>
-        {BADGES.map((b, i) => (
-          <span key={b.name} className={`m-badge${trainer.badges[i] ? " got" : ""}`} title={trainer.badges[i] ? `${b.name} Badge` : "Not yet"}>
-            <svg viewBox="0 0 32 32" aria-hidden="true">
-              <path d={b.shape} fill={trainer.badges[i] ? b.colour : "none"} stroke={trainer.badges[i] ? "#3e2a1c" : "#d6bf96"} strokeWidth="2" strokeDasharray={trainer.badges[i] ? undefined : "3 3"} strokeLinejoin="round" />
-            </svg>
-          </span>
-        ))}
       </div>
       <div className="m-list">
         <Row media={<RowIcon kind="save" />} title="Saves" sub={`Saved ${savedAgo}`} onClick={() => nav.go({ k: "saves" })} />

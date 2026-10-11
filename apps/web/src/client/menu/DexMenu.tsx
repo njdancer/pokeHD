@@ -1,7 +1,8 @@
 // The Pokédex menu (p2-menu): one menu around the Pokédex, replacing Start and Select. Five tabs
 // (Pokémon, People, Inventory, Map, Me), each keeping its own place; and the game's requests
 // (battle Team and Bag, who's next, PC, Mart) as a sheet over the game instead. Storybook look.
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Env, useEnv, type MenuEnv } from "./env.tsx";
 import { CloseIcon, TabIcon, type TabId } from "./icons.tsx";
 import { NavContext, rootOf, TABS, type Nav, type Screen } from "./nav.tsx";
@@ -54,9 +55,21 @@ export interface DexMenuProps {
   onRequestDone?(): void;
   /** A line from the game after an action finished (toasted when `n` changes). */
   notice?: { text: string; n: number } | null;
+  /**
+   * The open Pokédex's screen to draw into. The menu fills it edge to edge and has no frame of
+   * its own: the dex is the frame. Without one, the menu floats over the game in a plain panel.
+   */
+  screen?: HTMLElement | null;
+  /** Forces a layout; by default the screen's shape picks it (wider than tall: the sidebar). */
+  layout?: Layout;
+  /** Landscape's tabs: a sidebar with words (default), or a narrow rail of icons. */
+  side?: "full" | "rail";
 }
 
-export function DexMenu({ env: base, open, onClose, start, request, onRequestDone, notice }: DexMenuProps) {
+/** Portrait: tabs along the bottom. Landscape: a sidebar, and wide pages in two columns. */
+export type Layout = "portrait" | "landscape";
+
+export function DexMenu({ env: base, open, onClose, start, request, onRequestDone, notice, screen, layout, side }: DexMenuProps) {
   const [toastText, setToastText] = useState<{ text: string; n: number } | null>(null);
   const toast = useCallback((text: string) => {
     // Actions that finish later (in the game) return "", and their words follow as a notice.
@@ -78,7 +91,7 @@ export function DexMenu({ env: base, open, onClose, start, request, onRequestDon
     <Env.Provider value={env}>
       <div className={`m-root${open ? " open" : ""}${request ? " asked" : ""}`}>
         <div className="m-shade" onClick={request ? undefined : onClose} />
-        <Dex open={open} onClose={onClose} start={start} />
+        {screen ? createPortal(<Dex open={open} onClose={onClose} start={start} layout={layout} side={side} />, screen) : <Dex open={open} onClose={onClose} start={start} layout={layout} side={side} floating />}
         {request && <Sheet key={request.kind} request={request} onDone={() => onRequestDone?.()} />}
         {toastText && (
           <div className="m-toast" key={toastText.n} role="status">
@@ -90,7 +103,28 @@ export function DexMenu({ env: base, open, onClose, start, request, onRequestDon
   );
 }
 
-function Dex({ open, onClose, start }: { open: boolean; onClose(): void; start?: DexMenuProps["start"] }) {
+/** Wider than this (width ÷ height) is landscape; a little hysteresis stops it flickering mid-turn. */
+const WIDE = 1.15;
+
+/** The layout a box's shape asks for, watched as it changes (the dex turning with the phone). */
+function useShape(forced?: Layout) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [shape, setShape] = useState<Layout>("portrait");
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || forced) return;
+    const ro = new ResizeObserver(() => {
+      const { width, height } = el.getBoundingClientRect();
+      if (!width || !height) return;
+      setShape((was) => (width / height > (was === "landscape" ? WIDE - 0.1 : WIDE) ? "landscape" : "portrait"));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [forced]);
+  return [ref, forced ?? shape] as const;
+}
+
+function Dex({ open, onClose, start, layout: forced, side, floating }: { open: boolean; onClose(): void; start?: DexMenuProps["start"]; layout?: Layout; side?: DexMenuProps["side"]; floating?: boolean }) {
   const [{ tab, stacks, motion }, setState] = useState(() => {
     const s = Object.fromEntries(TABS.map((t) => [t.id, [rootOf(t.id)]])) as Record<TabId, Screen[]>;
     if (start?.screen) s[start.tab] = [rootOf(start.tab), start.screen];
@@ -113,18 +147,22 @@ function Dex({ open, onClose, start }: { open: boolean; onClose(): void; start?:
   };
   const top = stack[stack.length - 1]!;
   const gifts = env.model.friends.filter((f) => f.gift).length;
+  const [ref, layout] = useShape(forced);
+  useEffect(() => {
+    if (!open) return;
+    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    addEventListener("keydown", key);
+    return () => removeEventListener("keydown", key);
+  }, [open, onClose]);
   return (
-    <div className="m-dex" role="dialog" aria-label="Pokédex" aria-hidden={!open} inert={!open}>
-      <Corners />
-      <button type="button" className="m-round m-close" aria-label="Close the Pokédex" onClick={onClose}>
-        <CloseIcon />
-      </button>
+    <div ref={ref} className={`m-dex${floating ? " floating" : ""}${open ? " open" : ""}`} data-layout={layout} data-side={side ?? "full"} role="dialog" aria-label="Pokédex" aria-hidden={!open} inert={!open}>
       <NavContext.Provider value={nav}>
         <div className={`m-screen m-${motion}`} key={`${tab} ${stack.length} ${top.k}`}>
           {render(top)}
         </div>
       </NavContext.Provider>
       <nav className="m-tabbar" aria-label="Pokédex">
+        <span className="m-side-head" aria-hidden="true">Pokédex</span>
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -140,7 +178,8 @@ function Dex({ open, onClose, start }: { open: boolean; onClose(): void; start?:
               <TabIcon tab={t.id} on={t.id === tab} />
               {t.id === "people" && gifts > 0 && <i className="m-dot">{gifts}</i>}
             </span>
-            <span>{t.label}</span>
+            <span className="m-tablabel">{t.label}</span>
+            {t.id === "people" && gifts > 0 && <i className="m-dot side">{gifts}</i>}
           </button>
         ))}
       </nav>
@@ -148,15 +187,6 @@ function Dex({ open, onClose, start }: { open: boolean; onClose(): void; start?:
   );
 }
 
-function Corners() {
-  return (
-    <>
-      {(["tl", "tr", "bl", "br"] as const).map((c) => (
-        <span key={c} className={`m-corner ${c}`} aria-hidden="true" />
-      ))}
-    </>
-  );
-}
 
 /** A game request answered over the game: the same lists as the dex, filtered to what it asks. */
 function Sheet({ request, onDone }: { request: Request; onDone(): void }) {

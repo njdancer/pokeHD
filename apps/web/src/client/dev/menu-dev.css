@@ -13,7 +13,40 @@
 /* The notch and home bar, so safe areas are honest. */
 .md-phone::before { content: ""; position: absolute; z-index: 40; left: 50%; top: 0; translate: -50% 0; width: 162px; height: 32px; border-radius: 0 0 20px 20px; background: #17161a; pointer-events: none; }
 .md-phone::after { content: ""; position: absolute; z-index: 40; left: 50%; bottom: 8px; translate: -50% 0; width: 136px; height: 5px; border-radius: 3px; background: #17161acc; pointer-events: none; }
-.md-phone .m-root { --m-safe-top: 47px; --m-safe-bottom: 34px; }
+.md-phone .m-root, .md-phone .m-dex { --m-safe-top: 47px; --m-safe-bottom: 34px; }
+.md-phone { container: phone / size; }
+.md-phone.turned { width: 844px; height: 390px; }
+.md-phone.turned .m-root, .md-phone.turned .m-dex { --m-safe-top: 0px; --m-safe-bottom: 21px; --m-safe-left: 47px; --m-safe-right: 47px; }
+.md-phone.turned::before { left: 0; top: 50%; translate: 0 -50%; width: 32px; height: 162px; border-radius: 0 20px 20px 0; }
+
+/* A stand-in for the open Pokédex: a red body, the screen, two lights and the pad. Portrait: lights
+   above the screen, pad below. Landscape: the screen on the left, lights and pad on the right. */
+.md-opendex {
+  --top: 47px; --bottom: 34px; --left: 0px; --right: 0px;
+  position: absolute; z-index: 21; left: calc(var(--left) + 10px); right: calc(var(--right) + 10px); top: calc(var(--top) + 8px); bottom: calc(var(--bottom) + 8px);
+  border-radius: 26px; background: linear-gradient(160deg, #e9493c, #b72a20); box-shadow: 0 22px 48px #3a0d0866, inset 0 2px 0 #ff8a7c88, inset 0 -6px 0 #9b2118;
+  transform-origin: calc(100% - 30px) 30px; transform: scale(.15); opacity: 0; pointer-events: none;
+  transition: transform .34s cubic-bezier(.2, .9, .25, 1.04), opacity .2s ease;
+}
+.md-opendex.open { transform: none; opacity: 1; pointer-events: auto; }
+.md-opendex-screen {
+  position: absolute; left: 14px; right: 14px; top: 58px; bottom: 74px; overflow: hidden; border-radius: 18px;
+  box-shadow: 0 0 0 4px #2b2b33, 0 0 0 6px #7a160f;
+}
+.md-opendex-lights { position: absolute; left: 22px; top: 18px; width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #bfe8ff, #2c8fd6 55%, #135a8f); border: 3px solid #f4f1ea; }
+.md-opendex-lights::after { content: ""; position: absolute; left: 32px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: #f5c04f; box-shadow: 16px 0 #4fae5a; }
+.md-opendex-pad { position: absolute; left: 50%; bottom: 22px; translate: -50% 0; width: 120px; height: 30px; border-radius: 15px; background: #2b2b33; box-shadow: inset 0 2px 0 #fff2; }
+.md-phone.turned .md-opendex { --top: 0px; --bottom: 21px; --left: 47px; --right: 47px; }
+@container phone (orientation: landscape) {
+  .md-opendex-screen { left: 14px; top: 14px; bottom: 14px; right: 84px; }
+  .md-opendex-lights { left: auto; right: 30px; top: 22px; }
+  .md-opendex-lights::after { left: 4px; top: 34px; box-shadow: 0 16px #4fae5a; }
+  .md-opendex-pad { left: auto; right: 24px; bottom: 22px; translate: none; width: 34px; height: 110px; }
+}
+/* The closed dex sits above the open one, as the real one does. */
+.md-dexbtn { z-index: 25; }
+.md-phone:has(.md-opendex.open) .md-dexbtn { display: none; }
+.md-phone.turned .md-dexbtn { top: 12px; right: 59px; }
 .md-scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .md-status { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #fff; font-size: 17px; }
 .md-place { position: absolute; z-index: 1; left: 16px; top: 56px; padding: 6px 12px; border-radius: 99px; background: #fffaf0d9; font: 900 14px/1 Nunito, sans-serif; color: #3e2a1c; box-shadow: 0 2px 6px #0003; }
@@ -71,7 +104,8 @@
   .md-phone-col { position: fixed; inset: 0; }
   .md-phone { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
   .md-phone::before, .md-phone::after { display: none; }
-  .md-phone .m-root { --m-safe-top: env(safe-area-inset-top, 0px); --m-safe-bottom: env(safe-area-inset-bottom, 0px); }
+  .md-phone .m-root, .md-phone .m-dex { --m-safe-top: env(safe-area-inset-top, 0px); --m-safe-bottom: env(safe-area-inset-bottom, 0px); }
+  .md-phone .md-opendex { --top: env(safe-area-inset-top, 0px); --bottom: env(safe-area-inset-bottom, 0px); --left: env(safe-area-inset-left, 0px); --right: env(safe-area-inset-right, 0px); }
   .md-place { top: calc(env(safe-area-inset-top, 0px) + 12px); }
   .md-dexbtn { top: calc(env(safe-area-inset-top, 0px) + 10px); }
   .md-paneltoggle {
