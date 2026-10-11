@@ -253,7 +253,7 @@ class Trainer:
         occ = (self.M[idx][sl] > 0).float()
         if "occ" in h: loss = loss + 0.5 * F.binary_cross_entropy_with_logits(h["occ"], occ)
         if "depth" in h:
-            loss = loss + 0.1 * depth_loss(h["depth"], self.Z[idx][sl], occ)
+            loss = loss + t.get("depthWeight", 0.1) * depth_loss(h["depth"], self.Z[idx][sl], occ)
             g = t.get("depthGrad", 0)
             if g: loss = loss + g * grad_loss(h["depth"], self.Z[idx][sl], occ)
         return loss

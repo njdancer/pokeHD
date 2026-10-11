@@ -1,0 +1,7 @@
+{
+  "extends": "front-v6-depth-grad",
+  "title": "Pictures: depth weighted 5x higher",
+  "why": "Pictures come out as thin curved shells in 3D: the predicted depth range is shallow. Depth has had a tenth of the weight of the normals in the loss; give it more so the model commits to real front-to-back distances.",
+  "changes": ["Depth loss weight 0.1 → 0.5"],
+  "train": {"depthWeight": 0.5}
+}
