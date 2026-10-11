@@ -1,0 +1,8 @@
+{
+  "extends": "faces-v0",
+  "title": "Five faces, no tile labels, more context (dilated bottleneck, 64px crops)",
+  "why": "Shading says little; shape comes from outlines and layout. Does seeing more around each pixel help, at the same model size?",
+  "changes": ["Bottleneck uses dilated convs (rates 1, 2, 4, 8), same parameter count", "Trains on whole 64px scenes instead of 48px crops"],
+  "model": {"dilate": true},
+  "train": {"crop": 64}
+}

@@ -25,12 +25,27 @@ def block(i, o):
                          nn.Conv2d(o, o, 3, padding=1), nn.BatchNorm2d(o), nn.ReLU(inplace=True))
 
 
+class Dilated(nn.Module):
+    """Bottleneck with parallel dilated 3x3 convs (rates 1, 2, 4, 8), each c/4 wide, concatenated:
+    more context for the same weights as the plain bottleneck (ASPP-style)."""
+    def __init__(self, c):
+        super().__init__()
+        self.inp = nn.Sequential(nn.Conv2d(c, c, 3, padding=1), nn.BatchNorm2d(c), nn.ReLU(inplace=True))
+        self.branches = nn.ModuleList(nn.Conv2d(c, c // 4, 3, padding=r, dilation=r) for r in (1, 2, 4, 8))
+        self.post = nn.Sequential(nn.BatchNorm2d(c // 4 * 4), nn.ReLU(inplace=True))
+
+    def forward(self, x):
+        x = self.inp(x)
+        return self.post(torch.cat([b(x) for b in self.branches], 1))
+
+
 class UNet(nn.Module):
-    """3-level U-Net, widths c, 2c, 4c (the prototype's). `out` channels depend on the task."""
-    def __init__(self, c=40, out=3):
+    """3-level U-Net, widths c, 2c, 4c (the prototype's). `out` channels depend on the task.
+    dilate=True swaps the bottleneck for dilated convs (research memo 1, section 3)."""
+    def __init__(self, c=40, out=3, dilate=False):
         super().__init__()
         self.e1, self.e2, self.e3 = block(4, c), block(c, 2 * c), block(2 * c, 4 * c)
-        self.mid = block(4 * c, 4 * c)
+        self.mid = Dilated(4 * c) if dilate else block(4 * c, 4 * c)
         self.d3, self.d2, self.d1 = block(8 * c, 2 * c), block(4 * c, c), block(2 * c, c)
         self.out = nn.Conv2d(c, out, 1)
 
@@ -51,7 +66,7 @@ def out_channels(cfg):
 
 
 def build(cfg):
-    return UNet(cfg["model"]["width"], out_channels(cfg))
+    return UNet(cfg["model"]["width"], out_channels(cfg), dilate=cfg["model"].get("dilate", False))
 
 
 def split(cfg, o):
