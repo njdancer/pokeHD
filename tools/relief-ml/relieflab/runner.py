@@ -114,10 +114,10 @@ def _best(run, cfg):
 def _single_instance():
     """Exactly one worker per RELIEF_HOME: two would train the same run twice."""
     import fcntl
-    f = open(LOGS / "worker.lock", "w")
+    f = open(LOGS / "worker.lock", "a+")
     try: fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError: raise SystemExit("another worker is already running")
-    f.write(str(os.getpid())); f.flush()
+    f.truncate(0); f.write(str(os.getpid())); f.flush()
     return f
 
 
