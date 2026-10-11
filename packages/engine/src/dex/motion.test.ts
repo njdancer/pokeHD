@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import snapshot from "../../../../dashboard/dex-motion-values.json" with { type: "json" };
-import { cubicBezier, DEX_MOTION, DexRoll, dexPose, heldAngle, loadDexMotion, motionLength, pageCorners, pageSize, type DexFrame, type DexMeasure } from "./motion.ts";
+import { cubicBezier, DEX_MOTION, DexRoll, dexPose, fitBox, heldAngle, MAX_SCREEN, loadDexMotion, motionLength, pageCorners, pageSize, type DexFrame, type DexMeasure } from "./motion.ts";
 
 // Roughly the GLB's: a 9 × 14 body, a 7.3 × 7.6 screen a little below its middle.
 const measure: DexMeasure = { shut: { w: 9, h: 14, centre: [0, 0, 0] }, screen: { w: 7.3, h: 7.6, centre: [0, -0.75, 0.1] } };
@@ -116,5 +116,21 @@ describe("pages", () => {
     expect(l.width).toBeGreaterThan(l.height);
     // Its screen's width runs up the frame's height, filling it.
     expect(l.height).toBe(Math.round(DEX_MOTION.landscape.open.fill * wide.height));
+  });
+});
+
+describe("fitBox", () => {
+  it("is a phone's safe area, centred between its insets", () => {
+    const b = fitBox(390, 844, 0, { top: 47, right: 0, bottom: 34, left: 0 });
+    expect(b).toMatchObject({ width: 390, height: 763, x: 0, y: 6.5, portrait: { width: 390, height: 763 } });
+  });
+  it("never grows past the largest iPhone, upright or on its side", () => {
+    expect(fitBox(2560, 1440, 90)).toMatchObject({ width: MAX_SCREEN.height, height: MAX_SCREEN.width, portrait: MAX_SCREEN });
+    expect(fitBox(1000, 1400, 0)).toMatchObject({ width: MAX_SCREEN.width, height: MAX_SCREEN.height });
+  });
+  it("keeps a phone-sized dex on a big display", () => {
+    const frame: DexFrame = { width: 2560, height: 1440, unitsPerPixel: 0.1 };
+    const s = pageSize(DEX_MOTION, { ...frame, fit: fitBox(2560, 1440, 90) }, measure, 90);
+    expect(Math.max(s.width, s.height)).toBeLessThanOrEqual(MAX_SCREEN.height);
   });
 });

@@ -2,10 +2,9 @@
 // Nick picks: the modelled dex to turn round and inspect, with its screen's shape and corner
 // radius live (model.ts `reshape`). By default the screen fits the phone it's on (so the open
 // dex's screen fills it) and its corners match the phone's display. Beside it (on a phone, behind
-// "Try it"), the dex opens with the current Pokédex menu laid over its screen, minus the menu's
-// temporary panel chrome. On a computer the phone is an iPhone 13 Pro sized frame. The menu runs
+// "Try it"), the dex opens with the Pokédex menu drawn on its screen. On a computer the phone is an iPhone 13 Pro sized frame. The menu runs
 // on the sample adventure and taps don't change it. URL options: ?tab=map.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three/webgpu";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
@@ -290,6 +289,11 @@ function Inspector({ shape, cover }: { shape: ScreenShape; cover: number }) {
 function DexPhone({ env, shape, insets, tab, onClosed }: { env: Env; shape: ScreenShape; insets: Insets; tab?: TabId; onClosed?(): void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const screenRef = useRef<HTMLDivElement>(null);
+  const [screenEl, setScreenEl] = useState<HTMLDivElement | null>(null);
+  const screenAt = useCallback((el: HTMLDivElement | null) => {
+    screenRef.current = el;
+    setScreenEl(el);
+  }, []);
   const deviceRef = useRef<DexDevice | null>(null);
   const [info, setInfo] = useState("");
   const latest = useRef({ shape, insets });
@@ -362,9 +366,8 @@ function DexPhone({ env, shape, insets, tab, onClosed }: { env: Env; shape: Scre
     <div className="ds-stage">
       <div className="ds-backdrop" onClick={toggle} />
       <canvas className="ds-canvas" ref={canvasRef} />
-      <div className="ds-screen" ref={screenRef}>
-        <DexMenu env={env} open onClose={toggle} start={start} />
-      </div>
+      <div className="ds-screen" ref={screenAt} />
+      {screenEl && <DexMenu env={env} open onClose={toggle} start={start} screen={screenEl} />}
       {info && <span className="ds-size">Screen {info}</span>}
     </div>
   );

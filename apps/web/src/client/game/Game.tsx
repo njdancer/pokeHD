@@ -1194,13 +1194,14 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         aria-label="Menu"
         data-look={look}
         data-alert={cloudNewer || resumed || undefined}
+        data-dex={menu || undefined}
       >
         <i className="hd-ball" aria-hidden />
       </button>}
       {message && <div className="game-toast" role="status">{message}</div>}
       {settings && <div className="game-menu-scrim" onClick={() => setSettings(false)} />}
       {settings && (
-        <div className="game-menu" data-look={look} role="dialog" aria-label="Menu">
+        <div className="game-menu" data-look={look} data-dex={menu || undefined} role="dialog" aria-label="Menu">
           <i className="hd-corner tl" />
           <i className="hd-corner tr" />
           <i className="hd-corner bl" />
@@ -1308,9 +1309,6 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           }}
         />
       )}
-      {menu && ready && !menuOpen && !ask && !onboarding && !nameAsk && world && (
-        <button type="button" className="dm-open" aria-label="Pokédex" onClick={() => setMenuOpen({ tab: "dex" })} />
-      )}
       {menu && world && catalogue && (
         <LiveMenu
           rom={rom}
@@ -1321,6 +1319,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           ask={ask}
           onAskDone={() => setAsk(null)}
           open={!!menuOpen}
+          // The modelled dex is the button: shut in the corner, it opens with the menu on its screen.
+          onOpen={() => setMenuOpen({ tab: "dex" })}
+          away={!ready || !!ask || !!onboarding || !!nameAsk}
           {...(menuOpen ? { start: menuOpen } : {})}
           onClose={closeMenu}
           journal={playJournal}

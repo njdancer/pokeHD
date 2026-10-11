@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ActionResult, AskAnswer, GameAction, GameAsk, GameSnapshot } from "@pokehd/emu";
 import { trainerClasses, type WorldData } from "@pokehd/rom";
 import type { Catalogue } from "../dex/catalogue.ts";
+import { DexHost, type DexSlots } from "../dex/DexHost.tsx";
 import { DexMenu, type DexMenuProps } from "./DexMenu.tsx";
 import type { PlayJournal } from "./journal.ts";
 import { LiveActions, liveModel, momentOf, requestOf, type LiveFriend, type LiveHost } from "./live.ts";
@@ -31,6 +32,13 @@ export interface LiveMenuProps {
   /** The question has been answered (or a queued answer took it). */
   onAskDone(): void;
   open: boolean;
+  /**
+   * Draws the menu on the modelled dex (DexHost), which is then also the button that opens it.
+   * Without it the menu is the floating panel and opening is the caller's.
+   */
+  onOpen?(): void;
+  /** The shut dex steps aside (a question or the intro is up). */
+  away?: boolean;
   start?: DexMenuProps["start"];
   onClose(): void;
   /** Read again with every read of the game (so its new records show). */
@@ -45,7 +53,7 @@ export interface LiveMenuProps {
 /** How often the open menu reads the game (it runs on behind the menu). */
 const READ_EVERY_MS = 1000;
 
-export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, open, start, onClose, journal, friends, savedAt, app, setApp, grownUps }: LiveMenuProps) {
+export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, open, onOpen, away, start, onClose, journal, friends, savedAt, app, setApp, grownUps }: LiveMenuProps) {
   const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
   const [notice, setNotice] = useState<{ text: string; n: number } | null>(null);
   const trainers = useMemo(() => trainerClasses(rom), [rom]);
@@ -93,9 +101,8 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
     onAskDone();
   };
 
-  if (!env) return null;
-  return (
-    <>
+  const menu = (slots: Partial<DexSlots>) =>
+    env && (
       <DexMenu
         key={start?.screen ? JSON.stringify(start) : "menu"}
         env={env}
@@ -105,7 +112,19 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
         request={request}
         onRequestDone={requestDone}
         notice={notice}
+        {...slots}
       />
+    );
+  return (
+    <>
+      {/* The dex (the button) shows before the game's first read; the menu joins it once there's one. */}
+      {onOpen ? (
+        <DexHost open={open && !asking} onOpen={onOpen} onClose={onClose} away={!!away} alert={!!env?.model.friends.some((f) => f.gift)}>
+          {(slots) => menu(slots ?? {})}
+        </DexHost>
+      ) : (
+        menu({})
+      )}
       {asking && !request && <AskSheet rom={rom} world={world} catalogue={catalogue} ask={asking.ask} game={asking.game ?? snapshot} answer={answerFallback} />}
     </>
   );

@@ -14,6 +14,8 @@ import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeom
 import { loadDexModel, type DexModel, type ScreenShape } from "./model.ts";
 
 export { loadDexModel, type DexModel, type ScreenShape };
+export { createDexStage, type DexStage, type StageQuad } from "./stage.ts";
+export { quadTransform } from "./motion.ts";
 
 /** Space kept clear at each edge of the view when the camera pushes in to the screen (CSS px). */
 export interface Insets {
@@ -462,23 +464,4 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
       renderer.dispose();
     },
   };
-}
-
-/**
- * The CSS `matrix3d` that maps a `width`×`height` box onto `quad` (a projective transform), for
- * laying the page over the device's screen.
- */
-export function quadTransform(width: number, height: number, quad: ScreenQuad): string {
-  const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = quad as [[number, number], [number, number], [number, number], [number, number]];
-  // Square to quad (Heckbert), then scale the unit square down from the box.
-  const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
-  const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
-  const det = dx1 * dy2 - dx2 * dy1;
-  const g = (dx3 * dy2 - dx2 * dy3) / det;
-  const h = (dx1 * dy3 - dx3 * dy1) / det;
-  const a = x1 - x0 + g * x1, b = x3 - x0 + h * x3, c = x0;
-  const d = y1 - y0 + g * y1, e = y3 - y0 + h * y3, f = y0;
-  // Column-major, with the box's own units scaled to the unit square.
-  const m = [a / width, d / width, 0, g / width, b / height, e / height, 0, h / height, 0, 0, 1, 0, c, f, 0, 1];
-  return `matrix3d(${m.map((n) => +n.toFixed(8)).join(",")})`;
 }

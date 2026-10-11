@@ -2,24 +2,26 @@
 @import "@fontsource/nunito/latin-800.css";
 @import "@fontsource/nunito/latin-900.css";
 
-/* The Pokédex menu (DexMenu.tsx) in the Storybook look (D31): warm paper, rounded letters, a
-   ball in each corner, orange for what you can do. Sized for a phone held in one hand: rows and
+/* The Pokédex menu (DexMenu.tsx) in the Storybook look (D31): warm paper, rounded letters,
+   orange for what you can do. It fills the open dex's screen edge to edge (the dex is its frame):
+   tabs along the bottom when the screen is tall, a sidebar when it's wide. Sized for a phone held in one hand: rows and
    buttons are at least 48px tall, words at least 15px. */
-.m-root {
+.m-root, .m-dex {
   --m-ink: #3e2a1c; --m-muted: #9a6c45; --m-faint: #b89670; --m-edge: #d6a866; --m-line: #ecd3a6;
   --m-accent: #e0702a; --m-accent-2: #f08a3e; --m-accent-dark: #b9541a; --m-soft: #fbe6cc;
   --m-paper: #fffaf0; --m-paper-2: #f7ead0; --m-card: #fffdf8; --m-card-2: #fff4e1; --m-well: #f3e4c6;
   --m-blue: #2c8fd6; --m-green: #4fae5a; --m-red: #e8473b; --m-ball-ink: #2b2b33;
   --m-safe-top: env(safe-area-inset-top, 0px); --m-safe-bottom: env(safe-area-inset-bottom, 0px);
-  position: absolute; inset: 0; z-index: 20; pointer-events: none;
+  --m-safe-left: env(safe-area-inset-left, 0px); --m-safe-right: env(safe-area-inset-right, 0px);
   color: var(--m-ink); font: 800 16px/1.3 Nunito, ui-rounded, system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
 }
-.m-root * { box-sizing: border-box; }
-.m-root button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
-.m-root button:disabled { cursor: default; }
-.m-root :focus-visible { outline: 3px solid var(--m-accent); outline-offset: 2px; }
-.m-root h2, .m-root h3, .m-root p, .m-root dl, .m-root dd, .m-root ol, .m-root figure, .m-root blockquote { margin: 0; }
+.m-root { position: absolute; inset: 0; z-index: 20; pointer-events: none; container: game / size; }
+:where(.m-root, .m-dex) * { box-sizing: border-box; }
+:where(.m-root, .m-dex) button { font: inherit; color: inherit; cursor: pointer; touch-action: manipulation; }
+:where(.m-root, .m-dex) button:disabled { cursor: default; }
+:where(.m-root, .m-dex) :focus-visible { outline: 3px solid var(--m-accent); outline-offset: 2px; }
+:where(.m-root, .m-dex) :is(h2, h3, p, dl, dd, ol, figure, blockquote) { margin: 0; }
 
 /* The world behind softens while the dex or a sheet is up. */
 .m-shade {
@@ -27,27 +29,38 @@
   opacity: 0; transition: opacity .25s ease;
 }
 .m-root.open .m-shade, .m-root.asked .m-shade { opacity: 1; pointer-events: auto; }
+/* On a real dex screen the host dims and blurs the world itself; sheets over the game keep this one. */
+.m-root.hosted:not(.asked) .m-shade { display: none; }
 
-/* ---------------------------------------------------------------- the open dex: one paper panel */
+/* ---------------------------------------------------------------- the open dex's screen */
+/* Fills whatever it's drawn into (the dex's screen). The grid places the tabs: below the pages
+   in portrait, beside them in landscape. */
 .m-dex {
-  position: absolute; left: 10px; right: 10px; top: calc(var(--m-safe-top) + 10px); bottom: calc(var(--m-safe-bottom) + 10px);
-  display: flex; flex-direction: column; border-radius: 28px;
-  background: linear-gradient(#fffaf0, #f7ead0); border: 3px solid var(--m-edge);
-  box-shadow: 0 22px 48px #3a1e0866, inset 0 0 0 3px #ffffffa0;
-  /* Placeholder open: the tuner thread owns the real animation from the closed dex. */
+  /* --m-screen-r: the host's screen corner radius, inherited (4px if unset: the canonical dex's
+     small rounding). Nested radii shrink by each inset but never below --m-min-r: past that they
+     keep the same radius rather than going square. */
+  --m-gap: 8px; --m-pad: 5px; --m-item: 58px; --m-min-r: 12px;
+  --m-bar-r: max(var(--m-min-r), calc(var(--m-screen-r, 4px) - var(--m-gap))); --m-sel-r: max(var(--m-min-r), calc(var(--m-bar-r) - var(--m-pad)));
+  --m-side-full: clamp(150px, 26%, 196px); --m-side-rail: 76px; --m-side-w: var(--m-side-full);
+  position: absolute; inset: 0; overflow: hidden; pointer-events: auto; container: dex / size;
+  display: grid; grid-template: "screen" minmax(0, 1fr) "tabs" auto / minmax(0, 1fr);
+  background: linear-gradient(#fffaf0, #f7ead0);
+}
+.m-dex[data-layout="landscape"] {
+  grid-template: "tabs screen" minmax(0, 1fr) / calc(var(--m-gap) + var(--m-side-w)) minmax(0, 1fr);
+  transition: grid-template-columns .36s cubic-bezier(.3, .9, .3, 1);
+}
+.m-dex[data-side="rail"] { --m-side-w: var(--m-side-rail); }
+.m-dex[data-dragging] { transition: none; }
+/* No dex to draw into (dev pages, for now the game): a plain panel over the world. */
+.m-dex.floating {
+  left: calc(var(--m-safe-left) + 12px); right: calc(var(--m-safe-right) + 12px); top: calc(var(--m-safe-top) + 12px); bottom: calc(var(--m-safe-bottom) + 12px);
+  border-radius: var(--m-screen-r, 4px); box-shadow: 0 22px 48px #3a1e0866;
   transform-origin: calc(100% - 30px) 30px; transition: transform .34s cubic-bezier(.2, .9, .25, 1.04), opacity .2s ease;
-  transform: scale(.2); opacity: 0;
+  transform: scale(.2); opacity: 0; pointer-events: none;
 }
-.m-root.open .m-dex { transform: none; opacity: 1; pointer-events: auto; }
+.m-dex.floating.open { transform: none; opacity: 1; pointer-events: auto; }
 .m-root.open.asked .m-dex { filter: brightness(.94); }
-
-.m-corner {
-  position: absolute; z-index: 3; width: 20px; height: 20px; translate: -50% -50%; border-radius: 50%; pointer-events: none;
-  background: radial-gradient(circle, #fff 0 16%, var(--m-ball-ink) 17% 29%, transparent 30%), linear-gradient(var(--m-red) 0 44%, var(--m-ball-ink) 44% 56%, #fbfbfb 56%);
-  box-shadow: 0 0 0 2px var(--m-ball-ink), 0 2px 4px #0004;
-}
-.m-corner.tl { left: 6px; top: 6px; } .m-corner.tr { left: calc(100% - 6px); top: 6px; display: none; }
-.m-corner.bl { left: 6px; top: calc(100% - 6px); } .m-corner.br { left: calc(100% - 6px); top: calc(100% - 6px); }
 
 .m-round {
   width: 46px; height: 46px; flex: none; display: grid; place-items: center; padding: 0; border-radius: 50%;
@@ -56,9 +69,8 @@
 }
 .m-round:active { translate: 0 2px; box-shadow: 0 1px 0 #d9b77d; }
 .m-round.on { background: linear-gradient(var(--m-accent-2), var(--m-accent)); color: #fff; border-color: var(--m-accent-dark); box-shadow: 0 3px 0 var(--m-accent-dark); }
-.m-close { position: absolute; z-index: 4; right: -10px; top: -12px; width: 52px; height: 52px; }
 
-.m-screen { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 26px 26px 0 0; overflow: hidden; }
+.m-screen { grid-area: screen; min-height: 0; min-width: 0; display: flex; flex-direction: column; overflow: hidden; container: pane / inline-size; }
 .m-push { animation: m-push .26s cubic-bezier(.2, .8, .3, 1); }
 .m-pop { animation: m-pop .22s cubic-bezier(.2, .8, .3, 1); }
 .m-tab { animation: m-tab .2s ease-out; }
@@ -67,7 +79,7 @@
 @keyframes m-tab { from { opacity: 0; transform: translateY(6px); } }
 
 .m-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.m-head { display: flex; align-items: center; gap: 10px; min-height: 72px; padding: 16px 52px 8px 18px; }
+.m-head { display: flex; align-items: center; gap: 10px; min-height: 70px; padding: 16px 18px 8px; }
 .m-head h2 { flex: 1; min-width: 0; font: 900 27px/1.08 Nunito, ui-rounded, sans-serif; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-backbtn { margin-left: -4px; }
 .m-meta { flex: none; padding: 5px 11px; border-radius: 99px; background: var(--m-well); color: var(--m-muted); font-size: 13.5px; white-space: nowrap; }
@@ -398,17 +410,97 @@ img.m-sprite { width: 40px; height: 40px; }
 .m-wildrow .m-pixel { width: 38px; height: 38px; }
 .m-unseen { color: var(--m-muted); font-size: 13px; font-weight: 700; }
 
-/* ---------------------------------------------------------------- the tab bar */
+/* ---------------------------------------------------------------- tabs: a bar in portrait, a sidebar in landscape */
+/* One design both ways: a floating panel of tabs, the tab you're on a soft orange lozenge. Every
+   nested corner is concentric with the one outside it: the panel sits --m-gap in from the
+   screen, so its radius is the screen's minus the gap; the lozenge sits --m-pad inside the panel,
+   so its radius is the panel's minus the pad. Hosts set --m-screen-r to their screen's radius. */
 .m-tabbar {
-  flex: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; margin: 6px 10px 10px; padding: 5px;
-  border-radius: 24px; background: var(--m-well); box-shadow: inset 0 2px 4px #4a2a0a1c;
+  grid-area: tabs; display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; margin: 0 var(--m-gap) var(--m-gap); padding: var(--m-pad);
+  border-radius: var(--m-bar-r); background: #fffdf8e6; box-shadow: 0 0 0 1.5px var(--m-line), 0 8px 22px #4a2a0a24;
 }
-.m-tabbar button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; min-height: 62px; padding: 6px 0 5px; border: 0; border-radius: 19px; background: none; color: var(--m-muted); font-size: 12.5px; }
-.m-tabbar button[aria-current="page"] { background: linear-gradient(#fffdf8, #fff3df); color: var(--m-accent-dark); box-shadow: 0 2px 0 #e2c48f, 0 4px 10px #4a2a0a1a; }
-.m-tabicon { position: relative; width: 34px; height: 34px; display: grid; place-items: center; }
-.m-tabicon svg { width: 34px; height: 34px; transition: transform .2s cubic-bezier(.3, 1.6, .5, 1); }
+.m-tabbar button {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-height: var(--m-item); padding: 5px 0 4px;
+  border: 0; border-radius: var(--m-sel-r); background: none; color: var(--m-muted); font-size: 12px; transition: background .2s, color .2s;
+}
+.m-tabbar button[aria-current="page"] { background: var(--m-soft); color: var(--m-accent-dark); }
+.m-tabicon { position: relative; flex: none; width: 32px; height: 32px; display: grid; place-items: center; }
+.m-tabicon svg { width: 32px; height: 32px; transition: transform .2s cubic-bezier(.3, 1.6, .5, 1); }
 .m-tabbar button[aria-current="page"] svg { transform: translateY(-1px) scale(1.08); }
-.m-dot { position: absolute; top: -2px; right: -8px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--m-blue); color: #fff; font: 900 12px/20px Nunito, sans-serif; font-style: normal; border: 2px solid var(--m-well); }
+.m-dot { position: absolute; top: -2px; right: -8px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--m-blue); color: #fff; font: 900 12px/20px Nunito, sans-serif; font-style: normal; border: 2px solid #fffdf8; }
+.m-sidegrip { display: none; }
+
+/* Landscape: the same panel standing up the left side, Me at its foot. Its width animates between
+   words (full) and icons only (rail); the grip on its edge drags or taps between them. */
+.m-dex[data-layout="landscape"] .m-tabbar {
+  display: flex; flex-direction: column; gap: 3px; margin: var(--m-gap) 0 var(--m-gap) var(--m-gap); overflow: hidden auto; scrollbar-width: none;
+}
+.m-dex[data-layout="landscape"] .m-tabbar button {
+  flex-direction: row; justify-content: flex-start; gap: 12px; font-size: 16px; color: var(--m-ink);
+  /* The icon sits where the rail's centre will be, so it doesn't move sideways as it slims. */
+  padding: 0 12px 0 calc((var(--m-side-rail) - 2 * var(--m-pad) - 32px) / 2);
+}
+.m-dex[data-layout="landscape"] .m-tabbar button[aria-current="page"] { color: var(--m-accent-dark); }
+.m-dex[data-layout="landscape"] .m-tabbar button:last-child { margin-top: auto; }
+.m-tablabel { white-space: nowrap; overflow: hidden; transition: opacity .2s; }
+/* Slimming: the word beside the icon fades out as a small one fades in below it. */
+.m-tabmini { display: none; }
+.m-dex[data-layout="landscape"] .m-tabmini {
+  display: block; position: absolute; left: 0; bottom: 5px; width: calc(var(--m-side-rail) - 2 * var(--m-pad)); text-align: center;
+  font-size: 11px; white-space: nowrap; opacity: 0; transition: opacity .2s;
+}
+.m-dex[data-layout="landscape"] .m-tabicon { transition: translate .3s cubic-bezier(.3, .9, .3, 1); }
+.m-dex[data-layout="landscape"][data-side="rail"] .m-tablabel { opacity: 0; }
+.m-dex[data-layout="landscape"][data-side="rail"] .m-tabmini { opacity: 1; }
+.m-dex[data-layout="landscape"][data-side="rail"] .m-tabicon { translate: 0 -7px; }
+.m-dex[data-layout="landscape"] .m-sidegrip {
+  display: grid; place-items: center; grid-area: tabs; justify-self: end; align-self: center; z-index: 2; width: 20px; height: 72px; margin-right: -14px;
+  padding: 0; border: 0; background: none; cursor: col-resize; touch-action: none;
+}
+.m-sidegrip::before { content: ""; width: 5px; height: 36px; border-radius: 3px; background: #d9c09a; transition: background .2s, height .2s; }
+.m-sidegrip:hover::before, .m-dex[data-dragging] .m-sidegrip::before { background: var(--m-accent); height: 44px; }
+
+/* Landscape pages: a tighter header, and pages with a big picture in two columns (the picture
+   stays put on the left while the words scroll on the right). */
+.m-dex[data-layout="landscape"] .m-head { min-height: 54px; padding: 8px 16px 2px; }
+.m-dex[data-layout="landscape"] .m-head h2 { font-size: 23px; }
+.m-dex[data-layout="landscape"] .m-seg button { min-height: 36px; font-size: 15px; }
+.m-dex[data-layout="landscape"] .m-progress { flex-direction: row; align-items: center; gap: 14px; font-size: 15px; }
+.m-dex[data-layout="landscape"] .m-progress b { font-size: 17px; }
+.m-dex[data-layout="landscape"] .m-progress > div { flex: none; }
+.m-dex[data-layout="landscape"] .m-progress .m-bar { flex: 1; }
+.m-dex[data-layout="landscape"] .m-dexgrid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
+.m-dex[data-layout="landscape"] .m-mapwrap { margin: 0 var(--m-gap) var(--m-gap) 0; border-radius: var(--m-bar-r); }
+.m-dex[data-layout="landscape"] .m-mapctl { gap: 6px; right: 8px; top: 8px; }
+.m-dex[data-layout="landscape"] .m-mapctl .m-round { width: 40px; height: 40px; font-size: 20px; }
+.m-dex[data-layout="landscape"] .m-mapseg { left: 8px; top: 8px; width: 180px; }
+.m-dex[data-layout="landscape"] .m-mapcard { left: 8px; right: 60px; bottom: 8px; }
+.m-dex[data-layout="landscape"] .m-layers { left: 8px; right: 60px; top: 60px; }
+.m-dex[data-layout="landscape"] .m-page:has(.m-mapwrap) .m-head { padding-left: 6px; }
+.m-dex[data-layout="landscape"] .m-backbtn { width: 40px; height: 40px; }
+.m-dex[data-layout="landscape"] .m-body { padding: 4px 14px 14px; }
+.m-dex[data-layout="landscape"] .m-body:has(> .m-hero, > .m-idcol) {
+  display: grid; grid-template-columns: minmax(140px, 38%) minmax(0, 1fr); align-content: start; align-items: start; column-gap: 14px; row-gap: 10px;
+}
+.m-dex[data-layout="landscape"] .m-body:has(> .m-hero, > .m-idcol) > * { grid-column: 2; }
+.m-dex[data-layout="landscape"] .m-body > :is(.m-hero, .m-idcol) { grid-column: 1; grid-row: 1 / span 30; position: sticky; top: 0; }
+.m-dex[data-layout="landscape"] .m-body > .m-hero { grid-template-columns: 1fr; justify-items: center; text-align: center; gap: 8px; }
+.m-dex[data-layout="landscape"] .m-body > .m-hero .m-hero-pic { width: min(100%, 124px); }
+.m-dex[data-layout="landscape"] .m-body > .m-hero h3 { font-size: 22px; }
+.m-dex[data-layout="landscape"] .m-body > .m-hero .m-hero-text { align-items: center; }
+.m-dex[data-layout="landscape"] .m-body > .m-hero .m-types { justify-content: center; }
+.m-dex[data-layout="landscape"] .m-idcol .m-tcard { grid-template-columns: 1fr; justify-items: center; text-align: center; }
+.m-dex[data-layout="landscape"] .m-idcol .m-tcard-pic { width: 84px; }
+.m-dex[data-layout="landscape"] .m-idcol .m-tcard dl { align-self: stretch; text-align: left; }
+.m-dex[data-layout="landscape"] .m-idcol .m-badges { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.m-idcol { display: flex; flex-direction: column; gap: 10px; }
+
+/* Wider pages fit more in a row, whichever way up. */
+@container pane (min-width: 420px) {
+  .m-dexgrid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }
+  .m-stats { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+  .m-bigverbs { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
 
 /* ---------------------------------------------------------------- game requests: a sheet over the game */
 .m-sheet {
@@ -418,8 +510,18 @@ img.m-sprite { width: 40px; height: 40px; }
   animation: m-sheet .3s cubic-bezier(.2, .9, .25, 1);
 }
 @keyframes m-sheet { from { transform: translateY(60%); opacity: 0; } }
+/* A phone on its side: the game's question slides in from the right, leaving the game in view. */
+@container game (orientation: landscape) and (max-height: 600px) {
+  .m-sheet {
+    left: auto; right: calc(var(--m-safe-right) + 8px); top: 8px; bottom: calc(var(--m-safe-bottom) + 8px); width: min(440px, 56%); height: auto;
+    animation-name: m-sheet-side;
+  }
+  .m-grabber { display: none; }
+}
+@keyframes m-sheet-side { from { transform: translateX(60%); opacity: 0; } }
 .m-grabber { position: absolute; left: 50%; top: 7px; translate: -50% 0; width: 44px; height: 5px; border-radius: 3px; background: #e2c99c; }
-.m-sheet .m-close { right: -6px; top: -14px; }
+.m-close { position: absolute; z-index: 4; right: 12px; top: 14px; width: 44px; height: 44px; }
+.m-sheet .m-head { padding-right: 66px; }
 .m-sheet .m-screen { border-radius: 26px; }
 .m-sheet .m-body { padding-bottom: 22px; }
 

@@ -81,12 +81,5 @@
 .dm-qty output { min-width: 80px; text-align: center; font: 900 34px/1 Nunito, sans-serif; }
 .dm-qty-total { text-align: center; color: var(--dm-muted); margin-bottom: 12px; }
 .dm-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-/* The button that opens it, over the game. */
-.dm-open { position: fixed; z-index: 30; right: max(14px, env(safe-area-inset-right)); top: max(14px, env(safe-area-inset-top)); width: 54px; height: 66px; border: 0; border-radius: 12px 14px 14px 12px;
-  cursor: pointer; background: linear-gradient(160deg, #e9493c, #b72a20); box-shadow: 0 6px 14px #3a0d0866, inset 0 2px 0 #ff8a7c88, inset -6px 0 0 #9b2118; }
-.dm-open::before { content: ""; position: absolute; left: 9px; top: 10px; width: 17px; height: 17px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #bfe8ff, #2c8fd6 55%, #135a8f); border: 2px solid #f4f1ea; }
-.dm-open::after { content: ""; position: absolute; left: 9px; right: 13px; bottom: 13px; height: 3px; border-radius: 2px; background: #7a160f; box-shadow: 0 -7px 0 #7a160f; }
-.dm-open:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 /* Over the game on a wide screen the dex stays phone-sized, in the middle. */
-.game .m-dex { max-width: 480px; margin-inline: auto; }
+.game .m-dex.floating { max-width: 480px; margin-inline: auto; }
