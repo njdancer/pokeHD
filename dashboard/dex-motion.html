@@ -34,6 +34,7 @@
   --t-pressIn: #c98bdb;
   --t-pressOut: #a874c9;
   --t-dim: #8d8173;
+  --t-blur: #8fa3b5;
   --t-moveX: #e0702a;
   --t-moveY: #f09a5a;
   --t-scale: #e6b450;
@@ -319,6 +320,7 @@ const TRACKS = [
   { id: "pressIn", label: "Press in", note: "The tap: the closed dex shrinks by Depth along this curve." },
   { id: "pressOut", label: "Press out", note: "…and springs back along this one. Overshoot (y above 1) makes it bounce past full size." },
   { id: "dim", label: "Dim", note: "The world behind darkens. Amount is how dark at the end." },
+  { id: "blur", label: "Blur", note: "The world behind drifts out of focus, so the eye goes to the dex. Amount is the blur radius in screen pixels at the end." },
   { id: "moveX", label: "Move x", note: "Across, from the button to the middle. Give x and y different curves or timing to bend the path." },
   { id: "moveY", label: "Move y", note: "Down, from the button to the middle." },
   { id: "scale", label: "Scale", note: "Grows from button size to screen size (in log space, so it feels even). The point it grows around slides from the body's centre to the screen's with it." },
@@ -332,6 +334,7 @@ const DEFAULTS = {
     pressIn: { delay: 0, duration: 70, curve: [0.3, 0, 0.6, 1], depth: 0.1 },
     pressOut: { delay: 70, duration: 160, curve: [0.3, 0, 0.3, 1] },
     dim: { delay: 0, duration: 420, curve: [0.4, 0, 0.2, 1], amount: 0.45 },
+    blur: { delay: 0, duration: 480, curve: [0.4, 0, 0.2, 1], amount: 6 },
     moveX: { delay: 30, duration: 640, curve: [0.2, 0.9, 0.25, 1] },
     moveY: { delay: 30, duration: 640, curve: [0.2, 0.9, 0.25, 1] },
     scale: { delay: 30, duration: 640, curve: [0.3, 0.6, 0.2, 1] },
@@ -611,7 +614,7 @@ function pose(ms) {
   const s0 = (b.w * k) / shutW;
   const s1 = V.open.fill * Math.min((SW * k) / screenW, (SH * k) / screenH);
 
-  const pressIn = at("pressIn", ms), pressOut = at("pressOut", ms), mx = at("moveX", ms), my = at("moveY", ms), scale = at("scale", ms), turn = at("turn", ms), open = at("open", ms), page = at("page", ms), dim = at("dim", ms);
+  const pressIn = at("pressIn", ms), pressOut = at("pressOut", ms), mx = at("moveX", ms), my = at("moveY", ms), scale = at("scale", ms), turn = at("turn", ms), open = at("open", ms), page = at("page", ms), dim = at("dim", ms), blur = at("blur", ms);
   // The point of the device pinned to the path: the closed body's centre, sliding to the screen's.
   wrap.position.lerpVectors(shutCentre, screenCentre, Math.min(1, Math.max(0, scale.e))).negate();
   device.position.set(lerp(x0, x1, mx.e), lerp(y0, y1, my.e), 0);
@@ -624,6 +627,10 @@ function pose(ms) {
   setOpen(Math.max(open.e, V.alerts.lid * lidV * shut));
   device.updateMatrixWorld(true);
   dimEl.style.opacity = String(V.tracks.dim.amount * Math.min(1, Math.max(0, dim.e)));
+  // Blur the world canvas, scaled up a touch so its soft edges stay outside the screen.
+  const px = V.tracks.blur.amount * Math.max(0, blur.e);
+  worldCanvas.style.filter = px > 0.05 ? `blur(${px.toFixed(2)}px)` : "";
+  worldCanvas.style.transform = px > 0.05 ? `scale(${1 + (4 * px) / Math.max(1, worldCanvas.clientWidth)})` : "";
   placeNews(b);
 
   // The page over the screen.
@@ -1134,6 +1141,7 @@ function fillTrackFields() {
   ["x1", "y1", "x2", "y2"].forEach((n, i) => field(host, n, () => tr.curve[i], (v) => (tr.curve[i] = n[0] === "x" ? Math.min(1, Math.max(0, v)) : v), { step: 0.01 }));
   if (selected === "turn") field(host, "Swing °", () => tr.swing, (v) => (tr.swing = v), { step: 1, wide: true, range: [-45, 45] });
   if (selected === "pressIn" || selected === "pressOut") field(host, "Depth", () => V.tracks.pressIn.depth, (v) => (V.tracks.pressIn.depth = v), { step: 0.01, wide: true, range: [0, 0.4] });
+  if (selected === "blur") field(host, "Amount px", () => tr.amount, (v) => (tr.amount = v), { step: 0.5, wide: true, range: [0, 24] });
   if (selected === "dim") field(host, "Amount", () => tr.amount, (v) => (tr.amount = v), { step: 0.01, wide: true, range: [0, 1] });
 }
 function buildFields() {
