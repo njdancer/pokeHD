@@ -1,0 +1,10 @@
+{
+  "title": "Map scenes, as used up to faces-v3",
+  "note": "Shared data recipe for map tasks: the prototype's v2, v3, v4 and furniture generations, regenerated with today's renderer.",
+  "datasets": [
+    {"label": "Outdoor scenes (map v2)", "view": "map", "seed": 0, "n": 6000, "shard": 250, "shares": {}},
+    {"label": "Outdoor scenes, game-like ground (map v3)", "view": "map", "seed": 200000, "n": 4000, "shard": 250, "shares": {}},
+    {"label": "Half indoor rooms (map v4)", "view": "map", "seed": 300000, "n": 2000, "shard": 250, "shares": {"room": 0.5}},
+    {"label": "Game-style furniture rooms", "view": "map", "seed": 1000000, "n": 3000, "shard": 250, "shares": {"room": 1, "furniture": 0.8}}
+  ]
+}

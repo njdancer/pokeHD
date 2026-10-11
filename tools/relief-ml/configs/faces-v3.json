@@ -1,0 +1,11 @@
+{
+  "extends": "map-data",
+  "task": "faces",
+  "title": "Five faces: furniture rooms, no furniture rule labels (GPU rerun)",
+  "parent": null,
+  "why": "Can game-style furniture scenes replace the rule's furniture labels, keeping tables high while chairs stay fixed?",
+  "changes": ["Rerun of the cloud faces-v3 on the new pipeline (Mac GPU)", "+3,000 game-style furniture rooms", "Rule labels for table, counter, shelf, machine, furniture, statue and sign switched off"],
+  "real": {"share": 0.5, "objectRuleWeight": 0},
+  "model": {"width": 40},
+  "train": {"epochs": 20}
+}

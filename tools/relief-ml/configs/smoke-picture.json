@@ -1,0 +1,7 @@
+{
+  "extends": "front-v5",
+  "title": "Pipeline smoke test (pictures)",
+  "tags": ["smoke"],
+  "datasets": [{"label": "Smoke test creatures", "view": "front", "seed": 5100000, "n": 300, "shard": 100, "shares": {"posed": 0.5, "white": 0.35}}],
+  "train": {"epochs": 2, "valFraction": 0.34}
+}

@@ -1,0 +1,9 @@
+{
+  "task": "faces",
+  "title": "Pipeline smoke test (faces)",
+  "tags": ["smoke"],
+  "datasets": [{"label": "Smoke test scenes", "view": "map", "seed": 5000000, "n": 400, "shard": 100, "shares": {"room": 0.5, "furniture": 0.5}}],
+  "real": {"share": 0.5, "objectRuleWeight": 0},
+  "train": {"epochs": 2, "valFraction": 0.25},
+  "eval": {"render3d": true}
+}
