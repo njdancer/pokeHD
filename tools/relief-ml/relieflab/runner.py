@@ -13,7 +13,7 @@ from .paths import CKPT, LOGS, QUEUE
 from .runs import Run
 from .train import Trainer
 
-PRIMARY = {"faces": ("test_acc", "higher"), "normals": ("test_acc", "higher"), "picture": ("val_depth_err", "lower")}
+PRIMARY = {"faces": ("score", "higher"), "normals": ("score", "higher"), "picture": ("val_depth_err", "lower")}
 
 
 class Stopped(Exception):

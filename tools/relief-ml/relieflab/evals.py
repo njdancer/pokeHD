@@ -200,6 +200,9 @@ def run_all(model, cfg, run):
         if ev.get("realMaps"): out.update(real_maps(model, cfg, run))
         from . import paintings
         out.update(paintings.evaluate(model, cfg, run, EVAL_MAPS))
+        if "paint_acc" in out and "test_obj_mean" in out:
+            # Headline: furniture-heavy hand-made objects and building-heavy paintings, weighted equally.
+            out["score"] = (out["paint_acc"] + out["test_obj_mean"]) / 2
     if cfg["task"] == "picture" and ev.get("pictures"):
         pictures(model, cfg, run)
     return out
