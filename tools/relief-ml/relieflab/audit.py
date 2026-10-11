@@ -27,7 +27,7 @@ def run(model_run, per_label=12):
         try: img, labs = tasks.map_img(name)
         except Exception: continue
         if img.shape[0] < 16 or img.shape[1] < 16: continue
-        p = tasks.predict(model, cfg, img)
+        p = tasks.predict(model, cfg, img, labs)
         f = (p["faces"] if "faces" in p else (p["normal"] @ tasks.FACES.T).argmax(-1)).astype(np.uint8)
         cache[name] = (img, labs, f)
         ts = D["tilesets"][m["tileset"]]

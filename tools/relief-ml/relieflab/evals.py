@@ -117,7 +117,7 @@ def testset(model, cfg, run):
     rule_hits = 0
     for name in sorted({o["map"] for o in T}):
         img, labs = tasks.map_img(name)
-        p = tasks.predict(model, cfg, img); f = faces_of(p); rf = rule_faces(labs)
+        p = tasks.predict(model, cfg, img, labs); f = faces_of(p); rf = rule_faces(labs)
         truth = np.full(img.shape, 255, np.uint8)
         for o in [o for o in T if o["map"] == name]:
             xs = slice(o["x"][0], o["x"][1] + 1)
@@ -158,7 +158,7 @@ def real_maps(model, cfg, run):
     for name in EVAL_MAPS:
         img, labs = tasks.map_img(name)
         g = np.kron(np.vectorize(lambda l: LAB2C.get(l, -1))(labs), np.ones((8, 8), int))
-        p = tasks.predict(model, cfg, img); f = faces_of(p)
+        p = tasks.predict(model, cfg, img, labs); f = faces_of(p)
         m = g >= 0
         np.add.at(K, (g[m], f[m].astype(int)), 1); np.add.at(S, (img[m].astype(int), g[m]), 1)
         f3 = np.where(f > 2, 0, f)   # hips count as tops for the 3-class comparison
@@ -200,8 +200,8 @@ def watch(model, cfg, run, epoch):
         return
     ps = PredSet(run, "watch", f"Watch set after epoch {epoch}", "map", MAP_LAYERS)
     for name in WATCH_MAPS:
-        img, _ = tasks.map_img(name)
-        ps.item(f"map:{name}", name, img.shape[1], img.shape[0], _map_files(img, tasks.predict(model, cfg, img)))
+        img, labs = tasks.map_img(name)
+        ps.item(f"map:{name}", name, img.shape[1], img.shape[0], _map_files(img, tasks.predict(model, cfg, img, labs)))
     ps.save()
 
 

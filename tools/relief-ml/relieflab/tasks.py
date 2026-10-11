@@ -41,10 +41,11 @@ class Dilated(nn.Module):
 
 class UNet(nn.Module):
     """3-level U-Net, widths c, 2c, 4c (the prototype's). `out` channels depend on the task.
-    dilate=True swaps the bottleneck for dilated convs (research memo 1, section 3)."""
-    def __init__(self, c=40, out=3, dilate=False):
+    dilate=True swaps the bottleneck for dilated convs (research memo 1, section 3).
+    extra: additional input channels (e.g. the clear-cut tile flag)."""
+    def __init__(self, c=40, out=3, dilate=False, extra=0):
         super().__init__()
-        self.e1, self.e2, self.e3 = block(4, c), block(c, 2 * c), block(2 * c, 4 * c)
+        self.e1, self.e2, self.e3 = block(4 + extra, c), block(c, 2 * c), block(2 * c, 4 * c)
         self.mid = Dilated(4 * c) if dilate else block(4 * c, 4 * c)
         self.d3, self.d2, self.d1 = block(8 * c, 2 * c), block(4 * c, c), block(2 * c, c)
         self.out = nn.Conv2d(c, out, 1)
@@ -66,7 +67,18 @@ def out_channels(cfg):
 
 
 def build(cfg):
-    return UNet(cfg["model"]["width"], out_channels(cfg), dilate=cfg["model"].get("dilate", False))
+    return UNet(cfg["model"]["width"], out_channels(cfg), dilate=cfg["model"].get("dilate", False),
+                extra=1 if cfg["model"].get("tileFlag") else 0)
+
+
+TRUSTED = {"ground", "lawn", "tall-grass", "flower", "water", "shore", "bridge", "floor", "roof", "wall", "wall-interior",
+           "window", "door", "picture"}
+
+
+def tile_flag(labs, trusted=TRUSTED):
+    """Per-pixel 1 where the tile's label is clear-cut (the rule is right whole-tile), else 0."""
+    t = np.vectorize(lambda l: 1.0 if l in trusted else 0.0)(labs).astype(np.float32)
+    return np.kron(t, np.ones((8, 8), np.float32))
 
 
 def split(cfg, o):
@@ -86,12 +98,18 @@ def onehot(img_u8):
 
 
 @torch.no_grad()
-def predict(model, cfg, img):
-    """img: (H,W) uint8 0-3 numpy -> dict of numpy heads at full resolution (padding reads as white)."""
+def predict(model, cfg, img, labs=None):
+    """img: (H,W) uint8 0-3 numpy -> dict of numpy heads at full resolution (padding reads as white).
+    labs: the tile labels, for models that take the clear-cut tile flag as input."""
     model.eval(); dev = next(model.parameters()).device
     H, W = img.shape
     pad = np.zeros(((H + 7) // 8 * 8, (W + 7) // 8 * 8), np.uint8); pad[:H, :W] = img
-    o = model(onehot(torch.as_tensor(pad[None], device=dev)))
+    x = onehot(torch.as_tensor(pad[None], device=dev))
+    if cfg["model"].get("tileFlag"):
+        fl = np.zeros(pad.shape, np.float32)
+        if labs is not None: f = tile_flag(labs); fl[:f.shape[0], :f.shape[1]] = f[:pad.shape[0], :pad.shape[1]]
+        x = torch.cat([x, torch.as_tensor(fl, device=dev)[None, None]], 1)
+    o = model(x)
     h = split(cfg, o)
     out = {"normal": h["normal"][0, :, :H, :W].permute(1, 2, 0).cpu().numpy()}
     if "logits" in h:
@@ -112,7 +130,8 @@ def describe(model, input_shape=(4, 48, 48)):
                               layers=[type(l).__name__ for l in m.modules() if not list(l.children())]))
         hooks.append(mod.register_forward_hook(hook))
     was = model.training; model.eval(); dev = next(model.parameters()).device
-    with torch.no_grad(): model(torch.zeros(1, *input_shape, device=dev))
+    c_in = model.e1[0].in_channels if hasattr(model, "e1") else input_shape[0]
+    with torch.no_grad(): model(torch.zeros(1, c_in, *input_shape[1:], device=dev))
     model.train(was)
     for h in hooks: h.remove()
     params = sum(p.numel() for p in model.parameters())

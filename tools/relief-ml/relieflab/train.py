@@ -23,10 +23,11 @@ EVAL_MAPS = ["PALLET_TOWN", "VIRIDIAN_CITY", "PEWTER_CITY", "CERULEAN_CITY", "VE
 def real_crops(object_weight, size=64, stride=32, only=None, painted=None):
     """Real map crops labelled by the plan rule (training maps only; the eval maps are held out).
     only: if given, the tile labels whose rule labels are trusted; every other label gets weight 0."""
-    X, Y, W = [], [], []
+    X, Y, W, FL = [], [], [], []
     for name in tasks.map_names():
         if name in EVAL_MAPS: continue
         img, labs = tasks.map_img(name)
+        fl = tasks.tile_flag(labs)
         f = np.zeros(labs.shape, np.int64); w = np.zeros(labs.shape, np.float32)
         for (i, j), l in np.ndenumerate(labs):
             f[i, j], w[i, j] = tasks.rule(l, object_weight)
@@ -48,6 +49,8 @@ def real_crops(object_weight, size=64, stride=32, only=None, painted=None):
             for x in range(0, Wd - size + 1, stride):
                 if w[y:y + size, x:x + size].mean() < 0.3: continue
                 X.append(img[y:y + size, x:x + size]); Y.append(f[y:y + size, x:x + size]); W.append(w[y:y + size, x:x + size])
+                FL.append(fl[y:y + size, x:x + size])
+    real_crops.flags = np.stack(FL)
     return np.stack(X), np.stack(Y), np.stack(W)
 
 
@@ -142,6 +145,7 @@ class Trainer:
                     run.set(paintingsUsed=len(painted))
                 rx, ry, rw = real_crops(cfg["real"]["objectRuleWeight"], only=set(only) if only else None, painted=painted)
                 self.RX, self.RY, self.RW = (torch.as_tensor(a, device=d) for a in (rx, ry, rw))
+                self.RF = torch.as_tensor(real_crops.flags, device=d)
             self.nreal = int(t["batch"] * share) if share > 0 else 0
         else:
             self.nreal = 0
@@ -164,7 +168,7 @@ class Trainer:
         self.epoch = 0; self.step = 0; self.best = None
         info = dict(samples=n, valSamples=nv, realCrops=int(len(self.RX)) if self.nreal else 0, device=str(d),
                     unlabelledCrops=int(len(self.UX)) if self.cons else 0)
-        run.set(arch=tasks.describe(self.model, (4, t["crop"], t["crop"])), metrics=METRIC_DEFS,
+        run.set(arch=tasks.describe(self.model, (4 + bool(cfg["model"].get("tileFlag")), t["crop"], t["crop"])), metrics=METRIC_DEFS,
                 classes=["TOP", "FRONT", "SLOPE", "HIP◀", "HIP▶"] if cfg["task"] == "faces" else None, data=info)
         self._resume()
 
@@ -187,9 +191,16 @@ class Trainer:
         torch.save(dict(model=self.model.state_dict(), cfg=self.cfg), self.dir / "model.pt")
 
     # ---------- loss ----------
+    def _inp(self, u8, flag=None):
+        """One-hot shades, plus the clear-cut tile flag channel for models that take it (0 = made-up scene)."""
+        x = tasks.onehot(u8)
+        if self.cfg["model"].get("tileFlag"):
+            x = torch.cat([x, (flag if flag is not None else torch.zeros_like(u8, dtype=torch.float32))[:, None]], 1)
+        return x
+
     def _batch(self, idx, y0, x0, c):
         sl = (slice(None), slice(y0, y0 + c), slice(x0, x0 + c))
-        x = tasks.onehot(self.X[idx][sl])
+        x = self._inp(self.X[idx][sl])
         return x, sl
 
     def _loss(self, idx):
@@ -202,7 +213,7 @@ class Trainer:
             y = self.Y[idx][sl]
             if self.nreal:
                 br = torch.randint(0, len(self.RX), (self.nreal,), device=self.dev)
-                x = torch.cat([x, tasks.onehot(self.RX[br][sl])]); y = torch.cat([y, self.RY[br][sl]]); w = torch.cat([w, self.RW[br][sl]])
+                x = torch.cat([x, self._inp(self.RX[br][sl], self.RF[br][sl])]); y = torch.cat([y, self.RY[br][sl]]); w = torch.cat([w, self.RW[br][sl]])
             o = self.model(x)
             loss = (F.cross_entropy(o, y, reduction="none") * w).sum() / w.sum().clamp(min=1)
             if self.cons:
@@ -253,7 +264,7 @@ class Trainer:
         K = np.zeros((5, 5), np.int64)
         for i in range(0, len(self.vi), 128):
             idx = self.vi[i:i + 128]
-            x = tasks.onehot(self.X[idx]); h = tasks.split(cfg, self.model(x))
+            x = self._inp(self.X[idx]); h = tasks.split(cfg, self.model(x))
             y = self.N[idx]; m = self.M[idx]
             ang = torch.rad2deg(torch.acos((h["normal"] * y).sum(1).clamp(-1, 1)))
             angs.append(ang[m > 0]); angs_o.append(ang[m == 1])

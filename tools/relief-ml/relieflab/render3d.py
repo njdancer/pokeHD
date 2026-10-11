@@ -91,7 +91,7 @@ def map_views(model, cfg, name, crop, scale=6):
     img, labs = tasks.map_img(name)
     img = img[crop[0]:crop[1], crop[2]:crop[3]]; labs = labs[crop[0] // 8:crop[1] // 8, crop[2] // 8:crop[3] // 8]
     if getattr(model, "mask", None) is not None: model.mask = model.mask[..., crop[0]:crop[1], crop[2]:crop[3]]
-    p = tasks.predict(model, cfg, img)
+    p = tasks.predict(model, cfg, img, labs)
     k = p["faces"] if "faces" in p else (p["normal"] @ tasks.FACES.T).argmax(-1)
     S = tasks.FACES[k]
     lab_ = np.kron(np.array([[l in tasks.GROUND for l in r] for r in labs]), np.ones((8, 8), bool))

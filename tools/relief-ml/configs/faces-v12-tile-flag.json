@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v8-combined",
+  "title": "One model told which tiles are clear-cut (the router in one network)",
+  "why": "The router (labelled model on clear-cut tiles, label-free model elsewhere) scores 80-85% on two seed pairs, but needs two networks. Give one network a per-pixel flag: 1 on clear-cut tiles (where it learns from rule labels), 0 elsewhere and on every made-up scene (where it must rely on what the made-up scenes taught).",
+  "changes": ["+ input channel: clear-cut tile flag (from the tile labels, available at runtime)"],
+  "model": {"tileFlag": true}
+}
