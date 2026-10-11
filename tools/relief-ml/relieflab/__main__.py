@@ -29,6 +29,7 @@ def main(argv=None):
     s = sp.add_parser("audit"); s.add_argument("run", help="a run trained without rule labels")
     s = sp.add_parser("reeval"); s.add_argument("run", nargs="+")
     s = sp.add_parser("ensemble"); s.add_argument("name"); s.add_argument("run", nargs="+")
+    s = sp.add_parser("router"); s.add_argument("name"); s.add_argument("labelled"); s.add_argument("free")
     sp.add_parser("fetch-paintings")
     sp.add_parser("flags")
     s = sp.add_parser("flag-reply"); s.add_argument("id"); s.add_argument("status"); s.add_argument("reply")
@@ -81,6 +82,9 @@ def main(argv=None):
     elif a.cmd == "ensemble":
         from . import ensemble
         print(ensemble.build(a.name, a.run))
+    elif a.cmd == "router":
+        from . import ensemble
+        print(ensemble.build_router(a.name, a.labelled, a.free))
     elif a.cmd == "fetch-paintings":
         from . import paintings
         print("painted tiles, pictures:", paintings.fetch())
