@@ -55,6 +55,7 @@ import {
 } from "../saves/resume-store.ts";
 import { listPlayers, me, setMyName, type Account } from "../room/account.ts";
 import { Friends } from "../room/Friends.tsx";
+import { AdminTools } from "../admin/AdminTools.tsx";
 import { RoomClient, type Friend, type RoomStatus } from "../room/client.ts";
 import { RoomLink } from "../room/link.ts";
 import { LinkPicker } from "../room/LinkPicker.tsx";
@@ -1237,6 +1238,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
               </select>
             </label>
           </div>
+          {admin && <AdminTools />}
           {input && <KeyBindingsPanel input={input} />}
           <GrownUps>{grownUpControls}</GrownUps>
           </div>

@@ -6,6 +6,7 @@ import { cleanEmail, type CodeKind, type Player } from "./directory/store.ts";
 import { PLAYER_ID_HEADER, PLAYER_NAME_HEADER } from "./room/do.ts";
 import { locksApi } from "./locks/api.ts";
 import { savesApi } from "./saves/saves.ts";
+import { labApi } from "./lab/lab.ts";
 
 export { Directory } from "./directory/do.ts";
 export { Room } from "./room/do.ts";
@@ -243,6 +244,11 @@ app.delete("/admin/colour-set", async (c) => {
   await c.env.PRIVATE.delete(COLOUR_SET_KEY);
   return c.json({ ok: true });
 });
+
+// The relief lab (/admin/lab): the trainer on Nick's Mac mirrors its runs here with ADMIN_TOKEN,
+// and the dashboard reads them. A file store under `lab/` in the private bucket
+// (docs/relief-ml/LAB-CONTRACT.md).
+app.route("/admin/lab", labApi<Bindings>());
 
 /** A fresh sign-in link for a player, e.g. when the first one expired. */
 app.post("/admin/players/:id/link", async (c) => {
