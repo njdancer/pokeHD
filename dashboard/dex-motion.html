@@ -107,6 +107,7 @@ select.btn { padding-right: 6px; }
 .tl-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; color: var(--muted); font-size: .8rem; }
 .tl-head .time { font: 600 .85rem var(--font-num); color: var(--ink); font-variant-numeric: tabular-nums; min-width: 8ch; }
 .tl-grid { display: grid; grid-template-columns: 136px minmax(0, 1fr); row-gap: 3px; position: relative; }
+.snap-guide { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px dashed var(--ink); opacity: .75; pointer-events: none; z-index: 3; display: none; }
 .tl-label { font-weight: 800; font-size: .8rem; display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 2px 0; border-radius: 6px; min-width: 0; }
 .tl-label::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); flex: none; }
 .tl-label[aria-selected="true"] { color: var(--c); }
@@ -248,7 +249,7 @@ textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid
     <div class="timeline">
       <div class="tl-head">
         <span class="time" id="time">0 ms</span>
-        <span id="tl-note">Drag a bar to move it, its ends to stretch it. Drag the ruler to scrub.</span>
+        <span id="tl-note">Drag a bar to move it, its ends to stretch it; edges snap to other bars (Alt drags freely). Drag the ruler to scrub.</span>
         <span class="hold">Hidden layers sit at
           <button class="btn" id="hold-start" type="button" aria-pressed="true">Start</button>
           <button class="btn" id="hold-end" type="button" aria-pressed="false">End</button>
@@ -1053,15 +1054,38 @@ function dragBar(bar, id) {
     const mode = e.target.classList.contains("l") ? "l" : e.target.classList.contains("r") ? "r" : "m";
     const x0 = e.clientX, tr = V.tracks[id], d0 = tr.delay, w0 = tr.duration;
     const perPx = span / laneW();
+    // Edges snap to the other bars' starts and ends, 0 and the playhead, within 8 px (Alt drags freely).
+    const targets = [0, Math.round(t)];
+    for (const o of TRACKS) if (o.id !== id) { const ot = V.tracks[o.id]; targets.push(ot.delay, ot.delay + ot.duration); }
+    const near = (ms) => { let best = null; for (const g of targets) if (Math.abs(g - ms) <= 8 * perPx && (best === null || Math.abs(g - ms) < Math.abs(best - ms))) best = g; return best; };
     bar.onpointermove = (ev) => {
-      const dms = (ev.clientX - x0) * perPx;
-      if (mode === "m") tr.delay = snap(d0 + dms);
-      else if (mode === "r") tr.duration = Math.max(0, snap(w0 + dms));
-      else { const nd = Math.min(d0 + w0, snap(d0 + dms)); tr.duration = d0 + w0 - nd; tr.delay = nd; }
+      const dms = (ev.clientX - x0) * perPx, free = ev.altKey;
+      let guide = null;
+      if (mode === "m") {
+        const s = d0 + dms, e = s + w0, gs = free ? null : near(s), ge = free ? null : near(e);
+        const useS = gs !== null && (ge === null || Math.abs(gs - s) <= Math.abs(ge - e));
+        tr.delay = useS ? gs : ge !== null ? Math.max(0, ge - w0) : snap(s);
+        guide = useS ? gs : ge;
+      } else if (mode === "r") {
+        const e = d0 + w0 + dms, g = free ? null : near(e);
+        tr.duration = Math.max(0, (g ?? snap(e)) - d0); guide = g;
+      } else {
+        const st = d0 + dms, g = free ? null : near(st);
+        const nd = Math.max(0, Math.min(d0 + w0, g ?? snap(st))); tr.duration = d0 + w0 - nd; tr.delay = nd; guide = g;
+      }
+      showGuide(guide);
       placeBars(); fillTrackFields(); writeJson();
     };
-    bar.onpointerup = () => { bar.onpointermove = null; save(); if (Math.max(1000, Math.ceil((allTotal() + 150) / 250) * 250) !== span) buildTimeline(); };
+    bar.onpointerup = () => { bar.onpointermove = null; showGuide(null); save(); if (Math.max(1000, Math.ceil((allTotal() + 150) / 250) * 250) !== span) buildTimeline(); };
   });
+}
+function showGuide(ms) {
+  let g = tl.querySelector(".snap-guide");
+  if (!g) { g = document.createElement("div"); g.className = "snap-guide"; tl.append(g); }
+  if (ms === null) { g.style.display = "none"; return; }
+  const ruler = tl.querySelector(".lane.ruler");
+  g.style.left = ruler.offsetLeft + (ms / span) * ruler.clientWidth + "px";
+  g.style.display = "block";
 }
 function select(id) {
   selected = id;
