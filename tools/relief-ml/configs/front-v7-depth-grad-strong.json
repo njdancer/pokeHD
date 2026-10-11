@@ -1,0 +1,7 @@
+{
+  "extends": "front-v6-depth-grad",
+  "title": "Pictures: stronger depth gradient matching, longer training",
+  "why": "front-v6's gradient loss (0.2) made depth slightly smoother (1.73 to 1.67 px) but the 3D still tears. Try a stronger weight and more epochs.",
+  "changes": ["Depth gradient weight 0.2 → 0.6", "22 → 30 epochs"],
+  "train": {"depthGrad": 0.6, "epochs": 30}
+}
