@@ -1,0 +1,1369 @@
+<title>Dex Motion Tuner</title>
+<!--
+  The Pokédex open-animation tuner (a standalone page, not part of the game). The closed dex sits
+  where the menu button is; tapping it opens the cover and flies it into place as separate,
+  overlapping tracks, each with its own delay, duration and cubic-bezier curve. It also tries how
+  the closed dex shows news (its lights, and a toast that comes out of it). The values copy out as
+  JSON for the game (packages/engine/src/dex/device.ts), and save to the page's database
+  (tuning/values) so Claude can read them.
+
+  The model comes in as base64 in the dex-glb script tag: build with `node dashboard/build-dex-motion.mjs`,
+  which writes the publishable page next to it (gitignored output under dashboard/dist/).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a motion tool. Left, the phone stage over a timeline; right, the inspector (curve,
+   poses, alerts, values). On a phone the stage is pinned to the top and everything else scrolls
+   under it. One warm-dark look, the game's orange as accent. */
+:root {
+  color-scheme: dark;
+  --ground: #181512;
+  --panel: #221e1a;
+  --raised: #2c2722;
+  --line: #3b342d;
+  --ink: #f2e9dc;
+  --muted: #a59784;
+  --accent: #e0702a;
+  --accent-ink: #1b0f06;
+  --cream: #fffaf0;
+  --sand: #d6a866;
+  --brown: #3e2a1c;
+  --font-ui: Nunito, ui-rounded, system-ui, sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --t-pressIn: #c98bdb;
+  --t-pressOut: #a874c9;
+  --t-dim: #8d8173;
+  --t-blur: #8fa3b5;
+  --t-move: #e0702a;
+  --t-scale: #e6b450;
+  --t-turn: #59b8ad;
+  --t-open: #e8574a;
+  --t-page: #8fb4f0;
+  --ph: 58vh;
+}
+html, body { height: 100%; overflow-x: clip; }
+/* A tool, not a document: dragging bars, handles and curves must never select text, and only the
+   preview zooms (its own pinch); the rest scrolls but can't be pinched or double-tapped bigger. */
+html, body { touch-action: pan-x pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+input, textarea { user-select: text; -webkit-user-select: text; }
+body { background: var(--ground); color: var(--ink); font: 600 14px/1.4 var(--font-ui); }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
+header {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); min-width: 0;
+}
+header h1 { margin: 0; font: 900 1.05rem/1 var(--font-ui); letter-spacing: .01em; }
+header h1 small { font-weight: 700; color: var(--muted); margin-left: 6px; font-size: .8rem; }
+.transport { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; min-width: 0; }
+.btn {
+  border: 1px solid var(--line); background: var(--raised); border-radius: 8px; padding: 6px 11px;
+  font-weight: 800; font-size: .85rem; white-space: nowrap;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+select.btn { padding-right: 6px; }
+
+.left { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.stage-wrap { position: relative; min-height: 0; overflow: hidden; touch-action: none; background:
+  repeating-conic-gradient(#1d1a16 0 25%, #1a1714 0 50%) 0 0 / 22px 22px; }
+.stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
+.stage.framed { border-radius: 44px; box-shadow: 0 0 0 10px #0d0b09, 0 0 0 11px #3b342d, 0 30px 80px #000a; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#dex { z-index: 2; pointer-events: none; }
+.dim { position: absolute; inset: 0; background: #1a1006; opacity: 0; pointer-events: none; }
+.page {
+  position: absolute; z-index: 3; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; opacity: 0; overflow: hidden;
+  background: linear-gradient(#fffaf0, #f6ead2); color: var(--brown); border-radius: 4px;
+  display: flex; flex-direction: column; padding: 7% 7%; gap: 4%;
+}
+.page h2 { margin: 0; font: 900 1.35rem/1.1 var(--font-ui); }
+.page .rowlist { display: grid; gap: 8px; }
+.page .row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 2px solid var(--sand); border-radius: 12px; background: #fffdf7; font-weight: 800; }
+.page .row i { width: 22px; height: 22px; border-radius: 6px; background: var(--sand); flex: none; }
+.page .row:nth-child(1) i { background: #e8473b; } .page .row:nth-child(2) i { background: #59b8ad; }
+.page .row:nth-child(3) i { background: #e6b450; } .page .row:nth-child(4) i { background: #8fb4f0; }
+.page small { color: #8a6a4a; font-weight: 700; }
+.hint { position: absolute; z-index: 5; left: 50%; bottom: 22px; translate: -50% 0; padding: 6px 12px; border-radius: 99px;
+  background: #0008; color: #fff; font-weight: 800; font-size: 13px; pointer-events: none; transition: opacity .3s; white-space: nowrap; }
+.loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-weight: 800; }
+
+/* Zoom and the phone's drag handle */
+.zoom { position: absolute; z-index: 6; right: 10px; bottom: 10px; display: flex; gap: 4px; align-items: center; }
+.zoom .btn { padding: 4px 9px; background: #2c2722e6; }
+.zoom output { font: 600 .75rem var(--font-num); color: var(--muted); min-width: 4.5ch; text-align: center; }
+.handle { display: none; }
+
+/* Timeline */
+.timeline { border-top: 1px solid var(--line); background: var(--panel); padding: 8px 16px 12px; min-width: 0; }
+.tl-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; color: var(--muted); font-size: .8rem; }
+.tl-head .time { font: 600 .85rem var(--font-num); color: var(--ink); font-variant-numeric: tabular-nums; min-width: 8ch; }
+.tl-grid { display: grid; grid-template-columns: 136px minmax(0, 1fr); row-gap: 3px; position: relative; }
+.snap-guide { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px dashed var(--ink); opacity: .75; pointer-events: none; z-index: 3; display: none; }
+.tl-label { font-weight: 800; font-size: .8rem; display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 2px 0; border-radius: 6px; min-width: 0; }
+.tl-label::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); flex: none; }
+.tl-label[aria-selected="true"] { color: var(--c); }
+.tl-label .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.icon-btn { width: 24px; height: 22px; padding: 0; display: grid; place-items: center; flex: none; border: 1px solid transparent; border-radius: 5px; background: none; color: var(--muted); }
+.icon-btn:hover { border-color: var(--line); color: var(--ink); }
+.icon-btn svg { width: 16px; height: 16px; }
+.tl-label.off .name { opacity: .4; }
+.tl-label.off .eye { color: #6b5f52; }
+.bar.off { opacity: .25; }
+.hold { display: inline-flex; gap: 4px; align-items: center; margin-left: auto; }
+.hold .btn { padding: 2px 8px; font-size: .75rem; }
+.lane { position: relative; height: 24px; background: #1c1916; border-radius: 6px; min-width: 0; }
+.lane.ruler { height: 18px; background: none; cursor: ew-resize; font: 400 10px var(--font-num); color: var(--muted); overflow: hidden; touch-action: none; }
+.tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); padding-left: 3px; line-height: 18px; }
+.bar { position: absolute; top: 2px; bottom: 2px; border-radius: 5px; background: color-mix(in srgb, var(--c) 32%, transparent); border: 1.5px solid var(--c); cursor: grab; touch-action: none; overflow: hidden; }
+.bar[aria-selected="true"] { background: color-mix(in srgb, var(--c) 55%, transparent); }
+.bar svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.bar .grip { position: absolute; top: 0; bottom: 0; width: 10px; cursor: ew-resize; }
+.bar .grip.l { left: 0; } .bar .grip.r { right: 0; }
+.playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink); pointer-events: none; z-index: 2; }
+.playhead::before { content: ""; position: absolute; top: 0; left: -5px; border: 6px solid transparent; border-top-color: var(--ink); }
+
+/* Inspector */
+.inspector { grid-row: 2; grid-column: 2; border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 14px 16px 40px; display: grid; gap: 18px; align-content: start; min-width: 0; }
+.inspector section { display: grid; gap: 10px; min-width: 0; }
+.inspector h3 { margin: 0; font: 900 .78rem/1 var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.inspector h3 b { color: var(--c, var(--ink)); letter-spacing: .02em; text-transform: none; font-size: .95rem; }
+.curve { width: 100%; max-width: 330px; aspect-ratio: 1; background: #1c1916; border-radius: 10px; border: 1px solid var(--line); touch-action: none; display: block; }
+.presets { display: flex; flex-wrap: wrap; gap: 5px; }
+.mini-curves { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.mini-curve { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.fields h4.sub { grid-column: 1 / -1; margin: 6px 0 0; font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.mini-curve h4 { margin: 0; font-size: .82rem; color: var(--muted); }
+.mini-curve .chip { font-size: .7rem; padding: 2px 7px; }
+.path-ui { position: absolute; left: 0; top: 0; z-index: 5; transform-origin: 0 0; pointer-events: none; overflow: visible; }
+.path-ui .h { pointer-events: auto; cursor: grab; touch-action: none; }
+.chip { border: 1px solid var(--line); background: var(--raised); border-radius: 99px; padding: 3px 9px; font-size: .78rem; font-weight: 800; }
+.chip:hover { border-color: var(--muted); }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 10px; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) 64px; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); min-width: 0; }
+.field input { width: 100%; background: #1c1916; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font: 400 .82rem var(--font-num); text-align: right; font-variant-numeric: tabular-nums; }
+.field.wide { grid-column: 1 / -1; grid-template-columns: 104px minmax(0, 1fr) 64px; }
+.field.wide input[type="range"] { padding: 0; border: 0; background: none; accent-color: var(--accent); min-width: 0; }
+.note { color: var(--muted); font-size: .8rem; margin: 0; }
+textarea { width: 100%; min-height: 9rem; background: #1c1916; border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: 400 .74rem/1.45 var(--font-num); resize: vertical; }
+.row-btns { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.status { color: var(--accent); font-weight: 800; font-size: .8rem; }
+.saved { color: var(--muted); font-size: .78rem; }
+.toggles { display: flex; flex-wrap: wrap; gap: 6px; }
+.toggles .btn { font-size: .8rem; padding: 5px 10px; }
+
+.stage-wrap.full { position: fixed; inset: 0; z-index: 30; }
+.exit-full { position: fixed; z-index: 31; left: 12px; top: calc(12px + env(safe-area-inset-top, 0px)); }
+
+/* News on the closed dex: lights drawn over the model (no re-render), and toasts that come out
+   of it. */
+.led-glow { position: absolute; z-index: 4; width: var(--g, 12px); height: var(--g, 12px); translate: -50% -50%; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, #fff 0 18%, var(--c) 30%, color-mix(in srgb, var(--c) 40%, transparent) 50%, transparent 70%);
+  mix-blend-mode: screen; animation: blink var(--blink, 1000ms) steps(1, end) infinite; }
+@keyframes blink { 0%, 60% { opacity: 1; } 61%, 100% { opacity: 0; } }
+.toasts { position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+.pin { position: absolute; display: flex; align-items: center; gap: 8px; pointer-events: auto; cursor: pointer; touch-action: none;
+  background: #fffaf0; color: var(--brown); border: 2px solid var(--sand); box-shadow: 0 3px 10px #4a2a0a55;
+  white-space: nowrap; font-weight: 800; font-family: var(--font-ui); }
+.pin i { border-radius: 30%; flex: none; }
+.pin.behind { pointer-events: none; filter: brightness(.94); box-shadow: 0 2px 6px #4a2a0a33; }
+.pin .x { margin-left: 2px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: #e9dcc4; color: var(--brown); font: 900 14px/1 var(--font-ui);
+  display: grid; place-items: center; opacity: 0; transition: opacity .15s; padding: 0; }
+.pin:hover .x, .pin .x:focus-visible { opacity: 1; }
+@media (hover: none) { .pin .x { display: none; } }
+
+@media (max-width: 820px) {
+  .app { display: block; height: auto; padding-top: calc(var(--ph) + 18px); }
+  .stage-wrap { position: fixed; z-index: 20; left: 0; right: 0; top: 0; height: var(--ph); border-bottom: 1px solid var(--line); }
+  .handle { display: grid; place-items: center; position: fixed; z-index: 21; left: 0; right: 0; top: var(--ph); height: 18px;
+    background: var(--panel); border-bottom: 1px solid var(--line); cursor: ns-resize; touch-action: none; }
+  .handle::before { content: ""; width: 44px; height: 4px; border-radius: 2px; background: var(--muted); }
+  .left { display: block; }
+  .inspector { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .transport { margin-left: 0; }
+  .tl-grid { grid-template-columns: 116px minmax(0, 1fr); }
+  .hold { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .hint { transition: none; } .led-glow { animation: none; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Dex motion <small>open and fly into place</small></h1>
+    <div class="transport">
+      <button class="btn primary" id="play-open" type="button">Open ▶</button>
+      <button class="btn" id="play-close" type="button">Close ◀</button>
+      <button class="btn" id="loop" type="button" aria-pressed="false">Loop</button>
+      <select class="btn" id="speed" aria-label="Playback speed">
+        <option value="0.1">0.1×</option>
+        <option value="0.25">0.25×</option>
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+      </select>
+      <button class="btn" id="framed" type="button" aria-pressed="true">Phone frame</button>
+      <button class="btn" id="full" type="button">Try it full screen</button>
+      <button class="btn" id="reset" type="button">Reset all</button>
+    </div>
+  </header>
+
+  <div class="left">
+    <div class="stage-wrap" id="stage-wrap">
+      <svg class="path-ui" id="path-ui" aria-label="Motion path"></svg>
+      <div class="stage framed" id="stage">
+        <canvas id="world"></canvas>
+        <div class="toasts" id="toasts"></div>
+        <div class="dim" id="dim"></div>
+        <canvas id="dex"></canvas>
+        <div id="glows"></div>
+        <div class="page" id="page">
+          <h2>Menu</h2>
+          <div class="rowlist">
+            <div class="row"><i></i>Pokédex</div>
+            <div class="row"><i></i>Party</div>
+            <div class="row"><i></i>Bag</div>
+            <div class="row"><i></i>Friends</div>
+          </div>
+          <small>A stand-in page, to judge the settle.</small>
+        </div>
+        <div class="hint" id="hint">Tap the dex</div>
+        <div class="loading" id="loading">Loading the model…</div>
+      </div>
+      <div class="zoom">
+        <button class="btn" id="zoom-out" type="button" aria-label="Zoom out">−</button>
+        <output id="zoom-level">100%</output>
+        <button class="btn" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        <button class="btn" id="zoom-fit" type="button">Fit</button>
+      </div>
+      <button class="btn exit-full" id="exit-full" type="button" hidden>Done</button>
+    </div>
+    <div class="handle" id="handle" role="separator" aria-label="Drag to resize the preview"></div>
+
+    <div class="timeline">
+      <div class="tl-head">
+        <span class="time" id="time">0 ms</span>
+        <span id="tl-note">Drag a bar to move it, its ends to stretch it; edges snap to other bars (Alt drags freely). Drag the ruler to scrub.</span>
+        <span class="hold">Hidden layers sit at
+          <button class="btn" id="hold-start" type="button" aria-pressed="true">Start</button>
+          <button class="btn" id="hold-end" type="button" aria-pressed="false">End</button>
+        </span>
+      </div>
+      <div class="tl-grid" id="tl"></div>
+    </div>
+  </div>
+
+  <aside class="inspector" id="inspector">
+    <section id="curve-section">
+      <h3>Curve <b id="curve-name">Move</b></h3>
+      <svg class="curve" id="curve" viewBox="0 0 300 300" role="img" aria-label="Curve editor"></svg>
+      <div class="presets" id="presets"></div>
+      <div class="fields" id="track-fields"></div>
+      <p class="note" id="track-note"></p>
+    </section>
+
+    <section>
+      <h3>Closed (the menu button)</h3>
+      <div class="fields" id="closed-fields"></div>
+    </section>
+
+    <section>
+      <h3>Open (in place)</h3>
+      <div class="fields" id="open-fields"></div>
+    </section>
+
+    <section>
+      <h3>News on the closed dex</h3>
+      <p class="note">Send some news. The lid lifts a little and a toast slides out of it; more news stacks behind. Swipe a toast into the dex to dismiss it (or use its × on hover); tap it to open the dex.</p>
+      <div class="toggles" id="alert-events">
+        <button class="btn" type="button" data-ev="gift">+ Gift arrives</button>
+        <button class="btn" type="button" data-ev="friend">+ Friend comes online</button>
+        <button class="btn" type="button" data-ev="save">+ Newer save</button>
+        <button class="btn" type="button" data-ev="clear">Clear</button>
+      </div>
+      <div class="toggles" id="alert-styles"></div>
+      <div class="fields" id="alert-fields"></div>
+      <p class="note">Lights: red is a gift, green a friend, yellow a save. They're drawn over the model, so the dex itself doesn't redraw while they blink.</p>
+    </section>
+
+    <section>
+      <h3>Close</h3>
+      <div class="fields" id="close-fields"></div>
+      <p class="note">Closing plays the same timeline backwards at this speed.</p>
+    </section>
+
+    <section>
+      <h3>Values</h3>
+      <p class="saved" id="saved">Saved on this device.</p>
+      <textarea id="json" readonly aria-label="Values as JSON"></textarea>
+      <div class="row-btns">
+        <button class="btn primary" id="copy" type="button">Copy JSON</button>
+        <span class="status" id="status"></span>
+      </div>
+      <textarea id="import" placeholder="Paste values here to load them" aria-label="Paste values"></textarea>
+      <div class="row-btns"><button class="btn" id="apply" type="button">Load pasted values</button></div>
+    </section>
+  </aside>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script id="dex-glb" type="application/octet-stream">__DEX_GLB__</script>
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+// ---------- Values ----------
+const TRACKS = [
+  { id: "pressIn", label: "Press in", note: "The tap: the closed dex shrinks by Depth along this curve." },
+  { id: "pressOut", label: "Press out", note: "…and springs back along this one. Overshoot (y above 1) makes it bounce past full size." },
+  { id: "dim", label: "Dim", note: "The world behind darkens. Amount is how dark at the end." },
+  { id: "blur", label: "Blur", note: "The world behind drifts out of focus, so the eye goes to the dex. Amount is the blur radius in screen pixels at the end." },
+  { id: "move", label: "Move", note: "The path is the line on the preview: drag its two round handles to shape it. This curve is the speed along it, as a share of the path's length, so reshaping the path never changes the timing. The dots on the path are evenly spaced in time: bunched up is slow, spread out is fast." },
+  { id: "scale", label: "Scale", note: "Grows from button size to screen size (in log space, so it feels even). The point it grows around slides from the body's centre to the screen's with it." },
+  { id: "turn", label: "Turn", note: "Untilts from the button's tilt to square-on. Swing adds an extra turn that peaks halfway." },
+  { id: "open", label: "Open", note: "The cover swings open. Starts fully shut." },
+  { id: "page", label: "Page", note: "The page fades in on the screen." },
+];
+const DEFAULTS = {
+  version: 3,
+  tracks: {
+    pressIn: { delay: 0, duration: 70, curve: [0.3, 0, 0.6, 1], depth: 0.1 },
+    pressOut: { delay: 70, duration: 160, curve: [0.3, 0, 0.3, 1] },
+    dim: { delay: 0, duration: 420, curve: [0.4, 0, 0.2, 1], amount: 0.45 },
+    blur: { delay: 0, duration: 480, curve: [0.4, 0, 0.2, 1], amount: 6 },
+    move: { delay: 30, duration: 640, curve: [0.2, 0.9, 0.25, 1] },
+    scale: { delay: 30, duration: 640, curve: [0.3, 0.6, 0.2, 1] },
+    turn: { delay: 30, duration: 600, curve: [0.25, 1.1, 0.4, 1], swing: 12 },
+    open: { delay: 60, duration: 420, curve: [0.45, 0, 0.2, 1] },
+    page: { delay: 400, duration: 220, curve: [0.4, 0, 0.2, 1] },
+  },
+  closed: { width: 58, top: 12, right: 12, tiltX: -12, tiltY: -22, tiltZ: 4 },
+  open: { fill: 0.94, offsetY: 0 },
+  // The motion path, a cubic bezier from the button (0, 0) to the middle (1, 1). Each control point is
+  // a fraction of the way across (x) and down (y), so x above 1 swings past the middle.
+  path: { c1: [0.333, 0.333], c2: [0.667, 0.667] },
+  close: { speed: 1.4 },
+  // lights/toast: 1 on, 0 off. lid: how far it lifts while a toast is out, over lidMs.
+  alerts: {
+    lights: 1, toast: 1, blinkMs: 1000, glow: 12,
+    lid: 0.18, lidMs: 220, lidCurve: [0.3, 0, 0.2, 1],
+    toastMs: 380, toastCurve: [0.2, 1.1, 0.3, 1],
+    height: 40, font: 14, padX: 12, icon: 22, radius: 14, tuck: 22, offsetY: 0, stack: 6,
+  },
+};
+const PRESETS = {
+  linear: [0, 0, 1, 1],
+  "ease": [0.25, 0.1, 0.25, 1],
+  "in-out": [0.45, 0, 0.55, 1],
+  "out": [0.2, 0.8, 0.3, 1],
+  "out strong": [0.16, 1, 0.3, 1],
+  "in": [0.5, 0, 0.75, 0],
+  "back out": [0.34, 1.5, 0.64, 1],
+  "settle": [0.2, 1.15, 0.35, 1],
+};
+const PATHS = {
+  straight: [0.333, 0.333, 0.667, 0.667],
+  "drop first": [0, 0.8, 0.4, 1],
+  "across first": [0.8, 0, 1, 0.4],
+  "swing left": [1.1, 0.55, 1.4, 1],
+};
+/**
+ * The bezier parameter at fraction e of the path's length, so the Move curve is speed along the path
+ * however the handles bend it. dx and dy are the path's span on each axis (any one unit). Past either
+ * end (an overshooting curve) it carries on at the end's rate.
+ */
+let arcKey = "", arcLen = [];
+function pathParam(e, dx, dy) {
+  const P = V.path, N = 128;
+  dx = Math.abs(dx); dy = Math.abs(dy);
+  const key = `${P.c1},${P.c2},${(dy / (dx + dy || 1)).toFixed(4)}`;
+  if (key !== arcKey) {
+    arcKey = key; arcLen = [0];
+    let px = 0, py = 0;
+    for (let i = 1; i <= N; i++) {
+      const u = i / N, x = bez1(P.c1[0], P.c2[0], u) * dx, y = bez1(P.c1[1], P.c2[1], u) * dy;
+      arcLen.push(arcLen[i - 1] + Math.hypot(x - px, y - py)); px = x; py = y;
+    }
+  }
+  const L = arcLen[N];
+  if (!(L > 0)) return e;
+  if (e <= 0 || e >= 1) {
+    const i = e <= 0 ? 0 : N - 1, seg = (arcLen[i + 1] - arcLen[i]) / L, rate = seg > 0 ? 1 / N / seg : 1;
+    return e <= 0 ? e * rate : 1 + (e - 1) * rate;
+  }
+  const want = e * L;
+  let lo = 0, hi = N;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (arcLen[m] < want) lo = m; else hi = m; }
+  return (lo + (want - arcLen[lo]) / (arcLen[hi] - arcLen[lo] || 1)) / N;
+}
+const DOTS = 16;
+/** One axis of a cubic bezier from 0 to 1 with control values a and b. */
+const bez1 = (a, b, s) => 3 * (1 - s) * (1 - s) * s * a + 3 * (1 - s) * s * s * b + s * s * s;
+const clone = (o) => JSON.parse(JSON.stringify(o));
+function merge(base, over) {
+  for (const k of Object.keys(base)) {
+    if (over && over[k] !== undefined) {
+      if (typeof base[k] === "object" && !Array.isArray(base[k])) merge(base[k], over[k]);
+      else if (Array.isArray(base[k]) && Array.isArray(over[k]) && over[k].length === base[k].length && over[k].every(Number.isFinite)) base[k] = over[k].slice();
+      else if (typeof base[k] === "number" && Number.isFinite(over[k])) base[k] = over[k];
+    }
+  }
+  return base;
+}
+/** Values from any version: version 1's one move track becomes x and y, its press becomes in and out. */
+function load(raw) {
+  if (!raw || typeof raw !== "object") return clone(DEFAULTS);
+  const r = clone(raw);
+  if (r.tracks?.moveX) r.tracks.move ??= clone(r.tracks.moveX); // version 2's separate x and y speeds
+  if (r.tracks?.press) {
+    const p = r.tracks.press, half = Math.round(p.duration / 2);
+    r.tracks.pressIn ??= { delay: p.delay, duration: half, curve: p.curve, depth: p.depth };
+    r.tracks.pressOut ??= { delay: p.delay + half, duration: p.duration - half, curve: p.curve };
+  }
+  return merge(clone(DEFAULTS), r);
+}
+const STORE = "dex-motion-v1";
+let V = clone(DEFAULTS);
+try { V = load(JSON.parse(localStorage.getItem(STORE) || "null")); } catch {}
+
+// The page's database, where Claude can read the values (tuning/values). Absent outside the viewer.
+let db = null, dbTimer = 0;
+const savedNote = (s) => ($("saved").textContent = s);
+function save() {
+  try { localStorage.setItem(STORE, JSON.stringify(V)); } catch {}
+  writeJson();
+  if (!db) return;
+  clearTimeout(dbTimer);
+  savedNote("Saving…");
+  dbTimer = setTimeout(async () => {
+    try { await db.doc("tuning/values").set({ values: JSON.stringify(V), at: new Date().toISOString() }); savedNote("Saved on this device and for Claude."); }
+    catch (e) { savedNote("Saved on this device only (" + (e?.code || "couldn't reach the database") + ")."); }
+  }, 700);
+}
+(async () => {
+  db = await window.claude?.use?.("db").catch(() => null) ?? null;
+  if (!db) return savedNote("Saved on this device only.");
+  try {
+    const snap = await db.doc("tuning/values").get();
+    if (snap.exists) { V = load(JSON.parse(snap.data().values)); try { localStorage.setItem(STORE, JSON.stringify(V)); } catch {} buildAll(); }
+    else save(); // first open with the database: copy this device's values up
+    savedNote("Saved on this device and for Claude.");
+  } catch { savedNote("Saved on this device only."); }
+})();
+
+// Layer visibility (not part of the values): hidden layers, and whether a hidden layer sits at its
+// start or its end.
+const LAYERS = "dex-motion-layers-v2";
+const layers = { hidden: new Set(), holdEnd: false };
+try { const l = JSON.parse(localStorage.getItem(LAYERS) || "null"); if (l) { layers.hidden = new Set(l.hidden); layers.holdEnd = !!l.holdEnd; } } catch {}
+const saveLayers = () => { try { localStorage.setItem(LAYERS, JSON.stringify({ hidden: [...layers.hidden], holdEnd: layers.holdEnd })); } catch {} };
+const active = (id) => !layers.hidden.has(id);
+const ends = (ids) => Math.max(0, ...ids.map((id) => V.tracks[id].delay + V.tracks[id].duration));
+/** How long playback runs: to the end of the last visible layer. */
+const total = () => ends(TRACKS.map((t) => t.id).filter(active));
+/** The timeline's length, every layer included. */
+const allTotal = () => ends(TRACKS.map((t) => t.id));
+
+// ---------- Curves ----------
+function bezier([x1, y1, x2, y2]) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sx = (t) => ((ax * t + bx) * t + cx) * t;
+  const sy = (t) => ((ay * t + by) * t + cy) * t;
+  const dx = (t) => (3 * ax * t + 2 * bx) * t + cx;
+  return (x) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const e = sx(t) - x;
+      if (Math.abs(e) < 1e-6) return sy(t);
+      const d = dx(t);
+      if (Math.abs(d) < 1e-6) break;
+      t -= e / d;
+    }
+    let lo = 0, hi = 1; t = x;
+    for (let i = 0; i < 30; i++) { const v = sx(t); if (Math.abs(v - x) < 1e-6) break; if (v < x) lo = t; else hi = t; t = (lo + hi) / 2; }
+    return sy(t);
+  };
+}
+/** The track's raw 0–1 progress at time `ms`, and its eased value. */
+function at(id, ms) {
+  if (!active(id)) { const v = layers.holdEnd ? 1 : 0; return { u: v, e: v }; }
+  const tr = V.tracks[id];
+  const u = tr.duration <= 0 ? (ms >= tr.delay ? 1 : 0) : Math.min(1, Math.max(0, (ms - tr.delay) / tr.duration));
+  return { u, e: bezier(tr.curve)(u) };
+}
+
+// ---------- Stage ----------
+const $ = (id) => document.getElementById(id);
+const stageWrap = $("stage-wrap"), stage = $("stage"), dexCanvas = $("dex"), worldCanvas = $("world"), pageEl = $("page"), dimEl = $("dim"), hint = $("hint");
+let framed = true;
+let SW = 390, SH = 844, stageScale = 1, zoom = 1, panX = 0, panY = 0;
+function layoutStage() {
+  const r = stageWrap.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  let fit;
+  if (framed) { SW = 390; SH = 844; fit = Math.min((r.width - 40) / SW, (r.height - 40) / SH); }
+  else { SW = Math.round(r.width); SH = Math.round(r.height); fit = 1; }
+  stageScale = Math.max(0.1, fit * zoom);
+  if (zoom <= 1) { panX = 0; panY = 0; }
+  stage.style.width = SW + "px"; stage.style.height = SH + "px";
+  stage.style.left = Math.round((r.width - SW * stageScale) / 2 + panX) + "px";
+  stage.style.top = Math.round((r.height - SH * stageScale) / 2 + panY) + "px";
+  stage.style.transform = `scale(${stageScale})`;
+  stage.classList.toggle("framed", framed);
+  $("zoom-level").textContent = Math.round(zoom * 100) + "%";
+  if (worldW !== SW || worldH !== SH) paintWorld();
+  if (renderer) { renderer.setSize(SW, SH, false); camera.aspect = SW / SH; camera.updateProjectionMatrix(); pageSized = false; }
+}
+new ResizeObserver(layoutStage).observe(stageWrap);
+const setZoom = (z) => { zoom = Math.min(6, Math.max(0.5, z)); layoutStage(); };
+$("zoom-in").onclick = () => setZoom(zoom * 1.25);
+$("zoom-out").onclick = () => setZoom(zoom / 1.25);
+$("zoom-fit").onclick = () => { panX = panY = 0; setZoom(1); };
+stageWrap.addEventListener("wheel", (e) => { e.preventDefault(); setZoom(zoom * Math.exp(-e.deltaY * 0.002)); }, { passive: false });
+
+/** A stand-in for the game behind: a soft, tilt-shifted town at morning. No game art. */
+let worldW = 0, worldH = 0;
+function paintWorld() {
+  worldW = SW; worldH = SH;
+  const dpr = Math.min(devicePixelRatio, 2);
+  worldCanvas.width = SW * dpr; worldCanvas.height = SH * dpr;
+  const g = worldCanvas.getContext("2d");
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const sky = g.createLinearGradient(0, 0, 0, SH);
+  sky.addColorStop(0, "#9fd0e8"); sky.addColorStop(0.32, "#d7ead0"); sky.addColorStop(0.33, "#8cc46e"); sky.addColorStop(1, "#5d9a4c");
+  g.fillStyle = sky; g.fillRect(0, 0, SW, SH);
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  g.fillStyle = "#e3cf9a"; g.beginPath(); g.moveTo(SW * 0.42, SH * 0.33); g.lineTo(SW * 0.58, SH * 0.33); g.lineTo(SW * 0.8, SH); g.lineTo(SW * 0.2, SH); g.fill();
+  for (let i = 0; i < 40; i++) {
+    const y = SH * (0.3 + rnd() * 0.7), x = rnd() * SW, s = 14 + (y / SH) * 46;
+    const blur = Math.abs(y / SH - 0.6) * 10;
+    g.filter = `blur(${blur.toFixed(1)}px)`;
+    if (Math.abs(x - SW / 2) < SH * 0.1 * (y / SH)) continue;
+    if (rnd() < 0.2) {
+      g.fillStyle = "#f4efe2"; g.fillRect(x - s, y - s * 0.6, s * 2, s * 1.2);
+      g.fillStyle = rnd() < 0.5 ? "#c8574a" : "#5b7fb8"; g.beginPath(); g.moveTo(x - s * 1.2, y - s * 0.55); g.lineTo(x, y - s * 1.5); g.lineTo(x + s * 1.2, y - s * 0.55); g.fill();
+    } else {
+      g.fillStyle = "#2f6b3c"; g.beginPath(); g.arc(x, y, s * 0.7, 0, Math.PI * 2); g.fill();
+      g.fillStyle = "#4a8f4e"; g.beginPath(); g.arc(x - s * 0.15, y - s * 0.2, s * 0.45, 0, Math.PI * 2); g.fill();
+    }
+  }
+  g.filter = "none";
+  g.fillStyle = "#ffffff22"; g.beginPath(); g.arc(80, SH - 120, 52, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(SW - 60, SH - 140, 30, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(SW - 120, SH - 100, 30, 0, Math.PI * 2); g.fill();
+}
+
+// The phone's drag handle sets the preview's height.
+const PH = "dex-motion-ph";
+try { const h = +localStorage.getItem(PH); if (h > 100) document.documentElement.style.setProperty("--ph", h + "px"); } catch {}
+$("handle").addEventListener("pointerdown", (e) => {
+  const h = $("handle"); h.setPointerCapture(e.pointerId);
+  h.onpointermove = (ev) => {
+    const px = Math.round(Math.min(innerHeight * 0.88, Math.max(160, ev.clientY)));
+    document.documentElement.style.setProperty("--ph", px + "px");
+    try { localStorage.setItem(PH, String(px)); } catch {}
+  };
+  h.onpointerup = () => (h.onpointermove = null);
+});
+
+// ---------- Three ----------
+let ready = false, renderer, camera, scene, device, wrap, mixer, clip, screenMesh, screenCorners = [], screenCentre = new THREE.Vector3(), shutCentre = new THREE.Vector3(), screenW = 1, screenH = 1, shutW = 1, shutH = 1;
+const ledMeshes = {};
+const FOV = 24, DIST = 200;
+const tanHalf = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+
+async function initThree() {
+  renderer = new THREE.WebGLRenderer({ canvas: dexCanvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 0.95;
+  renderer.setClearColor(0x000000, 0);
+  scene = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.3;
+  camera = new THREE.PerspectiveCamera(FOV, SW / SH, 1, 2000);
+  camera.position.set(0, 0, DIST);
+  scene.add(new THREE.HemisphereLight(0xfff4e2, 0x5a4636, 0.7));
+  const key = new THREE.DirectionalLight(0xfff0d8, 2.4); key.position.set(-6, 9, 12); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xbfd8ff, 1.2); rim.position.set(8, 4, -6); scene.add(rim);
+
+  const b64 = $("dex-glb").textContent.trim();
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  const gltf = await new GLTFLoader().parseAsync(bytes.buffer, "");
+  gltf.scene.scale.setScalar(100);
+  wrap = new THREE.Group();
+  wrap.add(gltf.scene);
+  device = new THREE.Group();
+  device.add(wrap);
+  scene.add(device);
+  clip = THREE.AnimationClip.findByName(gltf.animations, "CoverOpen");
+  mixer = new THREE.AnimationMixer(gltf.scene);
+  mixer.clipAction(clip).play();
+  screenMesh = gltf.scene.getObjectByName("Screen");
+  for (const [kind, k] of Object.entries(KIND)) {
+    const m = gltf.scene.getObjectByName(k.led);
+    if (m) { m.geometry.computeBoundingSphere(); ledMeshes[kind] = m; }
+  }
+
+  device.updateMatrixWorld(true);
+  setOpen(0);
+  const shutBox = new THREE.Box3().setFromObject(gltf.scene);
+  shutBox.getCenter(shutCentre);
+  shutW = shutBox.max.x - shutBox.min.x; shutH = shutBox.max.y - shutBox.min.y;
+  // The screen's corners by their UVs ((0, 0) top left), in the device's own space.
+  const pos = screenMesh.geometry.getAttribute("position"), uv = screenMesh.geometry.getAttribute("uv");
+  const corner = (u, v) => {
+    let best = 0, bestD = Infinity;
+    for (let i = 0; i < pos.count; i++) { const d = (uv.getX(i) - u) ** 2 + (uv.getY(i) - v) ** 2; if (d < bestD) { best = i; bestD = d; } }
+    return new THREE.Vector3().fromBufferAttribute(pos, best).setZ(pos.getZ(best) + 0.0002);
+  };
+  screenCorners = [corner(0, 0), corner(1, 0), corner(1, 1), corner(0, 1)];
+  const inDevice = screenCorners.map((c) => c.clone().applyMatrix4(screenMesh.matrixWorld));
+  screenCentre.set(0, 0, 0); inDevice.forEach((c) => screenCentre.add(c)); screenCentre.multiplyScalar(0.25);
+  screenW = inDevice[0].distanceTo(inDevice[1]); screenH = inDevice[0].distanceTo(inDevice[3]);
+  renderer.setSize(SW, SH, false);
+  camera.aspect = SW / SH; camera.updateProjectionMatrix();
+  $("loading").hidden = true;
+  ready = true;
+}
+function setOpen(o) { mixer.setTime(Math.min(Math.max(o, 0), 0.9999) * clip.duration); mixer.getRoot().updateMatrixWorld(true); }
+
+// ---------- Poses ----------
+/** World units per CSS pixel on the z = 0 plane. */
+const wpp = () => (2 * DIST * tanHalf) / SH;
+function buttonRect() {
+  const c = V.closed, w = c.width, h = w * (shutH / shutW);
+  return { x: SW - c.right - w, y: c.top, w, h };
+}
+const deg = THREE.MathUtils.degToRad;
+const lerp = THREE.MathUtils.lerp;
+const tmp = new THREE.Vector3();
+let shut = 1;
+function pose(ms) {
+  const b = buttonRect(), k = wpp();
+  const x0 = (b.x + b.w / 2 - SW / 2) * k, y0 = (SH / 2 - b.y - b.h / 2) * k;
+  const x1 = 0, y1 = -V.open.offsetY * k;
+  const s0 = (b.w * k) / shutW;
+  const s1 = V.open.fill * Math.min((SW * k) / screenW, (SH * k) / screenH);
+
+  const pressIn = at("pressIn", ms), pressOut = at("pressOut", ms), move = at("move", ms), scale = at("scale", ms), turn = at("turn", ms), open = at("open", ms), page = at("page", ms), dim = at("dim", ms), blur = at("blur", ms);
+  // The point of the device pinned to the path: the closed body's centre, sliding to the screen's.
+  wrap.position.lerpVectors(shutCentre, screenCentre, Math.min(1, Math.max(0, scale.e))).negate();
+  const P = V.path;
+  const ps = pathParam(move.e, x1 - x0, y1 - y0);
+  device.position.set(lerp(x0, x1, bez1(P.c1[0], P.c2[0], ps)), lerp(y0, y1, bez1(P.c1[1], P.c2[1], ps)), 0);
+  const squash = 1 - V.tracks.pressIn.depth * (pressIn.e - pressOut.e);
+  device.scale.setScalar(s0 * Math.pow(s1 / s0, scale.e) * squash);
+  const r = 1 - turn.e;
+  device.rotation.set(deg(V.closed.tiltX) * r, deg(V.closed.tiltY) * r + deg(V.tracks.turn.swing) * Math.sin(Math.PI * turn.u), deg(V.closed.tiltZ) * r);
+  // News shows while it's shut and goes as soon as it starts to move.
+  shut = Math.max(0, 1 - Math.max(move.e, scale.e) * 4);
+  setOpen(Math.max(open.e, V.alerts.lid * lidV * shut));
+  device.updateMatrixWorld(true);
+  dimEl.style.opacity = String(V.tracks.dim.amount * Math.min(1, Math.max(0, dim.e)));
+  // Blur the world canvas, scaled up a touch so its soft edges stay outside the screen.
+  const px = V.tracks.blur.amount * Math.max(0, blur.e);
+  worldCanvas.style.filter = px > 0.05 ? `blur(${px.toFixed(2)}px)` : "";
+  worldCanvas.style.transform = px > 0.05 ? `scale(${1 + (4 * px) / Math.max(1, worldCanvas.clientWidth)})` : "";
+  placeNews(b);
+
+  // The page over the screen.
+  const op = Math.min(1, Math.max(0, page.e));
+  pageEl.style.opacity = String(op);
+  if (op > 0) {
+    if (!pageSized) sizePage();
+    const quad = screenCorners.map((c) => {
+      tmp.copy(c).applyMatrix4(screenMesh.matrixWorld).project(camera);
+      return [((tmp.x + 1) / 2) * SW, ((1 - tmp.y) / 2) * SH];
+    });
+    pageEl.style.transform = quadTransform(pageW, pageH, quad);
+  }
+}
+let pageSized = false, pageW = 300, pageH = 300;
+/** The page's layout size: the screen's size once in place, so text lays out once at its real size. */
+function sizePage() {
+  const s1 = V.open.fill * Math.min((SW * wpp()) / screenW, (SH * wpp()) / screenH);
+  pageW = Math.round((screenW * s1) / wpp()); pageH = Math.round((screenH * s1) / wpp());
+  pageEl.style.width = pageW + "px"; pageEl.style.height = pageH + "px";
+  pageSized = true;
+}
+// The same projective mapping as the game (device.ts quadTransform).
+function quadTransform(width, height, quad) {
+  const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = quad;
+  const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
+  const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+  const det = dx1 * dy2 - dx2 * dy1;
+  const g = (dx3 * dy2 - dx2 * dy3) / det, h = (dx1 * dy3 - dx3 * dy1) / det;
+  const a = x1 - x0 + g * x1, b = x3 - x0 + h * x3, c = x0;
+  const d = y1 - y0 + g * y1, e = y3 - y0 + h * y3, f = y0;
+  const m = [a / width, d / width, 0, g / width, b / height, e / height, 0, h / height, 0, 0, 1, 0, c, f, 0, 1];
+  return `matrix3d(${m.map((n) => +n.toFixed(8)).join(",")})`;
+}
+
+// ---------- News ----------
+const KIND = {
+  gift: { led: "LedRed", colour: "#e8473b", text: "A gift from Sam!" },
+  friend: { led: "LedGreen", colour: "#3fb24f", text: "Mia is playing" },
+  save: { led: "LedYellow", colour: "#e6b450", text: "A newer save is ready" },
+};
+/** Waiting news, oldest first; `shown` is the one out of the dex. */
+const queue = [];
+let shown = null, dismissWanted = false, busy = false;
+/** The lid's lift (0 shut … 1 at V.alerts.lid) and the shown toast's way out (0 inside … 1 out). */
+let lidV = 0, toastV = 0, dragging = false;
+const tweens = {};
+function tween(name, to, ms, curve) {
+  return new Promise((resolve) => {
+    const from = name === "lid" ? lidV : toastV;
+    tweens[name] = { from, to, start: performance.now(), ms: Math.max(1, ms), ease: bezier(curve), resolve };
+  });
+}
+function stepTweens(now) {
+  for (const [name, tw] of Object.entries(tweens)) {
+    const u = Math.min(1, (now - tw.start) / tw.ms);
+    const v = lerp(tw.from, tw.to, tw.ease(u));
+    if (name === "lid") lidV = v; else toastV = v;
+    if (u >= 1) { delete tweens[name]; tw.resolve(); }
+  }
+}
+/** Runs the news: lid up, toast out; on dismiss, toast in, the next out or the lid down. */
+async function pump() {
+  if (busy) return;
+  busy = true;
+  const A = V.alerts;
+  try {
+    for (;;) {
+      if (!A.toast) { shown = null; toastV = 0; if (lidV > 0) await tween("lid", 0, A.lidMs, A.lidCurve); break; }
+      if (!shown && queue.length) {
+        if (lidV < 1) await tween("lid", 1, A.lidMs, A.lidCurve);
+        shown = queue[0]; drawToasts();
+        await tween("toast", 1, A.toastMs, A.toastCurve);
+        continue;
+      }
+      if (shown && dismissWanted) {
+        dismissWanted = false;
+        await tween("toast", 0, A.toastMs * 0.7, [0.5, 0, 0.8, 0.6]);
+        queue.shift(); shown = null; drawToasts();
+        if (!queue.length) await tween("lid", 0, A.lidMs, A.lidCurve);
+        continue;
+      }
+      break;
+    }
+  } finally { busy = false; }
+}
+function toastEl(item, behind) {
+  const A = V.alerts;
+  const el = document.createElement("div");
+  el.className = "pin" + (behind ? " behind" : "");
+  Object.assign(el.style, { height: A.height + "px", padding: `0 ${A.padX + A.tuck}px 0 ${A.padX}px`, fontSize: A.font + "px", borderRadius: `${A.radius}px 6px 6px ${A.radius}px`, gap: Math.round(A.padX * 0.7) + "px" });
+  const icon = document.createElement("i");
+  Object.assign(icon.style, { width: A.icon + "px", height: A.icon + "px", background: KIND[item].colour });
+  const text = document.createElement("span"); text.textContent = KIND[item].text;
+  el.append(icon, text);
+  if (!behind) {
+    const x = document.createElement("button"); x.type = "button"; x.className = "x"; x.textContent = "×"; x.setAttribute("aria-label", "Dismiss");
+    x.addEventListener("pointerdown", (e) => e.stopPropagation());
+    x.onclick = (e) => { e.stopPropagation(); dismiss(); };
+    el.append(x);
+    swipe(el);
+  }
+  return el;
+}
+function drawToasts() {
+  const host = $("toasts"); host.innerHTML = "";
+  if (!shown) return;
+  if (queue.length > 1) host.append(toastEl(queue[1], true));
+  host.append(toastEl(shown, false));
+}
+const dismiss = () => { dismissWanted = true; pump(); };
+/** Swipe right to push it back into the dex; a tap opens the dex. */
+function swipe(el) {
+  el.addEventListener("pointerdown", (e) => {
+    e.stopPropagation();
+    el.setPointerCapture(e.pointerId);
+    const x0 = e.clientX, w = el.getBoundingClientRect().width || 200, v0 = toastV;
+    let moved = false;
+    dragging = true;
+    el.onpointermove = (ev) => {
+      const dx = ev.clientX - x0;
+      if (Math.abs(dx) > 6) moved = true;
+      toastV = Math.min(1, Math.max(0, v0 - Math.max(0, dx) / w));
+    };
+    el.onpointerup = () => {
+      el.onpointermove = null; dragging = false;
+      if (!moved) { toastV = v0; return playOpen(); }
+      if (toastV < 0.7) dismiss(); else tween("toast", 1, 160, [0.2, 0, 0.2, 1]);
+    };
+  });
+}
+/** Lays the toasts and the lights over the closed dex. Nothing here redraws the model. */
+const ledPos = new THREE.Vector3();
+function placeNews(b) {
+  const A = V.alerts, host = $("toasts");
+  const pins = host.querySelectorAll(".pin");
+  const front = pins[pins.length - 1], back = pins.length > 1 ? pins[0] : null;
+  const top = b.y + b.h / 2 - A.height / 2 + A.offsetY;
+  const visible = shut > 0.5 ? 1 : 0;
+  for (const el of pins) { el.style.right = SW - b.x - A.tuck + "px"; el.style.top = top + "px"; }
+  if (front) {
+    const w = front.offsetWidth || 200;
+    front.style.translate = `${(1 - toastV) * (w - A.tuck)}px 0`;
+    front.style.opacity = String(visible * Math.min(1, toastV * 4));
+  }
+  if (back) {
+    back.style.translate = `0 ${-A.stack}px`; back.style.scale = "0.94";
+    back.style.transformOrigin = "100% 50%";
+    back.style.opacity = String(visible * Math.min(1, toastV * 4) * 0.95);
+  }
+  // Lights: a glow over each LED with news waiting, blinking in CSS.
+  const glows = $("glows");
+  const kinds = A.lights && shut > 0.5 ? [...new Set(queue)] : [];
+  if (glows.dataset.k !== kinds.join() + A.glow + A.blinkMs) {
+    glows.dataset.k = kinds.join() + A.glow + A.blinkMs;
+    glows.innerHTML = "";
+    for (const kind of kinds) {
+      const g = document.createElement("i"); g.className = "led-glow"; g.dataset.kind = kind;
+      g.style.setProperty("--c", KIND[kind].colour); g.style.setProperty("--g", A.glow + "px"); g.style.setProperty("--blink", A.blinkMs + "ms");
+      glows.append(g);
+    }
+  }
+  for (const g of glows.children) {
+    const m = ledMeshes[g.dataset.kind];
+    if (!m) continue;
+    ledPos.copy(m.geometry.boundingSphere.center).applyMatrix4(m.matrixWorld).project(camera);
+    g.style.left = ((ledPos.x + 1) / 2) * SW + "px"; g.style.top = ((1 - ledPos.y) / 2) * SH + "px";
+  }
+}
+for (const btn of document.querySelectorAll("#alert-events .btn")) {
+  btn.onclick = () => {
+    const ev = btn.dataset.ev;
+    if (ev === "clear") { queue.length = 0; shown = null; dismissWanted = false; for (const k in tweens) delete tweens[k]; lidV = toastV = 0; busy = false; drawToasts(); return; }
+    if (t > 0) { t = 0; dir = 0; }
+    queue.push(ev);
+    drawToasts();
+    pump();
+  };
+}
+function buildAlertStyles() {
+  const host = $("alert-styles"); host.innerHTML = "";
+  for (const [k, label] of [["lights", "Lights"], ["toast", "Toast"]]) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn"; b.textContent = label;
+    b.setAttribute("aria-pressed", String(!!V.alerts[k]));
+    b.onclick = () => { V.alerts[k] = V.alerts[k] ? 0 : 1; b.setAttribute("aria-pressed", String(!!V.alerts[k])); save(); pump(); };
+    host.append(b);
+  }
+  const f = $("alert-fields"); f.innerHTML = "";
+  const A = () => V.alerts;
+  const num = (label, key, range, step = 1) => field(f, label, () => A()[key], (v) => { A()[key] = v; drawToasts(); }, { step, wide: true, range });
+  num("Blink ms", "blinkMs", [300, 2400], 50);
+  num("Glow px", "glow", [4, 30]);
+  num("Lid lift", "lid", [0, 0.5], 0.01);
+  num("Lid ms", "lidMs", [60, 800], 10);
+  num("Toast ms", "toastMs", [80, 1200], 10);
+  num("Height", "height", [24, 64]);
+  num("Text px", "font", [10, 22]);
+  num("Padding", "padX", [4, 28]);
+  num("Icon", "icon", [0, 40]);
+  num("Corner", "radius", [0, 32]);
+  num("Tuck under", "tuck", [0, 60]);
+  num("Offset y", "offsetY", [-40, 80]);
+  num("Stack", "stack", [0, 16]);
+  const box = document.createElement("div"); box.className = "mini-curves";
+  for (const [label, key, colour] of [["Lid curve", "lidCurve", "--t-open"], ["Toast curve", "toastCurve", "--t-page"]]) {
+    const cell = document.createElement("div"); cell.className = "mini-curve";
+    const h = document.createElement("h4"); h.textContent = label;
+    const s = document.createElementNS(NS, "svg"); s.setAttribute("class", "curve"); s.setAttribute("viewBox", "0 0 300 300"); s.setAttribute("aria-label", label);
+    const ps = document.createElement("div"); ps.className = "presets";
+    cell.append(h, s, ps); box.append(cell);
+    curveEditor(s, ps, { get: () => V.alerts[key], colour: () => `var(${colour})`, change: writeJson, commit: save }).build();
+  }
+  f.append(box);
+}
+
+// ---------- Playback ----------
+let t = 0;           // timeline position, ms
+let dir = 0;         // 1 opening, -1 closing, 0 still
+let loop = false, loopWait = 0, speed = 1;
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(100, now - last); last = now;
+  if (dir !== 0) {
+    t += dir * dt * speed * (dir < 0 ? V.close.speed : 1);
+    const T = total();
+    if (t >= T) { t = T; dir = 0; if (loop) loopWait = 700; }
+    if (t <= 0) { t = 0; dir = 0; if (loop) loopWait = 500; }
+  } else if (loop && loopWait > 0) {
+    loopWait -= dt;
+    if (loopWait <= 0) dir = t > 0 ? -1 : 1;
+  }
+  t = Math.min(t, total());
+  stepTweens(now);
+  if (ready) { pose(t); renderer.render(scene, camera); drawPathUI(); }
+  drawPlayhead();
+  requestAnimationFrame(frame);
+}
+const playOpen = () => { if (t >= total()) t = 0; dir = 1; hint.style.opacity = "0"; };
+const playClose = () => { if (t <= 0) t = total(); dir = -1; };
+$("play-open").onclick = playOpen;
+$("play-close").onclick = playClose;
+$("loop").onclick = (e) => { loop = !loop; e.currentTarget.setAttribute("aria-pressed", String(loop)); if (loop && dir === 0) loopWait = 1; };
+$("speed").onchange = (e) => (speed = +e.target.value);
+$("framed").onclick = (e) => { framed = !framed; e.currentTarget.setAttribute("aria-pressed", String(framed)); panX = panY = 0; layoutStage(); };
+// Full screen: the stage fills the window at real size, for feeling it on a phone.
+const setFull = (on) => {
+  stageWrap.classList.toggle("full", on); $("exit-full").hidden = !on;
+  framed = on ? false : $("framed").getAttribute("aria-pressed") === "true";
+  zoom = 1; panX = panY = 0;
+  t = 0; dir = 0; hint.style.opacity = "1"; layoutStage();
+};
+$("full").onclick = () => setFull(true);
+$("exit-full").onclick = () => setFull(false);
+$("reset").onclick = () => { V = clone(DEFAULTS); save(); buildAll(); };
+
+// The stage: a tap opens or closes the dex; a drag pans (once zoomed in); two fingers zoom.
+const touches = new Map();
+// Safari pinch-zooms the page through its own gesture events whatever touch-action says, so stop
+// them outside the preview (the preview pinches with its own pointer handling below).
+for (const ev of ["gesturestart", "gesturechange"]) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+let gesture = null;
+stageWrap.addEventListener("pointerdown", (e) => {
+  if (e.target.closest("button, .pin")) return;
+  stageWrap.setPointerCapture(e.pointerId);
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size === 1) gesture = { kind: "tap", x: e.clientX, y: e.clientY, panX, panY };
+  else if (touches.size === 2) {
+    const [a, b] = [...touches.values()];
+    gesture = { kind: "pinch", d: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+  }
+});
+stageWrap.addEventListener("pointermove", (e) => {
+  if (!touches.has(e.pointerId) || !gesture) return;
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (gesture.kind === "pinch" && touches.size === 2) {
+    const [a, b] = [...touches.values()];
+    setZoom(gesture.zoom * (Math.hypot(a.x - b.x, a.y - b.y) / gesture.d));
+    return;
+  }
+  const dx = e.clientX - gesture.x, dy = e.clientY - gesture.y;
+  if (gesture.kind === "tap" && Math.hypot(dx, dy) > 6) gesture.kind = "pan";
+  if (gesture.kind === "pan" && zoom > 1) { panX = gesture.panX + dx; panY = gesture.panY + dy; layoutStage(); }
+});
+const endTouch = (e) => {
+  if (!touches.has(e.pointerId)) return;
+  touches.delete(e.pointerId);
+  if (gesture?.kind === "tap" && e.type === "pointerup") tapStage(e.clientX, e.clientY);
+  if (!touches.size) gesture = null;
+  else if (gesture?.kind === "pinch") gesture = null;
+};
+stageWrap.addEventListener("pointerup", endTouch);
+stageWrap.addEventListener("pointercancel", endTouch);
+function tapStage(cx, cy) {
+  const r = stage.getBoundingClientRect();
+  const x = (cx - r.left) / stageScale, y = (cy - r.top) / stageScale;
+  const b = buttonRect(), pad = 10;
+  if (t === 0 && x > b.x - pad && x < b.x + b.w + pad && y > b.y - pad && y < b.y + b.h + pad) playOpen();
+  else if (t > 0 && dir >= 0) playClose();
+}
+
+// ---------- Timeline ----------
+const tl = $("tl");
+let selected = "move";
+let span = 1000;
+const laneW = () => tl.querySelector(".lane.ruler")?.clientWidth || 600;
+const EYE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const EYE_OFF = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4"/><path d="M6.6 6.6A17 17 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>`;
+// Solo, After Effects style: a filled dot in a ring.
+const SOLO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg>`;
+function buildTimeline() {
+  span = Math.max(1000, Math.ceil((allTotal() + 150) / 250) * 250);
+  tl.innerHTML = "";
+  tl.append(document.createElement("div"), Object.assign(document.createElement("div"), { className: "lane ruler", id: "ruler" }));
+  const ruler = $("ruler");
+  for (let ms = 0; ms <= span; ms += span > 1600 ? 250 : 100) {
+    const tick = document.createElement("div"); tick.className = "tick"; tick.style.left = (ms / span) * 100 + "%";
+    if (ms % (span > 1600 ? 500 : 200) === 0) tick.textContent = ms;
+    ruler.append(tick);
+  }
+  const ph = document.createElement("div"); ph.className = "playhead"; ph.id = "playhead"; ruler.append(ph);
+  scrubber(ruler);
+  for (const tr of TRACKS) {
+    const label = document.createElement("div");
+    label.className = "tl-label"; label.dataset.id = tr.id; label.style.setProperty("--c", `var(--t-${tr.id})`);
+    label.setAttribute("aria-selected", String(tr.id === selected)); label.tabIndex = 0;
+    const eye = document.createElement("button"); eye.type = "button"; eye.className = "icon-btn eye";
+    eye.onclick = (e) => { e.stopPropagation(); if (layers.hidden.has(tr.id)) layers.hidden.delete(tr.id); else layers.hidden.add(tr.id); saveLayers(); markLayers(); };
+    const name = document.createElement("span"); name.className = "name"; name.textContent = tr.label;
+    const solo = document.createElement("button"); solo.type = "button"; solo.className = "icon-btn solo"; solo.innerHTML = SOLO;
+    solo.title = `Show only ${tr.label} (again to show all)`; solo.setAttribute("aria-label", solo.title);
+    // Solo is a shortcut, not a state: it hides every other layer, or, if this is already the only
+    // one showing, shows them all again.
+    solo.onclick = (e) => {
+      e.stopPropagation();
+      const others = TRACKS.map((x) => x.id).filter((id) => id !== tr.id);
+      const alone = active(tr.id) && others.every((id) => !active(id));
+      layers.hidden = alone ? new Set() : new Set(others);
+      saveLayers(); markLayers();
+    };
+    label.append(eye, name, solo);
+    label.onclick = () => select(tr.id);
+    const lane = document.createElement("div"); lane.className = "lane";
+    const bar = document.createElement("div"); bar.className = "bar"; bar.dataset.id = tr.id;
+    bar.style.setProperty("--c", `var(--t-${tr.id})`); bar.setAttribute("aria-selected", String(tr.id === selected));
+    bar.innerHTML = `<svg viewBox="0 0 100 100" preserveAspectRatio="none"><path fill="none" stroke="var(--c)" stroke-width="2" vector-effect="non-scaling-stroke" opacity=".8"/></svg><i class="grip l"></i><i class="grip r"></i>`;
+    lane.append(bar);
+    tl.append(label, lane);
+    dragBar(bar, tr.id);
+  }
+  placeBars();
+  markLayers();
+}
+function markLayers() {
+  for (const el of tl.querySelectorAll(".tl-label, .bar")) el.classList.toggle("off", !active(el.dataset.id));
+  for (const label of tl.querySelectorAll(".tl-label")) {
+    const on = active(label.dataset.id), eye = label.querySelector(".eye");
+    eye.innerHTML = on ? EYE : EYE_OFF;
+    eye.title = `${on ? "Hide" : "Show"} ${TRACKS.find((x) => x.id === label.dataset.id).label}`;
+    eye.setAttribute("aria-label", eye.title); eye.setAttribute("aria-pressed", String(!on));
+  }
+  $("hold-start").setAttribute("aria-pressed", String(!layers.holdEnd));
+  $("hold-end").setAttribute("aria-pressed", String(layers.holdEnd));
+  t = Math.min(t, total());
+}
+$("hold-start").onclick = () => { layers.holdEnd = false; saveLayers(); markLayers(); };
+$("hold-end").onclick = () => { layers.holdEnd = true; saveLayers(); markLayers(); };
+function placeBars() {
+  for (const bar of tl.querySelectorAll(".bar")) {
+    const tr = V.tracks[bar.dataset.id];
+    bar.style.left = (tr.delay / span) * 100 + "%";
+    bar.style.width = Math.max(0.5, (tr.duration / span) * 100) + "%";
+    const f = bezier(tr.curve);
+    let d = "";
+    for (let i = 0; i <= 40; i++) { const u = i / 40; d += `${i ? "L" : "M"}${u * 100},${90 - f(u) * 80}`; }
+    bar.querySelector("path").setAttribute("d", d);
+  }
+}
+function drawPlayhead() {
+  const ph = $("playhead");
+  if (ph) ph.style.left = (t / span) * 100 + "%";
+  $("time").textContent = `${Math.round(t)} ms`;
+  drawCurveDot();
+}
+function scrubber(ruler) {
+  ruler.addEventListener("pointerdown", (e) => {
+    ruler.setPointerCapture(e.pointerId);
+    const go = (ev) => { const r = ruler.getBoundingClientRect(); t = Math.min(total(), Math.max(0, ((ev.clientX - r.left) / r.width) * span)); dir = 0; loopWait = 0; hint.style.opacity = "0"; };
+    go(e);
+    ruler.onpointermove = go;
+    ruler.onpointerup = () => (ruler.onpointermove = null);
+  });
+}
+const snap = (ms) => Math.max(0, Math.round(ms / 10) * 10);
+function dragBar(bar, id) {
+  bar.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    select(id);
+    bar.setPointerCapture(e.pointerId);
+    const mode = e.target.classList.contains("l") ? "l" : e.target.classList.contains("r") ? "r" : "m";
+    const x0 = e.clientX, tr = V.tracks[id], d0 = tr.delay, w0 = tr.duration;
+    const perPx = span / laneW();
+    // Edges snap to the other bars' starts and ends, 0 and the playhead, within 8 px (Alt drags freely).
+    const targets = [0, Math.round(t)];
+    for (const o of TRACKS) if (o.id !== id) { const ot = V.tracks[o.id]; targets.push(ot.delay, ot.delay + ot.duration); }
+    const near = (ms) => { let best = null; for (const g of targets) if (Math.abs(g - ms) <= 8 * perPx && (best === null || Math.abs(g - ms) < Math.abs(best - ms))) best = g; return best; };
+    bar.onpointermove = (ev) => {
+      const dms = (ev.clientX - x0) * perPx, free = ev.altKey;
+      let guide = null;
+      if (mode === "m") {
+        const s = d0 + dms, e = s + w0, gs = free ? null : near(s), ge = free ? null : near(e);
+        const useS = gs !== null && (ge === null || Math.abs(gs - s) <= Math.abs(ge - e));
+        tr.delay = useS ? gs : ge !== null ? Math.max(0, ge - w0) : snap(s);
+        guide = useS ? gs : ge;
+      } else if (mode === "r") {
+        const e = d0 + w0 + dms, g = free ? null : near(e);
+        tr.duration = Math.max(0, (g ?? snap(e)) - d0); guide = g;
+      } else {
+        const st = d0 + dms, g = free ? null : near(st);
+        const nd = Math.max(0, Math.min(d0 + w0, g ?? snap(st))); tr.duration = d0 + w0 - nd; tr.delay = nd; guide = g;
+      }
+      showGuide(guide);
+      placeBars(); fillTrackFields(); writeJson();
+    };
+    bar.onpointerup = () => { bar.onpointermove = null; showGuide(null); save(); if (Math.max(1000, Math.ceil((allTotal() + 150) / 250) * 250) !== span) buildTimeline(); };
+  });
+}
+function showGuide(ms) {
+  let g = tl.querySelector(".snap-guide");
+  if (!g) { g = document.createElement("div"); g.className = "snap-guide"; tl.append(g); }
+  if (ms === null) { g.style.display = "none"; return; }
+  const ruler = tl.querySelector(".lane.ruler");
+  g.style.left = ruler.offsetLeft + (ms / span) * ruler.clientWidth + "px";
+  g.style.display = "block";
+}
+function select(id) {
+  selected = id;
+  tl.querySelectorAll(".tl-label, .bar").forEach((el) => el.setAttribute("aria-selected", String(el.dataset.id === id)));
+  buildCurve();
+}
+
+// ---------- Curve editor ----------
+const svg = $("curve");
+const NS = "http://www.w3.org/2000/svg";
+// x 0–1 across, y −0.5…1.5 up (room to overshoot).
+const PAD = 22, Y0 = -0.5, Y1 = 1.5;
+const cx = (x) => PAD + x * (300 - 2 * PAD);
+const cy = (y) => 300 - PAD - ((y - Y0) / (Y1 - Y0)) * (300 - 2 * PAD);
+const fx = (px) => (px - PAD) / (300 - 2 * PAD);
+const fy = (py) => Y0 + ((300 - PAD - py) / (300 - 2 * PAD)) * (Y1 - Y0);
+const el = (tag, attrs) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); return n; };
+/** A cubic-bezier editor in an svg (and preset chips), editing the 4-number array get() returns in place. */
+function curveEditor(svg, presetsHost, o) {
+  let arm1, arm2, cpath, cdot, hs = [];
+  function build() {
+    const colour = o.colour();
+    svg.innerHTML = "";
+    svg.append(el("rect", { x: cx(0), y: cy(1), width: cx(1) - cx(0), height: cy(0) - cy(1), fill: "#ffffff08", stroke: "#3b342d" }));
+    for (const y of [0, 0.5, 1]) svg.append(el("line", { x1: cx(0), x2: cx(1), y1: cy(y), y2: cy(y), stroke: "#3b342d", "stroke-dasharray": y === 0.5 ? "3 4" : "" }));
+    for (const [y, s] of [[0, "0"], [1, "1"]]) { const tx = el("text", { x: 4, y: cy(y) + 4, fill: "#a59784", "font-size": 10, "font-family": "JetBrains Mono, monospace" }); tx.textContent = s; svg.append(tx); }
+    arm1 = el("line", { x1: cx(0), y1: cy(0), stroke: "#a59784", "stroke-width": 1.5 });
+    arm2 = el("line", { x1: cx(1), y1: cy(1), stroke: "#a59784", "stroke-width": 1.5 });
+    cpath = el("path", { fill: "none", stroke: colour, "stroke-width": 3 });
+    cdot = el("circle", { r: 5, fill: "#f2e9dc", cx: cx(0), cy: cy(0), visibility: o.dot ? "visible" : "hidden" });
+    svg.append(arm1, arm2, cpath, cdot);
+    hs = [0, 1].map((i) => {
+      const h = el("circle", { r: 9, fill: "#181512", stroke: colour, "stroke-width": 3, tabindex: 0, style: "cursor:grab" });
+      h.addEventListener("pointerdown", (e) => {
+        e.preventDefault(); h.setPointerCapture(e.pointerId);
+        h.onpointermove = (ev) => {
+          const r = svg.getBoundingClientRect(), c = o.get();
+          const px = ((ev.clientX - r.left) / r.width) * 300, py = ((ev.clientY - r.top) / r.height) * 300;
+          c[i * 2] = +Math.min(1, Math.max(0, fx(px))).toFixed(3); c[i * 2 + 1] = +Math.min(Y1, Math.max(Y0, fy(py))).toFixed(3);
+          draw(); o.change();
+        };
+        h.onpointerup = () => { h.onpointermove = null; o.commit(); };
+      });
+      svg.append(h);
+      return h;
+    });
+    draw();
+  }
+  function draw() {
+    if (!cpath) return;
+    const [x1, y1, x2, y2] = o.get();
+    arm1.setAttribute("x2", cx(x1)); arm1.setAttribute("y2", cy(y1));
+    arm2.setAttribute("x2", cx(x2)); arm2.setAttribute("y2", cy(y2));
+    cpath.setAttribute("d", `M${cx(0)},${cy(0)} C${cx(x1)},${cy(y1)} ${cx(x2)},${cy(y2)} ${cx(1)},${cy(1)}`);
+    hs[0].setAttribute("cx", cx(x1)); hs[0].setAttribute("cy", cy(y1));
+    hs[1].setAttribute("cx", cx(x2)); hs[1].setAttribute("cy", cy(y2));
+  }
+  function dot() {
+    if (!cdot || !o.dot) return;
+    const { u, e } = o.dot();
+    cdot.setAttribute("cx", cx(u)); cdot.setAttribute("cy", cy(e));
+  }
+  if (presetsHost) {
+    presetsHost.innerHTML = "";
+    for (const [name, p] of Object.entries(PRESETS)) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = name;
+      b.onclick = () => { o.get().splice(0, 4, ...p); build(); o.change(); o.commit(); };
+      presetsHost.append(b);
+    }
+  }
+  return { build, draw, dot };
+}
+const mainCurve = curveEditor(svg, $("presets"), {
+  get: () => V.tracks[selected].curve,
+  colour: () => `var(--t-${selected})`,
+  change: () => { placeBars(); fillTrackFields(); writeJson(); },
+  commit: () => save(),
+  dot: () => at(selected, t),
+});
+function buildCurve() {
+  const meta = TRACKS.find((x) => x.id === selected);
+  $("curve-section").style.setProperty("--c", `var(--t-${selected})`);
+  $("curve-name").textContent = meta.label;
+  $("track-note").textContent = meta.note;
+  mainCurve.build();
+  fillTrackFields();
+}
+const drawCurve = () => mainCurve.draw();
+const drawCurveDot = () => mainCurve.dot();
+
+// ---------- Motion path (on the preview while a move track is selected) ----------
+const pathUI = $("path-ui");
+const PATH = {};
+function buildPathUI() {
+  pathUI.innerHTML = "";
+  const mk = (k, tag, a) => { PATH[k] = el(tag, a); pathUI.append(PATH[k]); };
+  for (let i = 0; i <= DOTS; i++) mk("d" + i, "circle", { r: 2, fill: "#f2e9dc", opacity: 0.85 });
+  mk("arm1", "line", { stroke: "#f2e9dc", "stroke-width": 1, opacity: 0.7 });
+  mk("arm2", "line", { stroke: "#f2e9dc", "stroke-width": 1, opacity: 0.7 });
+  mk("curve", "path", { fill: "none", stroke: "var(--t-move)", "stroke-width": 2.5 });
+  mk("p0", "circle", { r: 3.5, fill: "var(--t-move)" });
+  mk("p1", "circle", { r: 3.5, fill: "var(--t-move)" });
+  mk("now", "circle", { r: 4, fill: "#f2e9dc", stroke: "#181512", "stroke-width": 1.5 });
+  for (const i of [0, 1]) {
+    mk("h" + i, "circle", { class: "h", r: 9, fill: "#181512cc", stroke: "var(--t-move)", "stroke-width": 3 });
+    const h = PATH["h" + i];
+    h.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); e.stopPropagation(); h.setPointerCapture(e.pointerId);
+      h.onpointermove = (ev) => {
+        const r = stage.getBoundingClientRect(), { p0, p1 } = pathEnds();
+        const lx = ((ev.clientX - r.left) / r.width) * SW, ly = ((ev.clientY - r.top) / r.height) * SH;
+        const frac = (v, a, b) => (Math.abs(b - a) < 1 ? 0 : (v - a) / (b - a));
+        V.path["c" + (i + 1)] = [+unsquash(frac(lx, p0[0], p1[0])).toFixed(3), +unsquash(frac(ly, p0[1], p1[1])).toFixed(3)];
+        fillTrackFields(); writeJson();
+      };
+      h.onpointerup = () => { h.onpointermove = null; save(); };
+    });
+  }
+}
+// Handles are drawn on a squashed scale: true to the path within half its length past either end, then
+// logarithmic, so dragging further out grows the value faster with no cap (10 sits about 2.75 lengths out).
+const SQ = 0.5;
+function squash(f) {
+  const d = f > 1 ? f - 1 : f < 0 ? -f : 0;
+  if (d <= SQ) return f;
+  const s = SQ + Math.log(1 + d - SQ);
+  return f > 1 ? 1 + s : -s;
+}
+function unsquash(s) {
+  const d = s > 1 ? s - 1 : s < 0 ? -s : 0;
+  if (d <= SQ) return s;
+  const f = SQ + Math.exp(d - SQ) - 1;
+  return s > 1 ? 1 + f : -f;
+}
+/** The path's ends in stage pixels: the closed button's centre and the open dex's. */
+function pathEnds() {
+  const b = buttonRect();
+  return { p0: [b.x + b.w / 2, b.y + b.h / 2], p1: [SW / 2, SH / 2 + V.open.offsetY] };
+}
+function drawPathUI() {
+  const on = selected === "move";
+  pathUI.style.display = on ? "" : "none";
+  if (!on) return;
+  if (!PATH.curve) buildPathUI();
+  // It sits beside the stage, not in it, so the path can run past the phone's edges; it copies the
+  // stage's placement so its pixels are the stage's.
+  pathUI.setAttribute("width", SW); pathUI.setAttribute("height", SH);
+  pathUI.style.left = stage.style.left; pathUI.style.top = stage.style.top; pathUI.style.transform = stage.style.transform;
+  // Keep the handles finger-sized however small the stage is drawn.
+  const sc = 1 / Math.max(0.2, stage.getBoundingClientRect().width / SW);
+  if (PATH.sc !== sc) {
+    PATH.sc = sc;
+    for (const i of [0, 1]) { PATH["h" + i].setAttribute("r", 11 * sc); PATH["h" + i].setAttribute("stroke-width", 3 * sc); }
+    for (const k of ["p0", "p1"]) PATH[k].setAttribute("r", 4 * sc);
+    PATH.now.setAttribute("r", 5 * sc);
+    PATH.curve.setAttribute("stroke-width", 2.5 * sc);
+    for (let i = 0; i <= DOTS; i++) PATH["d" + i].setAttribute("r", 2.2 * sc);
+  }
+  const { p0, p1 } = pathEnds(), P = V.path;
+  const pt = (fx, fy) => [p0[0] + (p1[0] - p0[0]) * fx, p0[1] + (p1[1] - p0[1]) * fy];
+  const c1 = pt(...P.c1), c2 = pt(...P.c2);
+  const g1 = pt(squash(P.c1[0]), squash(P.c1[1])), g2 = pt(squash(P.c2[0]), squash(P.c2[1]));
+  const set = (k, a) => { for (const n in a) PATH[k].setAttribute(n, a[n]); };
+  set("curve", { d: `M${p0} C${c1} ${c2} ${p1}` });
+  set("arm1", { x1: p0[0], y1: p0[1], x2: g1[0], y2: g1[1] });
+  set("arm2", { x1: p1[0], y1: p1[1], x2: g2[0], y2: g2[1] });
+  set("p0", { cx: p0[0], cy: p0[1] }); set("p1", { cx: p1[0], cy: p1[1] });
+  set("h0", { cx: g1[0], cy: g1[1] }); set("h1", { cx: g2[0], cy: g2[1] });
+  const M = V.tracks.move, dx = p1[0] - p0[0], dy = p1[1] - p0[1];
+  const where = (ms) => { const s = pathParam(at("move", ms).e, dx, dy); return pt(bez1(P.c1[0], P.c2[0], s), bez1(P.c1[1], P.c2[1], s)); };
+  for (let i = 0; i <= DOTS; i++) { const q = where(M.delay + (M.duration * i) / DOTS); set("d" + i, { cx: q[0], cy: q[1] }); }
+  const n = where(t);
+  set("now", { cx: n[0], cy: n[1] });
+}
+
+// ---------- Fields ----------
+function field(host, label, get, set, { step = 1, min, max, wide = false, range } = {}) {
+  const id = `f-${host.id}-${label.replace(/\W+/g, "-").toLowerCase()}`;
+  const wrapEl = document.createElement("label"); wrapEl.className = "field" + (wide ? " wide" : ""); wrapEl.htmlFor = id;
+  wrapEl.append(label);
+  const num = document.createElement("input"); num.type = "number"; num.id = id; num.step = step; if (min !== undefined) num.min = min; if (max !== undefined) num.max = max;
+  num.value = get();
+  let slider;
+  if (wide && range) {
+    slider = document.createElement("input"); slider.type = "range"; slider.min = range[0]; slider.max = range[1]; slider.step = step; slider.value = get(); slider.setAttribute("aria-label", label);
+    slider.oninput = () => { set(+slider.value); num.value = slider.value; after(); };
+    wrapEl.append(slider);
+  }
+  num.oninput = () => { if (num.value === "" || !Number.isFinite(+num.value)) return; set(+num.value); if (slider) slider.value = num.value; after(); };
+  wrapEl.append(num);
+  host.append(wrapEl);
+}
+function after() { placeBars(); drawCurve(); pageSized = false; save(); }
+function fillTrackFields() {
+  const host = $("track-fields");
+  if (host.contains(document.activeElement)) return; // don't rebuild under the cursor
+  host.innerHTML = "";
+  const tr = V.tracks[selected];
+  field(host, "Delay ms", () => tr.delay, (v) => (tr.delay = Math.max(0, v)), { step: 10, min: 0 });
+  field(host, "Duration ms", () => tr.duration, (v) => (tr.duration = Math.max(0, v)), { step: 10, min: 0 });
+  ["x1", "y1", "x2", "y2"].forEach((n, i) => field(host, n, () => tr.curve[i], (v) => (tr.curve[i] = n[0] === "x" ? Math.min(1, Math.max(0, v)) : v), { step: 0.01 }));
+  if (selected === "move") {
+    const head = document.createElement("h4"); head.className = "sub"; head.textContent = "Path"; host.append(head);
+    ["c1", "c2"].forEach((c, ci) => ["x", "y"].forEach((a, ai) => field(host, `Handle ${ci + 1} ${a}`, () => V.path[c][ai], (v) => (V.path[c][ai] = v), { step: 0.01 })));
+    const chips = document.createElement("div"); chips.className = "presets"; chips.style.gridColumn = "1 / -1";
+    for (const [name, p] of Object.entries(PATHS)) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "chip"; b.textContent = name;
+      b.onclick = () => { V.path.c1 = p.slice(0, 2); V.path.c2 = p.slice(2); save(); fillTrackFields(); writeJson(); };
+      chips.append(b);
+    }
+    host.append(chips);
+  }
+  if (selected === "turn") field(host, "Swing °", () => tr.swing, (v) => (tr.swing = v), { step: 1, wide: true, range: [-45, 45] });
+  if (selected === "pressIn" || selected === "pressOut") field(host, "Depth", () => V.tracks.pressIn.depth, (v) => (V.tracks.pressIn.depth = v), { step: 0.01, wide: true, range: [0, 0.4] });
+  if (selected === "blur") field(host, "Amount px", () => tr.amount, (v) => (tr.amount = v), { step: 0.5, wide: true, range: [0, 24] });
+  if (selected === "dim") field(host, "Amount", () => tr.amount, (v) => (tr.amount = v), { step: 0.01, wide: true, range: [0, 1] });
+}
+function buildFields() {
+  const c = $("closed-fields"); c.innerHTML = "";
+  field(c, "Width px", () => V.closed.width, (v) => (V.closed.width = Math.max(16, v)), { wide: true, range: [32, 110] });
+  field(c, "From top", () => V.closed.top, (v) => (V.closed.top = v), { wide: true, range: [0, 60] });
+  field(c, "From right", () => V.closed.right, (v) => (V.closed.right = v), { wide: true, range: [0, 60] });
+  field(c, "Tilt x °", () => V.closed.tiltX, (v) => (V.closed.tiltX = v), { wide: true, range: [-60, 60] });
+  field(c, "Tilt y °", () => V.closed.tiltY, (v) => (V.closed.tiltY = v), { wide: true, range: [-60, 60] });
+  field(c, "Tilt z °", () => V.closed.tiltZ, (v) => (V.closed.tiltZ = v), { wide: true, range: [-45, 45] });
+  const o = $("open-fields"); o.innerHTML = "";
+  field(o, "Screen fills", () => V.open.fill, (v) => (V.open.fill = Math.min(1.2, Math.max(0.3, v))), { step: 0.01, wide: true, range: [0.5, 1.1] });
+  field(o, "Offset y px", () => V.open.offsetY, (v) => (V.open.offsetY = v), { wide: true, range: [-200, 200] });
+  const cl = $("close-fields"); cl.innerHTML = "";
+  field(cl, "Speed ×", () => V.close.speed, (v) => (V.close.speed = Math.max(0.1, v)), { step: 0.05, wide: true, range: [0.5, 3] });
+}
+
+// ---------- JSON ----------
+function writeJson() { $("json").value = JSON.stringify(V, null, 1).replace(/\[\s+([^\]]*?)\s+\]/g, (_, s) => `[${s.replace(/\s+/g, " ")}]`); }
+const status = (s) => { $("status").textContent = s; clearTimeout(status.t); status.t = setTimeout(() => ($("status").textContent = ""), 2200); };
+$("copy").onclick = () => {
+  const text = $("json").value;
+  const fallback = () => { $("json").select(); status("Selected: copy it with your keyboard"); };
+  if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => status("Copied"), fallback); else fallback();
+};
+$("apply").onclick = () => {
+  try { V = load(JSON.parse($("import").value)); save(); buildAll(); status("Loaded"); $("import").value = ""; }
+  catch { status("That isn't valid JSON. Paste the whole block from Copy JSON."); }
+};
+
+function buildAll() { buildTimeline(); buildCurve(); buildFields(); buildAlertStyles(); writeJson(); drawToasts(); pageSized = false; }
+
+layoutStage();
+buildAll();
+new ResizeObserver(() => placeBars()).observe(tl);
+requestAnimationFrame(frame);
+initThree().catch((e) => { $("loading").textContent = "The model didn't load: " + e.message; console.error(e); });
+window.__dexMotion = { get t() { return t; }, set t(v) { t = v; dir = 0; }, V: () => V, ready: () => ready, queue };
+</script>

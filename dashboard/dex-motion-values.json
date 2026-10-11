@@ -1,0 +1,153 @@
+{
+ "version": 3,
+ "tracks": {
+  "pressIn": {
+   "delay": 0,
+   "duration": 30,
+   "curve": [
+    0.2,
+    0.8,
+    0.3,
+    1
+   ],
+   "depth": 0.1
+  },
+  "pressOut": {
+   "delay": 50,
+   "duration": 50,
+   "curve": [
+    0.5,
+    0,
+    0.75,
+    0
+   ]
+  },
+  "dim": {
+   "delay": 100,
+   "duration": 420,
+   "curve": [
+    0.4,
+    0,
+    0.2,
+    1
+   ],
+   "amount": 0.1
+  },
+  "blur": {
+   "delay": 100,
+   "duration": 480,
+   "curve": [
+    0.4,
+    0,
+    0.2,
+    1
+   ],
+   "amount": 6
+  },
+  "move": {
+   "delay": 50,
+   "duration": 660,
+   "curve": [
+    0.113,
+    0.891,
+    0.724,
+    0.334
+   ]
+  },
+  "scale": {
+   "delay": 100,
+   "duration": 640,
+   "curve": [
+    0.2,
+    0.8,
+    0.3,
+    1
+   ]
+  },
+  "turn": {
+   "delay": 30,
+   "duration": 600,
+   "curve": [
+    0.25,
+    1.1,
+    0.4,
+    1
+   ],
+   "swing": 12
+  },
+  "open": {
+   "delay": 100,
+   "duration": 420,
+   "curve": [
+    0,
+    1.063,
+    0.29,
+    0.639
+   ]
+  },
+  "page": {
+   "delay": 50,
+   "duration": 218,
+   "curve": [
+    0.06,
+    1.112,
+    0.3,
+    1
+   ]
+  }
+ },
+ "closed": {
+  "width": 40,
+  "top": 28,
+  "right": 23,
+  "tiltX": -2,
+  "tiltY": -31,
+  "tiltZ": 5
+ },
+ "open": {
+  "fill": 0.94,
+  "offsetY": 0
+ },
+ "path": {
+  "c1": [
+   2.006,
+   0.424
+  ],
+  "c2": [
+   1.184,
+   0.819
+  ]
+ },
+ "close": {
+  "speed": 1.4
+ },
+ "alerts": {
+  "lights": 1,
+  "toast": 1,
+  "blinkMs": 1000,
+  "glow": 12,
+  "lid": 0.23,
+  "lidMs": 220,
+  "lidCurve": [
+   0.3,
+   0,
+   0.2,
+   1
+  ],
+  "toastMs": 380,
+  "toastCurve": [
+   0.2,
+   1.1,
+   0.3,
+   1
+  ],
+  "height": 36,
+  "font": 14,
+  "padX": 10,
+  "icon": 21,
+  "radius": 8,
+  "tuck": 20,
+  "offsetY": 5,
+  "stack": 6
+ }
+}
