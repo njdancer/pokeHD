@@ -204,14 +204,16 @@ def obj_table_game(rng, x, z):
     """A table as the game draws them: a big top, a short front (legs or a skirt)."""
     w, d, h = rng.uniform(6, 16), rng.uniform(4, 12), rng.uniform(2, 5)
     a = alb(rng, 0.3); t = rng.uniform(0.5, 1.5)
-    prims = [Prim("box", (x, 2 * h - t, z), b=(w, t, d), rad=rng.choice([0, 0.3]), albedo=a, tex=random_tex(rng) if rng.random() < 0.5 else None)]
+    plain = TOP_PLAIN > 0 and rng.random() < TOP_PLAIN   # the game's tables: a flat, mid-grey top
+    if plain: a = ALB[1]
+    prims = [Prim("box", (x, 2 * h - t, z), b=(w, t, d), rad=rng.choice([0, 0.3]), albedo=a, tex=random_tex(rng) if rng.random() < 0.5 and not plain else None)]
     if rng.random() < 0.5:  # skirt: a solid front just under the top
         prims.append(Prim("box", (x, h - t, z), b=(w - 0.8, h - t, d - 0.8), albedo=ALB[rng.integers(1, 4)], tex=random_tex(rng)))
     else:
         for sx in (-1, 1):
             for sz in (-1, 1):
                 prims.append(Prim("box", (x + sx * (w - 0.8), h, z + sz * (d - 0.8)), b=(0.6, h, 0.6), albedo=ALB[rng.integers(1, 4)]))
-    for _ in range(int(rng.integers(0, 3))):  # things on the table
+    for _ in range(int(rng.integers(0, 2 if plain else 3))):  # things on the table
         prims.append(Prim("box", (x + rng.uniform(-w, w) * 0.7, 2 * h + 1, z + rng.uniform(-d, d) * 0.6), b=(rng.uniform(0.8, 2.5), rng.uniform(0.5, 2), rng.uniform(0.8, 2)), albedo=alb(rng)))
     return prims
 
@@ -220,8 +222,10 @@ def obj_chair(rng, x, z):
     """A stool or chair: a small seat top over a short front, sometimes a back rest behind."""
     w, d, h = rng.uniform(2.5, 6), rng.uniform(2.5, 6), rng.uniform(1.5, 4)
     a = alb(rng, 0.2)
-    prims = [Prim("box", (x, h, z), b=(w, h, d), rad=rng.choice([0, 0.4, 1.0]), albedo=a, tex=random_tex(rng) if rng.random() < 0.4 else None)]
-    if rng.random() < 0.5:
+    plain = TOP_PLAIN > 0 and rng.random() < TOP_PLAIN
+    if plain: a = ALB[1]
+    prims = [Prim("box", (x, h, z), b=(w, h, d), rad=rng.choice([0, 0.4, 1.0]), albedo=a, tex=random_tex(rng) if rng.random() < 0.4 and not plain else None)]
+    if rng.random() < CHAIR_BACK:
         bh = rng.uniform(2, 6)
         prims.append(Prim("box", (x, 2 * h + bh, z - d + 0.6), b=(w, bh, 0.6), albedo=a))
     return prims
@@ -384,10 +388,19 @@ def calibrated_style(rng):
 
 
 STYLE_RAND = float(os.environ.get("STYLE_RAND", "0"))  # share of scenes with randomised outlines and dither
+TOP_LIT = float(os.environ.get("TOP_LIT", "0"))  # share of scenes lit from above: light tops, dark fronts (game furniture)
+# Fitted by calib_furniture.search() to the hand-made test objects' P(shade | top, front), 2026-10-11.
+TOP_LIT_PARAMS = dict(el=(49.2, 59.2), ambient=(0.45, 0.51), kd=(0.65, 0.75), th=((0.776, 0.836), (0.541, 0.601), (0.439, 0.499)))
+TOP_PLAIN = float(os.environ.get("TOP_PLAIN", "0"))  # share of tables and chairs with a plain mid-grey top
+CHAIR_BACK = float(os.environ.get("CHAIR_BACK", "0.5"))  # share of chairs with a back rest (real ones: few)
 
 
 def random_style(rng, view):
     st = _random_style(rng, view)
+    if TOP_LIT > 0 and rng.random() < TOP_LIT:
+        P = TOP_LIT_PARAMS
+        st.update(el=rng.uniform(*P["el"]), ambient=rng.uniform(*P["ambient"]), kd=rng.uniform(*P["kd"]), wrap=0.0,
+                  thresholds=tuple(sorted((rng.uniform(*t) for t in P["th"]), reverse=True)), use_ao=True)
     if STYLE_RAND > 0 and rng.random() < STYLE_RAND:
         # Randomise what the game doesn't encode consistently: outline on/off, shade, gaps; dither strength.
         st.update(outline=rng.random() < 0.85, outline_shade=int(rng.choice([3, 3, 2])),

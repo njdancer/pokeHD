@@ -16,7 +16,7 @@ from .paths import DATA
 GEN_VERSION = 1   # bump when render/style/scenes change in a way that changes the pixels
 SHADE = np.array([255, 170, 85, 0], np.uint8)
 SHARE_VARS = {"room": "ROOM_SHARE", "furniture": "FURNITURE_SHARE", "white": "WHITE_SHARE", "posed": "POSED_SHARE",
-              "styleRand": "STYLE_RAND"}
+              "styleRand": "STYLE_RAND", "topLit": "TOP_LIT", "chairBack": "CHAIR_BACK", "topPlain": "TOP_PLAIN"}
 
 
 def recipe_id(r):

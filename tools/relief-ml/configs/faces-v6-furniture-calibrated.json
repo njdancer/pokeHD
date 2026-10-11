@@ -1,0 +1,12 @@
+{
+  "extends": "faces-v3",
+  "title": "Five faces: furniture rooms calibrated to the game (light tops, dark fronts)",
+  "why": "faces-v3's made-up furniture had tops and fronts in the same shades; in the game, tops are light grey and fronts mostly black. Matching that should let tables and chairs transfer.",
+  "changes": ["Furniture rooms re-rendered: lit from above (fitted to the hand-made objects' shades), plain mid-grey table and chair tops (80%), fewer chair backs (10%)", "Shade mismatch with real furniture down from 0.66 to 0.31 (0 = identical)"],
+  "datasets": [
+    {"label": "Outdoor scenes (map v2)", "view": "map", "seed": 0, "n": 6000, "shard": 100, "shares": {}},
+    {"label": "Outdoor scenes, game-like ground (map v3)", "view": "map", "seed": 200000, "n": 4000, "shard": 100, "shares": {}},
+    {"label": "Half indoor rooms (map v4)", "view": "map", "seed": 300000, "n": 2000, "shard": 100, "shares": {"room": 0.5}},
+    {"label": "Calibrated furniture rooms", "view": "map", "seed": 1000000, "n": 3000, "shard": 100, "shares": {"room": 1, "furniture": 0.8, "topLit": 1, "topPlain": 0.8, "chairBack": 0.1}}
+  ]
+}
