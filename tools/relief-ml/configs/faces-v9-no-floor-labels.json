@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v8-combined",
+  "title": "faces-v8 without floor labels",
+  "why": "With trusted labels, chairs fall to ~40% even though chair tiles carry no label. Suspect: indoors, only floor (top) and walls (front) are labelled, so the model learns 'not floor = front'. Made-up rooms already teach floors well (92% without labels), so drop floor labels.",
+  "changes": ["Rule labels no longer used for floor tiles"],
+  "real": {"labels": ["ground", "lawn", "tall-grass", "flower", "water", "shore", "bridge", "roof", "wall", "wall-interior", "window", "door", "picture"]}
+}

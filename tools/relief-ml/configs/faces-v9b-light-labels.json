@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v8-combined",
+  "title": "faces-v8 with fewer real maps per batch",
+  "why": "Alternative explanation for the chair collapse: half of every batch is real maps, which drowns out the made-up furniture. Use real maps for 15% of each batch instead of 50%.",
+  "changes": ["Real maps share of each batch 50% → 15%"],
+  "real": {"share": 0.15}
+}
