@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v8-combined",
+  "title": "faces-v8, seed 2",
+  "why": "faces-v9 (no floor labels) fell from 81% to 68%, mostly on tables and chairs. Before trusting either number, check how much a model like v8 varies from one training run to the next.",
+  "changes": ["Same as faces-v8 with a different random seed"],
+  "train": {"seed": 2}
+}

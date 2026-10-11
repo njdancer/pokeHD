@@ -28,6 +28,7 @@ def main(argv=None):
     s = sp.add_parser("event"); s.add_argument("kind"); s.add_argument("title"); s.add_argument("--body"); s.add_argument("--run", action="append")
     s = sp.add_parser("audit"); s.add_argument("run", help="a run trained without rule labels")
     s = sp.add_parser("reeval"); s.add_argument("run", nargs="+")
+    s = sp.add_parser("ensemble"); s.add_argument("name"); s.add_argument("run", nargs="+")
     sp.add_parser("fetch-paintings")
     sp.add_parser("flags")
     s = sp.add_parser("flag-reply"); s.add_argument("id"); s.add_argument("status"); s.add_argument("reply")
@@ -77,6 +78,9 @@ def main(argv=None):
         for rid in a.run:
             r = Run(rid); cfg = r.h["config"]
             res = evals.run_all(_load_model(cfg, rid), cfg, r); r.summary(**res); print(rid, {k: round(v, 3) for k, v in res.items()})
+    elif a.cmd == "ensemble":
+        from . import ensemble
+        print(ensemble.build(a.name, a.run))
     elif a.cmd == "fetch-paintings":
         from . import paintings
         print("painted tiles, pictures:", paintings.fetch())
