@@ -98,6 +98,7 @@ METRIC_DEFS = {
     "val_depth_err": dict(label="Synthetic depth error", unit="px", better="lower", group="synthetic", help="Average depth mistake in pixels after lining up each picture's mean depth."),
     "val_inside_acc": dict(unit="%", label="Silhouette accuracy", better="higher", group="synthetic", help="Share of pixels correctly called object or background."),
     "score": dict(unit="%", label="Headline score", better="higher", group="real", primary=True, help="Average of the hand-made objects (mostly furniture) and Nick's paintings (mostly buildings), so neither can be traded away unseen."),
+    "test_cat_mean": dict(unit="%", label="Hand-made set, mean of kinds", better="higher", group="real", primary=True, help="Average of four kinds of object (buildings, chairs, tables, storage), so getting one kind right can't hide another going wrong."),
     "test_acc": dict(unit="%", label="Hand-made test set", better="higher", group="real", help="Share of pixels on 13 hand-boxed real objects whose top/front face is right."),
     "test_obj_mean": dict(unit="%", label="Test set, mean per object", better="higher", group="real", help="Average of each object's score, so small objects count as much as big ones."),
     "test_obj_mean_lo": dict(unit="%", label="Test set, low end of 95% range", better="higher", group="real", help="With only 13 objects the score is uncertain; the true value is very likely above this."),

@@ -29,6 +29,15 @@ def bootstrap(scores, n=2000, seed=0):
     return float(np.percentile(m, 2.5)), float(np.percentile(m, 97.5))
 
 
+def category(title):
+    """Test objects by kind, so a model can't win by being good at the most numerous kind only."""
+    t = title.lower()
+    if "roof" in t or "wall" in t: return "buildings"
+    if "chair" in t: return "chairs"
+    if "table" in t or "desk" in t: return "tables"
+    return "storage"   # shelves, bookshelves, TV, counter
+
+
 def faces_of(pred):
     return pred["faces"] if "faces" in pred else (pred["normal"] @ tasks.FACES.T).argmax(-1).astype(np.uint8)
 
@@ -128,12 +137,16 @@ def testset(model, cfg, run):
         ps.item(f"map:{name}", name, img.shape[1], img.shape[0], files, scores=dict(acc=float((f[m] == truth[m]).mean())))
     acc = hits / n; om = float(np.mean([o["scores"]["acc"] for o in per]))
     lo, hi = bootstrap([o["scores"]["acc"] for o in per])
+    cats = {}
+    for o in per: cats.setdefault(category(o["title"]), []).append(o["scores"]["acc"])
+    cat_mean = float(np.mean([np.mean(v) for v in cats.values()]))
     run.eval("testset", dict(title=f"Hand-made test set ({len(per)} objects)", split="testset", circular=False,
                              overall=dict(acc=float(acc), obj_mean=om, obj_mean_lo=lo, obj_mean_hi=hi, rule_acc=float(rule_hits / n)),
                              perClass=dict(acc={c: float(K[i, i] / K[i].sum()) for i, c in enumerate(FACE_LABELS[:3]) if K[i].sum()}),
                              confusion=dict(labels=FACE_LABELS, matrix=K.tolist()),
                              perObject=per, preds=[ps.save()]))
-    return dict(test_acc=float(acc), test_obj_mean=om, test_obj_mean_lo=lo, test_obj_mean_hi=hi)
+    return dict(test_acc=float(acc), test_obj_mean=om, test_obj_mean_lo=lo, test_obj_mean_hi=hi, test_cat_mean=cat_mean,
+                **{f"test_{k}": float(np.mean(v)) for k, v in cats.items()})
 
 
 def real_maps(model, cfg, run):
