@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v14-self-distill",
+  "title": "faces-v14, seed 2",
+  "why": "Second seed: results must hold across training runs.",
+  "changes": ["Different random seed"],
+  "train": {"seed": 2}
+}
