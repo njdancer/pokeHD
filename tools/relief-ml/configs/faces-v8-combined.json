@@ -1,0 +1,8 @@
+{
+  "extends": "faces-v6-furniture-calibrated",
+  "title": "Five faces: trusted labels + calibrated furniture + more context",
+  "why": "Each idea fixed something: clear-cut labels fix buildings (v7), more context fixes roofs and the counter without labels (v4), calibrated furniture should fix chairs (v6). Put them together.",
+  "changes": ["Dilated bottleneck and whole 64px scenes (from faces-v4)"],
+  "model": {"dilate": true},
+  "train": {"crop": 64}
+}
