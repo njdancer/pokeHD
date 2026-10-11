@@ -1,7 +1,7 @@
 // The Pokédex menu (p2-menu): one menu around the Pokédex, replacing Start and Select. Five tabs
 // (Pokémon, People, Inventory, Map, Me), each keeping its own place; and the game's requests
 // (battle Team and Bag, who's next, PC, Mart) as a sheet over the game instead. Storybook look.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { createPortal } from "react-dom";
 import { Env, useEnv, type MenuEnv } from "./env.tsx";
 import { CloseIcon, TabIcon, type TabId } from "./icons.tsx";
@@ -64,12 +64,17 @@ export interface DexMenuProps {
   layout?: Layout;
   /** Landscape's tabs: a sidebar with words (default), or a narrow rail of icons. */
   side?: "full" | "rail";
+  /**
+   * A second copy to draw at the same time in the other layout, for crossfading while the dex
+   * turns. It shows the same tab and page as the main one, and can't be tapped.
+   */
+  also?: { screen: HTMLElement; layout: Layout } | null;
 }
 
 /** Portrait: tabs along the bottom. Landscape: a sidebar, and wide pages in two columns. */
 export type Layout = "portrait" | "landscape";
 
-export function DexMenu({ env: base, open, onClose, start, request, onRequestDone, notice, screen, layout, side }: DexMenuProps) {
+export function DexMenu({ env: base, open, onClose, start, request, onRequestDone, notice, screen, layout, side, also }: DexMenuProps) {
   const [toastText, setToastText] = useState<{ text: string; n: number } | null>(null);
   const toast = useCallback((text: string) => {
     // Actions that finish later (in the game) return "", and their words follow as a notice.
@@ -87,11 +92,19 @@ export function DexMenu({ env: base, open, onClose, start, request, onRequestDon
     if (notice) setToastText((t) => ({ text: notice.text, n: (t?.n ?? 0) + 1 }));
   }
   const env = useMemo<MenuEnv>(() => ({ ...base, toast }), [base, toast]);
+  // Where you are (tab, and the screens open in each), shared by every copy drawn.
+  const place = useState(() => {
+    const s = Object.fromEntries(TABS.map((t) => [t.id, [rootOf(t.id)]])) as Record<TabId, Screen[]>;
+    if (start?.screen) s[start.tab] = [rootOf(start.tab), start.screen];
+    return { tab: start?.tab ?? ("dex" as TabId), stacks: s, motion: "none" as Motion };
+  });
+  const dex = { open, onClose, place, side };
   return (
     <Env.Provider value={env}>
       <div className={`m-root${open ? " open" : ""}${request ? " asked" : ""}`}>
         <div className="m-shade" onClick={request ? undefined : onClose} />
-        {screen ? createPortal(<Dex open={open} onClose={onClose} start={start} layout={layout} side={side} />, screen) : <Dex open={open} onClose={onClose} start={start} layout={layout} side={side} floating />}
+        {screen ? createPortal(<Dex {...dex} layout={layout} />, screen) : <Dex {...dex} layout={layout} floating />}
+        {also && createPortal(<Dex {...dex} layout={also.layout} copy />, also.screen)}
         {request && <Sheet key={request.kind} request={request} onDone={() => onRequestDone?.()} />}
         {toastText && (
           <div className="m-toast" key={toastText.n} role="status">
@@ -124,12 +137,19 @@ function useShape(forced?: Layout) {
   return [ref, forced ?? shape] as const;
 }
 
-function Dex({ open, onClose, start, layout: forced, side, floating }: { open: boolean; onClose(): void; start?: DexMenuProps["start"]; layout?: Layout; side?: DexMenuProps["side"]; floating?: boolean }) {
-  const [{ tab, stacks, motion }, setState] = useState(() => {
-    const s = Object.fromEntries(TABS.map((t) => [t.id, [rootOf(t.id)]])) as Record<TabId, Screen[]>;
-    if (start?.screen) s[start.tab] = [rootOf(start.tab), start.screen];
-    return { tab: start?.tab ?? ("dex" as TabId), stacks: s, motion: "none" as Motion };
-  });
+type Place = { tab: TabId; stacks: Record<TabId, Screen[]>; motion: Motion };
+
+function Dex({ open, onClose, place, layout: forced, side, floating, copy }: {
+  open: boolean;
+  onClose(): void;
+  place: [Place, Dispatch<SetStateAction<Place>>];
+  layout?: Layout;
+  side?: DexMenuProps["side"];
+  floating?: boolean;
+  /** The extra copy drawn while the dex turns: looks the same, can't be used. */
+  copy?: boolean;
+}) {
+  const [{ tab, stacks, motion }, setState] = place;
   const stack = stacks[tab];
   const env = useEnv();
   const update = (t: TabId, next: Screen[], how: Motion) => setState((st) => ({ tab: t, stacks: { ...st.stacks, [t]: next }, motion: how }));
@@ -149,13 +169,13 @@ function Dex({ open, onClose, start, layout: forced, side, floating }: { open: b
   const gifts = env.model.friends.filter((f) => f.gift).length;
   const [ref, layout] = useShape(forced);
   useEffect(() => {
-    if (!open) return;
+    if (!open || copy) return;
     const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
-  }, [open, onClose]);
+  }, [open, onClose, copy]);
   return (
-    <div ref={ref} className={`m-dex${floating ? " floating" : ""}${open ? " open" : ""}`} data-layout={layout} data-side={side ?? "full"} role="dialog" aria-label="Pokédex" aria-hidden={!open} inert={!open}>
+    <div ref={ref} className={`m-dex${floating ? " floating" : ""}${open ? " open" : ""}`} data-layout={layout} data-side={side ?? "full"} role="dialog" aria-label="Pokédex" aria-hidden={!open || copy} inert={!open || copy}>
       <NavContext.Provider value={nav}>
         <div className={`m-screen m-${motion}`} key={`${tab} ${stack.length} ${top.k}`}>
           {render(top)}
