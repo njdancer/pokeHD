@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v4-context",
+  "title": "faces-v4-context, seed 1",
+  "why": "Run-to-run luck is large; a second seed of each setup gives a fair comparison.",
+  "changes": ["Different random seed"],
+  "train": {"seed": 1}
+}
