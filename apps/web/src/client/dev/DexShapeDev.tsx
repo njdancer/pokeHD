@@ -145,7 +145,7 @@ export function DexShapeDev() {
         <input type="range" min={0} max={80} step={0.5} value={r} aria-label="Screen corner radius" onChange={(e) => setRadiusPx(+e.target.value)} />
         <div className="ds-chips">
           <button type="button" aria-pressed={radiusPx === "match"} onClick={() => setRadiusPx("match")}>
-            Match {phone.name} ({Math.round(phone.radius)} px{phone.known ? "" : ", a guess"})
+            Match {phone.name} ({Math.round(phone.radius)} px{phone.known ? "" : ", unknown display"})
           </button>
           <button type="button" aria-pressed={radiusPx === 0} onClick={() => setRadiusPx(0)}>Square</button>
         </div>

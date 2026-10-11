@@ -46,7 +46,8 @@ export function pixelTexture(width: number, height: number): THREE.DataTexture {
 
 /**
  * Paints colour numbers into `tex` through a palette register and a ramp. `transparent` marks
- * pixels to leave clear (a background mask, or colour 0 for sprites).
+ * pixels to leave clear (a background mask, or colour 0 for sprites). `art`, when given, is a
+ * hand-coloured version of the picture (56×56 RGBA, same frame): its colour wins wherever it has one.
  */
 export function paint(
   tex: THREE.DataTexture,
@@ -54,6 +55,7 @@ export function paint(
   register: number,
   ramp: Ramp,
   transparent: (i: number) => boolean,
+  art: Uint8ClampedArray | null = null,
 ): void {
   const { width, height } = tex.image as { width: number; height: number };
   const data = tex.image.data as Uint8Array;
@@ -63,8 +65,10 @@ export function paint(
       const i = y * width + x;
       const c = pixels[i]!;
       if (c === NOT_DRAWN || transparent(i)) continue;
+      const out = ((height - 1 - y) * width + x) * 4;
+      if (art && art[i * 4 + 3]! > 0) { data.set([art[i * 4]!, art[i * 4 + 1]!, art[i * 4 + 2]!, 255], out); continue; }
       const hex = ramp[shade(register, c)]!;
-      data.set([hex >> 16, (hex >> 8) & 255, hex & 255, 255], ((height - 1 - y) * width + x) * 4);
+      data.set([hex >> 16, (hex >> 8) & 255, hex & 255, 255], out);
     }
   }
   tex.needsUpdate = true;

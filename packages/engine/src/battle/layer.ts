@@ -43,7 +43,16 @@ export interface BattleView {
   palettes: readonly [number, number, number];
   /** Where the battle screen sits on the Game Boy's screen, in pixels: the game shakes it. */
   origin: { x: number; y: number };
+  /**
+   * Hand-coloured pictures to show instead of the SGB colours (56×56 RGBA in the picture's own
+   * frame), per side. Used only while the background palette is the normal one, so the game's
+   * flashes and fades still show.
+   */
+  art?: Partial<Record<Side, Uint8ClampedArray | null>>;
 }
+
+/** rBGP outside flashes and fades: shades 0, 1, 2, 3 in order. */
+const NORMAL_BGP = 0b11100100;
 
 /** How the arena looks: the options compared for Nick (p2-battles). */
 export type ArenaStyle = "field" | "bases" | "stage";
@@ -107,7 +116,7 @@ interface Picture {
   mesh: THREE.Mesh;
   material: THREE.MeshStandardNodeMaterial;
   texture: THREE.DataTexture;
-  painted: { version: number; register: number; ramp: Ramp } | null;
+  painted: { version: number; register: number; ramp: Ramp; art: Uint8ClampedArray | null } | null;
   mask: Uint8Array;
 }
 
@@ -211,12 +220,13 @@ export function createBattleLayer(initial: ArenaStyle = "field"): BattleLayer {
     if (!view) return;
     const register = all.palettes[0];
     const ramp = all.ramps[side];
+    const art = register === NORMAL_BGP ? (all.art?.[side] ?? null) : null;
     const p = pic.painted;
-    if (!p || p.version !== view.version || p.register !== register || p.ramp !== ramp) {
+    if (!p || p.version !== view.version || p.register !== register || p.ramp !== ramp || p.art !== art) {
       if (!p || p.version !== view.version) pic.mask = backgroundMask(view.pixels, PIC, PIC);
       const mask = pic.mask;
-      paint(pic.texture, view.pixels, register, ramp, (i) => mask[i] === 1);
-      pic.painted = { version: view.version, register, ramp };
+      paint(pic.texture, view.pixels, register, ramp, (i) => mask[i] === 1, art);
+      pic.painted = { version: view.version, register, ramp, art };
     }
     // A slide across the screen moves the picture along the battle line; down sinks it.
     const s = SCREEN_CENTRE[side];

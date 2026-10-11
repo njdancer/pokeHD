@@ -21,6 +21,8 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
   loads it when it has no ROM. Locally, the Vite dev server serves `rom/pokeblue.gb` at
   `/__dev/rom` and the app auto-loads it. Never expose the ROM any other way (no public assets,
   no public bucket, nobody who isn't signed in).
+  **Second exception (temporary, D43):** a fan's hand-coloured Pokémon pictures, as one atlas in
+  the same private bucket, served by `GET /api/colour-set` behind the same gate as the ROM.
 - **Keep it private.** The GitHub repo is private. Don't name public things "Pokémon".
 - **Visuals are the point.** Pixel art stays crisp (no xBR/HQx smoothing on sprites); the
   HD treatment comes from 3D geometry, lighting, materials and post-processing. It's always
