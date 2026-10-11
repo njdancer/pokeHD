@@ -97,9 +97,10 @@
   }
  },
  "closed": {
-  "width": 40,
-  "top": 28,
-  "right": 23,
+  "width": 36,
+  "height": 56,
+  "top": 12,
+  "right": 12,
   "tiltX": -2,
   "tiltY": -31,
   "tiltZ": 5

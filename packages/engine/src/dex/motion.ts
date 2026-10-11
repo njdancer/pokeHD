@@ -33,8 +33,11 @@ export interface DexMotion {
     blur: Track & { amount: number };
     turn: Track & { swing: number };
   };
-  /** The closed dex (the menu button): its width in CSS pixels, inset from the top-right, tilt in degrees. */
-  closed: { width: number; top: number; right: number; tiltX: number; tiltY: number; tiltZ: number };
+  /**
+   * The closed dex (the menu button): its width in CSS pixels, at most `height` tall (its screen
+   * grows taller with the phone's), inset from the top-right of the safe area, tilt in degrees.
+   */
+  closed: { width: number; height: number; top: number; right: number; tiltX: number; tiltY: number; tiltZ: number };
   /** Portrait's open pose and path. */
   open: OpenPose;
   path: MotionPath;
@@ -60,7 +63,8 @@ export const DEX_MOTION: DexMotion = {
     open: { delay: 100, duration: 420, curve: [0, 1.063, 0.29, 0.639] },
     page: { delay: 50, duration: 218, curve: [0.06, 1.112, 0.3, 1] },
   },
-  closed: { width: 40, top: 28, right: 23, tiltX: -2, tiltY: -31, tiltZ: 5 },
+  // The size and place of the settings ball it replaced (Nick 2026-10-11), not the tuner's.
+  closed: { width: 36, height: 56, top: 12, right: 12, tiltX: -2, tiltY: -31, tiltZ: 5 },
   open: { fill: 0.94, offsetY: 0 },
   path: { c1: [2.006, 0.424], c2: [1.184, 0.819] },
   close: { speed: 1.4 },
@@ -259,6 +263,8 @@ export interface DexFrame {
    * frame when left out.
    */
   fit?: { width: number; height: number; x: number; y: number };
+  /** The safe area's top and right insets (CSS px): the closed dex sits inside them. */
+  inset?: { top: number; right: number };
 }
 
 /** The biggest the open dex's screen gets (CSS px, portrait): the largest iPhone's display, 16/17 Pro Max (Nick 2026-10-11). */
@@ -312,8 +318,9 @@ const rad = (d: number) => (d * Math.PI) / 180;
 
 /** The closed dex's box in CSS pixels (top-right of the frame, upright whatever the orientation). */
 export function buttonRect(m: DexMotion, frame: DexFrame, measure: DexMeasure): { x: number; y: number; w: number; h: number } {
-  const w = m.closed.width, h = w * (measure.shut.h / measure.shut.w);
-  return { x: frame.width - m.closed.right - w, y: m.closed.top, w, h };
+  const ratio = measure.shut.h / measure.shut.w;
+  const w = Math.min(m.closed.width, m.closed.height / ratio), h = w * ratio;
+  return { x: frame.width - (frame.inset?.right ?? 0) - m.closed.right - w, y: (frame.inset?.top ?? 0) + m.closed.top, w, h };
 }
 
 /** The open dex's scale with it rolled to `angle` degrees: its screen fills the frame. */
