@@ -111,8 +111,19 @@ def _best(run, cfg):
         lab.event("milestone", f"New best {cfg['task']} model: {run.id} ({key} {val:.4g}, was {cur_val if cur_val is None else round(cur_val, 4)})", runs=[run.id])
 
 
+def _single_instance():
+    """Exactly one worker per RELIEF_HOME: two would train the same run twice."""
+    import fcntl
+    f = open(LOGS / "worker.lock", "w")
+    try: fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError: raise SystemExit("another worker is already running")
+    f.write(str(os.getpid())); f.flush()
+    return f
+
+
 def worker(once=False):
     """Process the queue forever (or until empty with once=True)."""
+    _lock = _single_instance()
     stop = {"flag": False}
     def term(*_): stop["flag"] = True; raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, term)
