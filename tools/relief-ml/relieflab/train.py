@@ -52,12 +52,14 @@ METRIC_DEFS = {
     "scenes_per_s": dict(label="Throughput", unit="scenes/s", group="speed", help="Training speed on the GPU."),
     "val_angle": dict(label="Synthetic val angle", unit="°", better="lower", group="synthetic", help="Average angle between predicted and true surface direction on held-out made-up scenes."),
     "val_angle_obj": dict(label="Synthetic val angle (objects)", unit="°", better="lower", group="synthetic", help="Same, on object pixels only (not ground or background)."),
-    "val_face_acc": dict(label="Synthetic face accuracy (objects)", better="higher", group="synthetic", help="Share of object pixels in held-out made-up scenes given the right face."),
+    "val_face_acc": dict(unit="%", label="Synthetic face accuracy (objects)", better="higher", group="synthetic", help="Share of object pixels in held-out made-up scenes given the right face."),
     "val_depth_err": dict(label="Synthetic depth error", unit="px", better="lower", group="synthetic", help="Average depth mistake in pixels after lining up each picture's mean depth."),
-    "val_inside_acc": dict(label="Silhouette accuracy", better="higher", group="synthetic", help="Share of pixels correctly called object or background."),
-    "test_acc": dict(label="Hand-made test set", better="higher", group="real", primary=True, help="Share of pixels on 13 hand-boxed real objects whose top/front face is right."),
-    "test_obj_mean": dict(label="Test set, mean per object", better="higher", group="real", help="Average of each object's score, so small objects count as much as big ones."),
-    "real_balanced": dict(label="Real maps vs labels (balanced)", better="higher", group="real", help="Agreement with the tile-label rule on 22 real maps, averaged over top/front/slope. Circular if rule labels were trained on."),
+    "val_inside_acc": dict(unit="%", label="Silhouette accuracy", better="higher", group="synthetic", help="Share of pixels correctly called object or background."),
+    "test_acc": dict(unit="%", label="Hand-made test set", better="higher", group="real", primary=True, help="Share of pixels on 13 hand-boxed real objects whose top/front face is right."),
+    "test_obj_mean": dict(unit="%", label="Test set, mean per object", better="higher", group="real", help="Average of each object's score, so small objects count as much as big ones."),
+    "test_obj_mean_lo": dict(unit="%", label="Test set, low end of 95% range", better="higher", group="real", help="With only 13 objects the score is uncertain; the true value is very likely above this."),
+    "test_obj_mean_hi": dict(unit="%", label="Test set, high end of 95% range", better="higher", group="real", help="…and very likely below this."),
+    "real_balanced": dict(unit="%", label="Real maps vs labels (balanced)", better="higher", group="real", help="Agreement with the tile-label rule on 22 real maps, averaged over top/front/slope. Circular if rule labels were trained on."),
 }
 
 
