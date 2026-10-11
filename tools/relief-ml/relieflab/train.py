@@ -91,6 +91,7 @@ METRIC_DEFS = {
     "test_obj_mean": dict(unit="%", label="Test set, mean per object", better="higher", group="real", help="Average of each object's score, so small objects count as much as big ones."),
     "test_obj_mean_lo": dict(unit="%", label="Test set, low end of 95% range", better="higher", group="real", help="With only 13 objects the score is uncertain; the true value is very likely above this."),
     "test_obj_mean_hi": dict(unit="%", label="Test set, high end of 95% range", better="higher", group="real", help="…and very likely below this."),
+    "paint_acc": dict(unit="%", label="Nick's paintings", better="higher", group="real", primary=False, help="Share of pixels, on held-out maps, whose face matches Nick's relief-editor paintings. The most trustworthy score once enough is painted."),
     "real_balanced": dict(unit="%", label="Real maps vs labels (balanced)", better="higher", group="real", help="Agreement with the tile-label rule on 22 real maps, averaged over top/front/slope. Circular if rule labels were trained on."),
 }
 

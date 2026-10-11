@@ -198,6 +198,8 @@ def run_all(model, cfg, run):
     if cfg["task"] in ("faces", "normals"):
         if ev.get("testset"): out.update(testset(model, cfg, run))
         if ev.get("realMaps"): out.update(real_maps(model, cfg, run))
+        from . import paintings
+        out.update(paintings.evaluate(model, cfg, run, EVAL_MAPS))
     if cfg["task"] == "picture" and ev.get("pictures"):
         pictures(model, cfg, run)
     return out

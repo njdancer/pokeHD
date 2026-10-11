@@ -27,6 +27,7 @@ def main(argv=None):
     s = sp.add_parser("event"); s.add_argument("kind"); s.add_argument("title"); s.add_argument("--body"); s.add_argument("--run", action="append")
     s = sp.add_parser("audit"); s.add_argument("run", help="a run trained without rule labels")
     s = sp.add_parser("reeval"); s.add_argument("run", nargs="+")
+    sp.add_parser("fetch-paintings")
     sp.add_parser("flags")
     s = sp.add_parser("flag-reply"); s.add_argument("id"); s.add_argument("status"); s.add_argument("reply")
     a = ap.parse_args(argv)
@@ -72,6 +73,9 @@ def main(argv=None):
         for rid in a.run:
             r = Run(rid); cfg = r.h["config"]
             res = evals.run_all(_load_model(cfg, rid), cfg, r); r.summary(**res); print(rid, {k: round(v, 3) for k, v in res.items()})
+    elif a.cmd == "fetch-paintings":
+        from . import paintings
+        print("painted tiles, pictures:", paintings.fetch())
     elif a.cmd == "flags":
         for p in sorted((LAB / "flags").glob("*.json")) if (LAB / "flags").exists() else []:
             f = json.loads(p.read_text()); print(f"{f['id']} [{f['status']}] {f['kind']}: {f['note']}")
