@@ -165,3 +165,16 @@ def worker(once=False):
             r.set(status="failed", finished=lab.now(), error=tb[-2000:])
             lab.event("status", f"{job['run']} failed: {e!r}"[:200], body=f"```\n{tb[-1500:]}\n```", runs=[job["run"]])
             os.replace(f, QUEUE / "failed" / f.name)
+
+
+def prep(every=60):
+    """Generates the datasets of queued runs on the CPU while the worker trains on the GPU."""
+    while True:
+        for f in pending():
+            try:
+                job = json.loads(f.read_text())
+                for r in job["config"]["datasets"]:
+                    datasets.ensure(r, workers=6)
+            except Exception as e:
+                print(f"prep {f.name}: {e!r}", flush=True)
+        time.sleep(every)

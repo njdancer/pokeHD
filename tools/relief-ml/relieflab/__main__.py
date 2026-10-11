@@ -21,6 +21,7 @@ def main(argv=None):
     s = sp.add_parser("submit"); s.add_argument("config"); s.add_argument("--id")
     s = sp.add_parser("worker"); s.add_argument("--once", action="store_true")
     s = sp.add_parser("sync"); s.add_argument("--once", action="store_true")
+    sp.add_parser("prep")
     sp.add_parser("status")
     s = sp.add_parser("stop"); s.add_argument("run")
     s = sp.add_parser("ops"); s.add_argument("doing"); s.add_argument("--why", default=""); s.add_argument("--next", action="append", default=[]); s.add_argument("--run", action="append", default=[])
@@ -38,6 +39,9 @@ def main(argv=None):
     elif a.cmd == "worker":
         from .runner import worker
         worker(a.once)
+    elif a.cmd == "prep":
+        from .runner import prep
+        prep()
     elif a.cmd == "sync":
         from . import sync
         if a.once:
