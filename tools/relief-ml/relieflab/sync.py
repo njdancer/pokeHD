@@ -86,10 +86,8 @@ def loop(every=15):
             sent, err = once(state)
             if sent: STATE.write_text(json.dumps(state))
             if k % 8 == 0: pull_flags()
-            if k % 20 == 0:
-                from . import paintings
-                try: paintings.fetch()
-                except Exception as e: print(f"paintings: {e!r}", flush=True)
+            # Paintings are fetched only on purpose (`relieflab fetch-paintings`), once Nick says a set is real
+            # ground truth: editor work is often experiments (2026-10-11).
             (LOGS / "sync.json").write_text(json.dumps(dict(pid=os.getpid(), ts=lab.now(), sent=sent, errors=err, base=BASE)))
         except Exception as e:
             print(f"sync loop: {e!r}", flush=True)
