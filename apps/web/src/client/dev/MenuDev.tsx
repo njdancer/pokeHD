@@ -2,10 +2,10 @@
 // real menu components over the live HD world, in an iPhone 13 Pro sized frame (full screen on a
 // phone). A sample adventure stands in for the game; "Under the hood" logs the game routine each
 // tap would call. URL options for screenshots: ?open=1, ?tab=map, ?moment=wild, ?world=0,
-// ?turn=1 (the phone on its side), ?rail=1 (start with the slim sidebar). The menu draws into a
+// ?turn=1 (the phone on its side), ?rail=1 (start with the slim sidebar), ?r=4 (screen radius). The menu draws into a
 // stand-in for the open dex's screen, so its layout follows the screen's shape: tabs below in
 // portrait, a sidebar in landscape.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createEngine, DEFAULT_CYCLE, type Engine } from "@pokehd/engine";
 import { createLiveWorld, standingState, type LiveWorld } from "@pokehd/engine/world";
 import { MAP_NAMES, parseWorld, trainerClasses, type TrainerClass, type WorldData } from "@pokehd/rom";
@@ -305,7 +305,7 @@ export function MenuDev() {
               <button type="button" className={`md-dexbtn${env.model.friends.some((f) => f.gift) ? " alert" : ""}`} aria-label="Open the Pokédex" onClick={() => setOpen(true)} />
               {/* A stand-in for the open dex (its own threads own the real one and its motion). */}
               <div className={`md-opendex${open ? " open" : ""}`} aria-hidden="true">
-                <div className="md-opendex-screen" ref={setScreenEl} />
+                <div className="md-opendex-screen" ref={setScreenEl} style={query.get("r") ? ({ "--m-screen-r": `${query.get("r")}px` } as CSSProperties) : undefined} />
                 <i className="md-opendex-lights" />
                 <i className="md-opendex-pad" />
               </div>

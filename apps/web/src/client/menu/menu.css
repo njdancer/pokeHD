@@ -34,9 +34,11 @@
 /* Fills whatever it's drawn into (the dex's screen). The grid places the tabs: below the pages
    in portrait, beside them in landscape. */
 .m-dex {
-  /* --m-screen-r: the host's screen corner radius, inherited (34px if unset). */
-  --m-gap: 8px; --m-pad: 5px; --m-item: 58px;
-  --m-bar-r: max(0px, calc(var(--m-screen-r, 34px) - var(--m-gap))); --m-sel-r: max(0px, calc(var(--m-bar-r) - var(--m-pad)));
+  /* --m-screen-r: the host's screen corner radius, inherited (4px if unset: the canonical dex's
+     small rounding). Nested radii shrink by each inset but never below --m-min-r: past that they
+     keep the same radius rather than going square. */
+  --m-gap: 8px; --m-pad: 5px; --m-item: 58px; --m-min-r: 12px;
+  --m-bar-r: max(var(--m-min-r), calc(var(--m-screen-r, 4px) - var(--m-gap))); --m-sel-r: max(var(--m-min-r), calc(var(--m-bar-r) - var(--m-pad)));
   --m-side-full: clamp(150px, 26%, 196px); --m-side-rail: 76px; --m-side-w: var(--m-side-full);
   position: absolute; inset: 0; overflow: hidden; pointer-events: auto; container: dex / size;
   display: grid; grid-template: "screen" minmax(0, 1fr) "tabs" auto / minmax(0, 1fr);
@@ -51,7 +53,7 @@
 /* No dex to draw into (dev pages, for now the game): a plain panel over the world. */
 .m-dex.floating {
   left: calc(var(--m-safe-left) + 12px); right: calc(var(--m-safe-right) + 12px); top: calc(var(--m-safe-top) + 12px); bottom: calc(var(--m-safe-bottom) + 12px);
-  border-radius: var(--m-screen-r, 34px); box-shadow: 0 22px 48px #3a1e0866;
+  border-radius: var(--m-screen-r, 4px); box-shadow: 0 22px 48px #3a1e0866;
   transform-origin: calc(100% - 30px) 30px; transition: transform .34s cubic-bezier(.2, .9, .25, 1.04), opacity .2s ease;
   transform: scale(.2); opacity: 0; pointer-events: none;
 }
