@@ -11,7 +11,17 @@
 import * as THREE from "three/webgpu";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { loadDexModel, type DexModel } from "./model.ts";
+import { loadDexModel, type DexModel, type ScreenShape } from "./model.ts";
+
+export { loadDexModel, type DexModel, type ScreenShape };
+
+/** Space kept clear at each edge of the view when the camera pushes in to the screen (CSS px). */
+export interface Insets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
 
 /** Screen corners in CSS pixels: top-left, top-right, bottom-right, bottom-left. */
 export type ScreenQuad = [x: number, y: number][];
@@ -26,6 +36,10 @@ export interface DexDeviceOptions {
    * its screen nearly fills the view. Without one, or if it won't load, the simple built one.
    */
   model?: string;
+  /** The modelled screen's shape (model.ts `reshape`): taller to match the phone, rounded corners. */
+  screen?: ScreenShape;
+  /** Where the screen fills once pushed in: the view less these (a phone's safe area). */
+  insets?: Insets;
 }
 
 export interface DexDevice {
@@ -37,6 +51,10 @@ export interface DexDevice {
   readonly progress: number;
   /** The screen's size and shape: width over height. */
   readonly screenAspect: number;
+  /** Reshapes the modelled screen (no-op on the simple built one). */
+  reshape(shape: ScreenShape): void;
+  /** Changes the space the pushed-in screen keeps clear. */
+  setInsets(insets: Insets): void;
   /** Renders one frame now (for screenshots). */
   render(): Promise<void>;
   dispose(): void;
@@ -261,17 +279,26 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
       })
     : null;
   const shutCentre = new THREE.Vector3();
+  let frameW = W;
+  let frameH = H;
+  /** Centres the model as it is open, and frames it, after loading or reshaping. */
+  const place = () => {
+    if (!model) return;
+    model.root.position.copy(model.opened.getCenter(new THREE.Vector3())).negate();
+    model.shut.getCenter(shutCentre).add(model.root.position);
+    frameW = model.opened.max.x - model.opened.min.x;
+    frameH = model.opened.max.y - model.opened.min.y;
+  };
   if (model) {
     base.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
     });
     base.clear();
     base.add(model.root);
-    model.root.position.copy(model.opened.getCenter(new THREE.Vector3())).negate();
-    model.shut.getCenter(shutCentre).add(model.root.position);
+    if (options.screen) model.reshape(options.screen);
+    place();
   }
-  const frameW = model ? model.opened.max.x - model.opened.min.x : W;
-  const frameH = model ? model.opened.max.y - model.opened.min.y : H;
+  let insets: Insets = options.insets ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   // Framing: the open device's body fills the view's height (or width, on a narrow screen).
   let width = 1;
@@ -343,7 +370,13 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
       screenAt.multiplyScalar(1 / corners.length);
       const sw = v.copy(corners[1]!).applyMatrix4(space.matrixWorld).distanceTo(look.copy(corners[0]!).applyMatrix4(space.matrixWorld));
       const sh = v.copy(corners[3]!).applyMatrix4(space.matrixWorld).distanceTo(look.copy(corners[0]!).applyMatrix4(space.matrixWorld));
-      const near = Math.max((sh * 1.05) / (2 * tan()), (sw * 1.03) / (2 * tan() * camera.aspect));
+      // Fitted to the view less its insets, then shifted so it's centred in what's left.
+      const fw = Math.max(1, width - insets.left - insets.right);
+      const fh = Math.max(1, height - insets.top - insets.bottom);
+      const near = Math.max((sh * 1.05 * height) / (2 * tan() * fh), (sw * 1.03 * width) / (2 * tan() * camera.aspect * fw));
+      const perPx = (2 * near * tan()) / height;
+      screenAt.x += ((insets.right - insets.left) / 2) * perPx;
+      screenAt.y += ((insets.top - insets.bottom) / 2) * perPx;
       look.set(0, 0, 0).lerp(screenAt, push);
       camera.position.set(look.x, look.y, THREE.MathUtils.lerp(far, screenAt.z + near, push));
     }
@@ -400,7 +433,20 @@ export async function createDexDevice(canvas: HTMLCanvasElement, options: DexDev
     get progress() {
       return phase / end;
     },
-    screenAspect: model ? model.screenCorners[0]!.distanceTo(model.screenCorners[1]!) / model.screenCorners[0]!.distanceTo(model.screenCorners[3]!) : SCREEN.w / SCREEN.h,
+    get screenAspect() {
+      return model ? model.screenCorners[0]!.distanceTo(model.screenCorners[1]!) / model.screenCorners[0]!.distanceTo(model.screenCorners[3]!) : SCREEN.w / SCREEN.h;
+    },
+    reshape(shape) {
+      if (!model) return;
+      model.reshape(shape);
+      place();
+      frame();
+      if (!raf) pose(performance.now());
+    },
+    setInsets(next) {
+      insets = next;
+      if (!raf) pose(performance.now());
+    },
     async render() {
       pose(performance.now());
       await renderer.renderAsync(scene, camera);
