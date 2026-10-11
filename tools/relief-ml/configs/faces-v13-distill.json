@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v8-combined",
+  "title": "One model distilled from the router",
+  "why": "The router (two models chosen per tile) scores 80-85% but costs two networks; telling one network the tile flag (faces-v12) didn't reproduce it (65-67%). Instead, train one network to copy the router's answers on every pixel of the real training maps.",
+  "changes": ["Real maps labelled by the router teacher (faces-v7 on clear-cut tiles, faces-v4 elsewhere), weighted by its confidence, instead of by the rule"],
+  "real": {"teacher": {"labelled": "20261011-1752-faces-v7-trusted-labels", "free": "20261011-1631-faces-v4-context"}}
+}

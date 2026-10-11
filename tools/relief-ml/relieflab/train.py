@@ -20,7 +20,24 @@ EVAL_MAPS = ["PALLET_TOWN", "VIRIDIAN_CITY", "PEWTER_CITY", "CERULEAN_CITY", "VE
              "BLUES_HOUSE", "MUSEUM_1F", "PEWTER_GYM", "CELADON_MANSION_1F", "VIRIDIAN_SCHOOL_HOUSE"]
 
 
-def real_crops(object_weight, size=64, stride=32, only=None, painted=None):
+def teacher_faces(teacher, name):
+    """Router teacher's faces and confidence for a whole real map (labelled model on clear-cut tiles,
+    label-free model elsewhere)."""
+    from .ensemble import Router
+    from .runner import _load_model
+    if not hasattr(teacher_faces, "router"):
+        cl = lab.read_json(f"runs/{teacher['labelled']}/run.json")["config"]; cf = lab.read_json(f"runs/{teacher['free']}/run.json")["config"]
+        teacher_faces.router = Router(_load_model(cl, teacher["labelled"]), _load_model(cf, teacher["free"])).eval()
+        teacher_faces.cfg = dict(cl, model=dict(cl["model"], tileFlag=False))
+    img, labs = tasks.map_img(name)
+    r = teacher_faces.router
+    r.mask = torch.as_tensor(tasks.tile_flag(labs))[None]
+    p = tasks.predict(r, teacher_faces.cfg, img)
+    r.mask = None
+    return p["faces"].astype(np.int64), p["faceProb"].max(0).astype(np.float32)
+
+
+def real_crops(object_weight, size=64, stride=32, only=None, painted=None, teacher=None):
     """Real map crops labelled by the plan rule (training maps only; the eval maps are held out).
     only: if given, the tile labels whose rule labels are trusted; every other label gets weight 0."""
     X, Y, W, FL = [], [], [], []
@@ -33,6 +50,8 @@ def real_crops(object_weight, size=64, stride=32, only=None, painted=None):
             f[i, j], w[i, j] = tasks.rule(l, object_weight)
             if only is not None and l not in only: w[i, j] = 0.0
         f = np.kron(f, np.ones((8, 8), np.int64)); w = np.kron(w, np.ones((8, 8), np.float32))
+        if teacher:   # distillation: every pixel gets the router teacher's answer, weighted by its confidence
+            f, w = teacher_faces(teacher, name)
         if painted:   # Nick's paintings override the rule, pixel by pixel (D38: training material)
             D = tasks.rom(); mp = next(m for m in D["maps"] if m["name"] == name); ts = D["tilesets"][mp["tileset"]]
             for by in range(mp["h"]):
@@ -143,7 +162,8 @@ class Trainer:
                     from . import paintings
                     painted = {k: v for k, v in paintings.painted_tiles().items() if paintings.half(k) == "train"}
                     run.set(paintingsUsed=len(painted))
-                rx, ry, rw = real_crops(cfg["real"]["objectRuleWeight"], only=set(only) if only else None, painted=painted)
+                rx, ry, rw = real_crops(cfg["real"]["objectRuleWeight"], only=set(only) if only else None, painted=painted,
+                                        teacher=cfg["real"].get("teacher"))
                 self.RX, self.RY, self.RW = (torch.as_tensor(a, device=d) for a in (rx, ry, rw))
                 self.RF = torch.as_tensor(real_crops.flags, device=d)
             self.nreal = int(t["batch"] * share) if share > 0 else 0
