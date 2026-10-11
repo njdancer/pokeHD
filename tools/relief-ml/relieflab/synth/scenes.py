@@ -383,7 +383,20 @@ def calibrated_style(rng):
                 dither_offset=tuple(rng.integers(0, 4, 2)))
 
 
+STYLE_RAND = float(os.environ.get("STYLE_RAND", "0"))  # share of scenes with randomised outlines and dither
+
+
 def random_style(rng, view):
+    st = _random_style(rng, view)
+    if STYLE_RAND > 0 and rng.random() < STYLE_RAND:
+        # Randomise what the game doesn't encode consistently: outline on/off, shade, gaps; dither strength.
+        st.update(outline=rng.random() < 0.85, outline_shade=int(rng.choice([3, 3, 2])),
+                  outline_drop=float(rng.choice([0.0, rng.uniform(0.05, 0.35)])), outline_seed=int(rng.integers(1 << 30)),
+                  dither=float(rng.choice([0.0, 0.1, 0.15, 0.25])), crease=rng.random() < 0.4)
+    return st
+
+
+def _random_style(rng, view):
     if view == "map" and rng.random() < 0.85:
         return calibrated_style(rng)
     if view == "map":

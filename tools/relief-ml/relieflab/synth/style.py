@@ -97,7 +97,8 @@ def outlines(ids, depth, jump=1.5, ground_outline=True, crease=None, N=None, cre
 
 def stylise(scene, buf, ss, L, thresholds=(0.8, 0.55, 0.3), ambient=0.35, kd=0.75, dither=0.0,
             outline=True, jump=1.5, ground_outline=True, crease=False, use_shadow=True, use_ao=True,
-            wrap=0.0, spec=0.0, dither_offset=(0, 0), shs=1.0, aos=1.0, gamma=1.0):
+            wrap=0.0, spec=0.0, dither_offset=(0, 0), shs=1.0, aos=1.0, gamma=1.0,
+            outline_shade=3, outline_drop=0.0, outline_seed=0):
     I = pool(intensity(scene, buf, L, ambient, kd, use_shadow, use_ao, wrap, spec, shs, aos, gamma), ss)
     img = quantise(I, thresholds, dither, dither_offset)
     ids = mode_ids(buf["ids"], ss)
@@ -112,7 +113,9 @@ def stylise(scene, buf, ss, L, thresholds=(0.8, 0.55, 0.3), ambient=0.35, kd=0.7
         # "Open" parts have no outline against the background, so white meets white as in many sprites.
         opn = [i for i, p in enumerate(scene.prims) if getattr(p, "open", False)]
         if opn: o &= ~(np.isin(ids, opn) & next_to_background(ids))
-        img[o] = 3
+        if outline_drop > 0:   # broken outlines (style randomisation, research memo 1 section 1)
+            o &= np.random.default_rng(outline_seed).random(o.shape) >= outline_drop
+        img[o] = outline_shade
     return img, N, ids, I
 
 
