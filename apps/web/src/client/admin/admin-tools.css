@@ -1,0 +1,11 @@
+/* Inside the game menu's light panel: inherit its ink rather than the page's dark-theme tokens. */
+.admin-tools > summary { cursor: pointer; font-weight: 600; padding: .3rem 0; }
+.admin-tools[open] > summary { margin-bottom: .4rem; }
+.admin-tools ul { list-style: none; margin: 0 0 .5rem; padding: 0; display: grid; gap: .35rem; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+.admin-tools a {
+  display: grid; gap: .1rem; padding: .5rem .65rem; border-radius: 8px; text-decoration: none; color: inherit;
+  background: color-mix(in srgb, currentColor 6%, transparent); border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+.admin-tools a:hover, .admin-tools a:focus-visible { border-color: currentColor; }
+.admin-tools .name { font-weight: 600; }
+.admin-tools .what { opacity: .7; font-size: .8rem; }
