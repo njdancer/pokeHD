@@ -690,3 +690,22 @@ Tunnel, Diglett's Cave, Seafoam Islands, Victory Road, the Cerulean Cave), which
 darker, cooler Cave look; every other tileset is a building, lit by the midday look with the sun
 overhead. The clock keeps running while the player is inside. The light switches at once on a
 map change, since the game changes maps behind its own fade to black.
+
+## D43. A fan's hand-coloured Pokémon pictures stand in for the colour work, gated like the ROM (temporary)
+
+Nick asked on 2026-10-11 for the Pokémon pictures to show a fan's hand-coloured versions (Reddit's
+Red_O_Zone redrew all 151 Red/Blue front pictures pixel for pixel in full colour; the creator allows
+any use except selling) until the colour work (D37) has something better. He chose to keep them on
+the server rather than load them per device: one PNG atlas in the private bucket (`colour/fan151.png`),
+served by `GET /api/colour-set` only to players allowed his cartridge (D26) or tools with
+DEV_ROM_TOKEN, and uploaded with ADMIN_TOKEN (`PUT`/`DELETE /api/admin/colour-set`). This is the
+second deliberate exception to "no Nintendo data on any server", after the ROM itself; nothing goes
+in the repo or the public assets.
+
+The atlas is built on Nick's Mac (`fan_atlas.py` in the colour work folder): each fan sprite is
+lined up with the ROM's picture by silhouette (mean overlap 0.94) and placed where the game draws
+it in the 7×7-tile frame. The game shows it in the Pokédex and menus, and for the opponent's
+Pokémon in battle, only while the background palette is the normal one so flashes and fades still
+show. The player's own Pokémon keeps its SGB colours (the fan set has no back pictures), and so
+do trainers and a transformed Pokémon. `?fan=0` turns it off. To remove it, delete the object and
+this code.
