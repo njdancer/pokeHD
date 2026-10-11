@@ -25,8 +25,6 @@
   box-shadow: 0 3px 10px #4a2a0a66; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
 }
 .game-menu-button:active { translate: 0 2px; }
-/* With the Pokédex menu, the shut dex has the top-right corner: this one moves to the left. */
-.game-menu-button[data-dex] { right: auto; left: max(12px, env(safe-area-inset-left)); }
 .game-menu-button[aria-expanded="true"] { border-color: #e0702a; }
 .hd-ball {
   width: 26px; height: 26px; border-radius: 50%;
@@ -57,7 +55,6 @@
   background: linear-gradient(#fffaf0, #f7ead0); border: 3px solid #d6a866; border-radius: 14px;
   box-shadow: 0 6px 24px #4a2a0a80, inset 0 0 0 2px #fff8; animation: hd-box-in .16s ease-out;
 }
-.game-menu[data-dex] { right: auto; left: max(16px, env(safe-area-inset-left)); }
 .game-menu > .hd-corner.tl { left: 0; top: 0; }
 .game-menu > .hd-corner.tr { left: 100%; top: 0; }
 .game-menu > .hd-corner.bl { left: 0; top: 100%; }

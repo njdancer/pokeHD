@@ -2,17 +2,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { GiftSpec } from "@pokehd/emu";
 import type { PlayerInfo } from "@pokehd/protocol";
 import type { GiftCourier, GiftNotice } from "./gifts.ts";
-import { decodeGiftables, describeGift, type Giftables } from "./giftables.ts";
+import { decodeGiftables, describeGift, GIFT_REASONS, type Giftables } from "./giftables.ts";
 import "./gift-panel.css";
-
-const REASONS: Record<string, string> = {
-  "last Pokémon": "You can't give away your last Pokémon.",
-  "key item": "Key items can't be gifted.",
-  "not enough money": "You don't have that much money.",
-  "not enough": "You don't have that many.",
-  "item moved": "Your bag changed. Try again.",
-  "party changed": "Your party changed. Try again.",
-};
 
 interface PanelProps {
   rom: Uint8Array;
@@ -48,7 +39,7 @@ export function GiftPanel({ rom, courier, friends, read, onClose }: PanelProps) 
     const result = await courier.send(friend, spec);
     setStatus({
       busy: false,
-      text: result.ok ? `Sent ${describeGift(rom, result.gift)} to ${friend.name}. Your game saved.` : (REASONS[result.reason] ?? `Couldn't send it (${result.reason}).`),
+      text: result.ok ? `Sent ${describeGift(rom, result.gift)} to ${friend.name}. Your game saved.` : (GIFT_REASONS[result.reason] ?? `Couldn't send it (${result.reason}).`),
     });
     refresh();
   };

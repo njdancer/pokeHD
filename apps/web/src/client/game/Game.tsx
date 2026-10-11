@@ -61,7 +61,7 @@ import { RoomLink } from "../room/link.ts";
 import { LinkPicker } from "../room/LinkPicker.tsx";
 import { GiftCourier } from "../room/gifts.ts";
 import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
-import { GIFTABLE_RANGES } from "../room/giftables.ts";
+import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
 import { BattleTracker, maskBattleScreen } from "./battle.ts";
@@ -1157,6 +1157,18 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     for (const f of online.values()) if (!players.some((p) => p.id === f.id)) all.push({ ...f, online: true });
     return all;
   }, [room, players]);
+  /** A gift from the Pokédex menu: the team member or item it names, sent as the Gift panel sends. */
+  const sendGift = async (to: string, what: { item: number } | { mon: number }): Promise<string> => {
+    const friend = room?.friends.find((f) => f.id === to);
+    if (!gifts || !friend) return "They need to be playing right now to get a gift.";
+    const g = decodeGiftables(rom, await readGiftables());
+    const mon = "mon" in what ? g.party[what.mon] : undefined;
+    const item = "item" in what ? g.bag.find((b) => b.item === what.item && !b.key) : undefined;
+    const spec = mon ? { kind: "mon" as const, slot: mon.slot, species: mon.species } : item ? { kind: "item" as const, slot: item.slot, item: item.item, quantity: 1 } : null;
+    if (!spec) return GIFT_REASONS["item moved"]!;
+    const r = await gifts.send(friend, spec);
+    return r.ok ? `Sent ${describeGift(rom, r.gift)} to ${friend.name}. Your game saved.` : (GIFT_REASONS[r.reason] ?? `Couldn't send it (${r.reason}).`);
+  };
   const bindLive = useMemo(() => (actions: LiveActions) => void (liveActionsRef.current = actions), []);
   const [readAloud, setReadAloud] = useState(false);
   const appOptions = useMemo<AppOptions>(() => ({ sound, readAloud, gameBoyScreen: pip }), [sound, readAloud, pip]);
@@ -1186,8 +1198,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       />
       {onboarding?.phase === "intro" && !noHd && <IntroStage ref={introCanvas} />}
       {hdText && !noHd && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} hideDialog={hideDialog} actions={textActions} look={look} />}
-      {/* Everything that isn't the game sits behind one button (the menu), in the HD panels' look. */}
-      {ready && <button
+      {/* Everything that isn't the game sits behind one button (the menu), in the HD panels' look.
+          With the Pokédex menu, the dex is that button and all of this lives in it. */}
+      {ready && !menu && <button
         type="button"
         className="game-menu-button"
         onClick={() => setSettings((v) => !v)}
@@ -1195,14 +1208,13 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         aria-label="Menu"
         data-look={look}
         data-alert={cloudNewer || resumed || undefined}
-        data-dex={menu || undefined}
       >
         <i className="hd-ball" aria-hidden />
       </button>}
       {message && <div className="game-toast" role="status">{message}</div>}
       {settings && <div className="game-menu-scrim" onClick={() => setSettings(false)} />}
       {settings && (
-        <div className="game-menu" data-look={look} data-dex={menu || undefined} role="dialog" aria-label="Menu">
+        <div className="game-menu" data-look={look} role="dialog" aria-label="Menu">
           <i className="hd-corner tl" />
           <i className="hd-corner tr" />
           <i className="hd-corner bl" />
@@ -1273,7 +1285,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       {battleHud && !noHd && layout === "battle" && <BattleHud state={battleHud.state} huds={battleHud.huds} />}
       {/* The pad hides while Settings is open so it can't cover the panel's forms (and unmounting releases any held button). */}
       {/* The pad is for the world: anything with buttons of its own (HD menus, messages, the start and names) hides it. */}
-      {input && touch && !settings && !(hdText && !noHd) && !nameAsk && !onboarding && !dex && !menuOpen && !ask && <TouchPad onChange={onTouch} />}
+      {input && touch && !settings && !(hdText && !noHd) && !nameAsk && !onboarding && !dex && !menuOpen && !ask && <TouchPad onChange={onTouch} menuButtons={!menu} />}
       {lockUi && !held && (
         <LockScreen
           {...lockUi}
@@ -1331,7 +1343,20 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           savedAt={savedAt}
           app={appOptions}
           setApp={setApp}
-          grownUps={<div className="game-settings">{grownUpControls}</div>}
+          sendGift={gifts && room?.status === "open" ? sendGift : undefined}
+          grownUps={
+            <div className="game-settings">
+              {(resumed || cloudNewer) && (
+                <div className="game-menu-notes">
+                  {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
+                  {cloudNewer && <p>There's a newer save in the cloud. Load it below.</p>}
+                </div>
+              )}
+              {admin && <AdminTools />}
+              {input && <KeyBindingsPanel input={input} />}
+              {grownUpControls}
+            </div>
+          }
         />
       )}
       {savedAt > 0 && <SavedToast shownAt={savedAt} />}

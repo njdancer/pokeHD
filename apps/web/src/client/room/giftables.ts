@@ -74,3 +74,13 @@ export function describeGift(rom: Uint8Array, gift: Gift): string {
     }
   }
 }
+
+/** Why a gift didn't go, in words. */
+export const GIFT_REASONS: Record<string, string> = {
+  "last Pokémon": "You can't give away your last Pokémon.",
+  "key item": "Key items can't be gifted.",
+  "not enough money": "You don't have that much money.",
+  "not enough": "You don't have that many.",
+  "item moved": "Your bag changed. Try again.",
+  "party changed": "Your party changed. Try again.",
+};

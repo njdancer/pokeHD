@@ -85,6 +85,7 @@ export function DexHost({ open, onOpen, onClose, insets, radius, held: heldProp,
     let wasRolling = false;
     const roll = new DexRoll(() => M);
     const fits = new Map<Held, DexFrame["fit"]>();
+    let inset = { top: 0, right: 0 };
     const pages = { p: { w: 1, h: 1 }, l: { w: 1, h: 1 } };
 
     const measureFrame = () => {
@@ -102,6 +103,7 @@ export function DexHost({ open, onOpen, onClose, insets, radius, held: heldProp,
       if (!width || !height) return;
       stage.resize(width, height);
       for (const a of [0, 90, -90] as Held[]) fits.set(a, fitBox(width, height, a, ins));
+      inset = { top: ins.top, right: ins.right };
       const portrait = fitBox(width, height, 0, ins).portrait;
       const fill = M.open.fill;
       const r = live.current.radius ?? displayRadius().radius;
@@ -139,7 +141,7 @@ export function DexHost({ open, onOpen, onClose, insets, radius, held: heldProp,
       const want = live.current.open;
       ms = want ? Math.min(LENGTH, ms + dt) : Math.max(0, ms - dt * M.close.speed);
       const angle = roll.at(now);
-      const frame = { ...stage.frame, fit: fits.get(heldNow) };
+      const frame = { ...stage.frame, fit: fits.get(heldNow), inset };
       const pose = dexPose(M, ms, frame, stage.measure, heldNow, angle);
       const quad = stage.render(pose);
 
@@ -151,7 +153,7 @@ export function DexHost({ open, onOpen, onClose, insets, radius, held: heldProp,
         shade.style.setProperty("-webkit-backdrop-filter", blur);
         shade.style.visibility = ms > 0 ? "visible" : "hidden";
       }
-      const b = buttonRect(M, stage.frame, stage.measure), btn = buttonRef.current;
+      const b = buttonRect(M, frame, stage.measure), btn = buttonRef.current;
       if (btn) Object.assign(btn.style, { left: `${b.x}px`, top: `${b.y}px`, width: `${b.w}px`, height: `${b.h}px` });
 
       // The page for how it's held, and while it rolls the other fading out on its own corners.

@@ -356,6 +356,8 @@ export interface LiveHost {
   /** The game's words after an action, or why it didn't happen. */
   notice(text: string): void;
   setApp<K extends keyof AppOptions>(key: K, value: AppOptions[K]): void;
+  /** Sends a friend a gift (a team member by index, or one of an item); resolves to what happened, in words. */
+  sendGift?(friend: string, what: { item: number } | { mon: number }): Promise<string>;
   /** The game as the menu last read it (bag indices, options). */
   game: GameSnapshot | null;
 }
@@ -488,8 +490,11 @@ export class LiveActions implements MenuActions {
     ]);
     return "";
   }
-  gift(): string {
-    return "Send gifts with the Gift button for now.";
+  gift(friend: string, what: { item: number } | { mon: number }): string {
+    const send = this.#host.sendGift;
+    if (!send) return "Gifts need you to be signed in and online.";
+    void send(friend, what).then((text) => this.#host.notice(text));
+    return "Waiting for a quiet moment in the game…";
   }
   ask(): string {
     return "Trades and battles start at a Pokémon Center's link desk for now.";
