@@ -121,9 +121,16 @@ def _single_instance():
     return f
 
 
+def _code_mtime():
+    from .paths import PKG
+    return max(p.stat().st_mtime for p in PKG.rglob("*.py"))
+
+
 def worker(once=False):
-    """Process the queue forever (or until empty with once=True)."""
+    """Process the queue forever (or until empty with once=True). Between jobs, re-executes itself
+    if the pipeline code changed, so new runs always use the latest code."""
     _lock = _single_instance()
+    born = _code_mtime()
     stop = {"flag": False}
     def term(*_): stop["flag"] = True; raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, term)
@@ -133,6 +140,10 @@ def worker(once=False):
         if not jobs:
             if once: _heartbeat("idle"); return
             _heartbeat("idle"); time.sleep(10); continue
+        if not once and _code_mtime() > born:
+            print("code changed: restarting worker", flush=True)
+            _lock.close()
+            os.execv(sys.executable, [sys.executable, "-u", "-m", "relieflab", "worker"])
         f = jobs[0]; job = json.loads(f.read_text())
         try:
             execute(job)
