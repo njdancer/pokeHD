@@ -1,5 +1,5 @@
 {
-  "extends": "faces-v3",
+  "extends": "faces-v7-trusted-labels",
   "title": "Five faces: furniture rooms calibrated to the game (light tops, dark fronts)",
   "why": "faces-v3's made-up furniture had tops and fronts in the same shades; in the game, tops are light grey and fronts mostly black. Matching that should let tables and chairs transfer.",
   "changes": ["Furniture rooms re-rendered: lit from above (fitted to the hand-made objects' shades), plain mid-grey table and chair tops (80%), fewer chair backs (10%)", "Shade mismatch with real furniture down from 0.66 to 0.31 (0 = identical)"],
