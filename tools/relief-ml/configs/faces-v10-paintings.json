@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v8-combined",
+  "title": "faces-v8 taught by Nick's paintings",
+  "why": "Nick painted some roof-labelled tiles as fronts (the strip under the eaves). Models trained on the rule copy its mistake. Let half of the painted tiles override the rule in training; score on the other half.",
+  "changes": ["Half of Nick's painted tiles (fixed split) replace the rule's labels, at double weight", "Painting score uses only the other half"],
+  "real": {"paintings": true}
+}

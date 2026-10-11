@@ -46,6 +46,12 @@ def painted_tiles():
     return out
 
 
+def half(key):
+    """Painted tiles are split in two by a fixed hash: 'train' tiles may teach, 'eval' tiles only score."""
+    import zlib
+    return "train" if zlib.crc32(f"{key[0]}:{key[1]}".encode()) % 2 == 0 else "eval"
+
+
 def truth_map(name, painted):
     """Face truth for a map from paintings (255 where nothing is painted), plus the painted labels."""
     D = tasks.rom(); m = next(m for m in D["maps"] if m["name"] == name)
@@ -66,6 +72,8 @@ def truth_map(name, painted):
 
 def evaluate(model, cfg, run, maps):
     painted = painted_tiles()
+    trained = cfg.get("real", {}).get("paintings") and cfg["real"].get("share", 0) > 0
+    if trained: painted = {k: v for k, v in painted.items() if half(k) == "eval"}
     if not painted: return {}
     K = np.zeros((5, 5), np.int64); per_label = {}
     for name in maps:
@@ -82,7 +90,8 @@ def evaluate(model, cfg, run, maps):
     if K.sum() == 0: return {}
     acc = float(np.trace(K) / K.sum())
     labels = ["TOP", "FRONT", "SLOPE", "HIP◀", "HIP▶"]
-    run.eval("paintings", dict(title="Nick's relief-editor paintings (held-out maps)", split="paintings", circular=False,
+    run.eval("paintings", dict(title="Nick's relief-editor paintings (held-out maps" + (", held-out half of the tiles)" if trained else ")"),
+                               split="paintings", circular=False,
                                overall=dict(acc=acc, tiles=len(painted), pixels=int(K.sum())),
                                perClass=dict(acc={labels[i]: float(K[i, i] / K[i].sum()) for i in range(5) if K[i].sum()}),
                                perLabel={k: v[0] / v[1] for k, v in per_label.items()},

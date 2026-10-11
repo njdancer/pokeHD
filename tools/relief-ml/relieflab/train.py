@@ -20,7 +20,7 @@ EVAL_MAPS = ["PALLET_TOWN", "VIRIDIAN_CITY", "PEWTER_CITY", "CERULEAN_CITY", "VE
              "BLUES_HOUSE", "MUSEUM_1F", "PEWTER_GYM", "CELADON_MANSION_1F", "VIRIDIAN_SCHOOL_HOUSE"]
 
 
-def real_crops(object_weight, size=64, stride=32, only=None):
+def real_crops(object_weight, size=64, stride=32, only=None, painted=None):
     """Real map crops labelled by the plan rule (training maps only; the eval maps are held out).
     only: if given, the tile labels whose rule labels are trusted; every other label gets weight 0."""
     X, Y, W = [], [], []
@@ -32,6 +32,16 @@ def real_crops(object_weight, size=64, stride=32, only=None):
             f[i, j], w[i, j] = tasks.rule(l, object_weight)
             if only is not None and l not in only: w[i, j] = 0.0
         f = np.kron(f, np.ones((8, 8), np.int64)); w = np.kron(w, np.ones((8, 8), np.float32))
+        if painted:   # Nick's paintings override the rule, pixel by pixel (D38: training material)
+            D = tasks.rom(); mp = next(m for m in D["maps"] if m["name"] == name); ts = D["tilesets"][mp["tileset"]]
+            for by in range(mp["h"]):
+                for bx in range(mp["w"]):
+                    b = mp["blocks"][by * mp["w"] + bx]
+                    for i in range(16):
+                        pf = painted.get((mp["tileset"], ts["blocks"][b * 16 + i]))
+                        if pf is None: continue
+                        y, x = by * 32 + (i // 4) * 8, bx * 32 + (i % 4) * 8
+                        f[y:y + 8, x:x + 8] = pf; w[y:y + 8, x:x + 8] = 2.0
         H, Wd = img.shape
         if H < size or Wd < size: continue
         for y in range(0, H - size + 1, stride):
@@ -123,7 +133,12 @@ class Trainer:
             share = cfg["real"]["share"]
             if share > 0:
                 only = cfg["real"].get("labels")
-                rx, ry, rw = real_crops(cfg["real"]["objectRuleWeight"], only=set(only) if only else None)
+                painted = None
+                if cfg["real"].get("paintings"):
+                    from . import paintings
+                    painted = {k: v for k, v in paintings.painted_tiles().items() if paintings.half(k) == "train"}
+                    run.set(paintingsUsed=len(painted))
+                rx, ry, rw = real_crops(cfg["real"]["objectRuleWeight"], only=set(only) if only else None, painted=painted)
                 self.RX, self.RY, self.RW = (torch.as_tensor(a, device=d) for a in (rx, ry, rw))
             self.nreal = int(t["batch"] * share) if share > 0 else 0
         else:
