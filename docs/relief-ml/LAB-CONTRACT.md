@@ -2,7 +2,9 @@
 
 The trainer on Nick's Mac keeps a local file tree and mirrors it into the private bucket under
 `lab/`; the dashboard at `/admin/lab` reads it. The server only stores files. This page says what
-the files are; `packages/protocol/src/lab.ts` is the checked schema for each one.
+the files are; `packages/protocol/src/lab.ts` is the checked schema for each one, and
+`node tools/lab-seed.ts --out <dir>` (or `--url http://localhost:5173`) writes a complete synthetic
+example tree.
 
 ## Transport
 
@@ -90,6 +92,7 @@ numeric key still plots without a definition, labelled by its key.
   "summary": { "val_loss": 0.21, "test_acc": 0.81 },
   "classes": ["TOP", "FRONT", "SLOPE", "HIP◀", "HIP▶"],
   "evals": ["testset", "real-maps"],
+  "preds": ["preds/watch.json", "preds/testset.json"],   // all prediction manifests; non-eval ones show on their own
   "images": [{ "path": "images/pallet-3d.png", "caption": "Pallet Town from the game camera", "kind": "3d" }],
   "findings": ["Chairs 36% → 55%"]
 }
@@ -156,7 +159,7 @@ manifest's folder.
 | `mask` | 8-bit PNG | 0 background, 1 object, 2 ground |
 | `error` | PNG | heatmap, brighter is worse |
 
-Pre-rendered 3D PNGs can go in `images` as a fallback; the dashboard also builds 3D itself from
+Fractions (0 to 1) shown as percentages need `"unit": "%"` in their metric definition. Pre-rendered 3D PNGs can go in `images` as a fallback; the dashboard also builds 3D itself from
 `faces`, `normals` and `depth` layers.
 
 ## events.jsonl

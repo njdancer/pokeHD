@@ -11,6 +11,8 @@ const UiLooks = lazy(() => import("./dev/UiLooks.tsx").then((m) => ({ default: m
 const Bench = lazy(() => import("./dev/Bench.tsx").then((m) => ({ default: m.Bench })));
 // Crash reports (/admin/errors), for Nick.
 const Errors = lazy(() => import("./admin/Errors.tsx").then((m) => ({ default: m.Errors })));
+// The relief lab (/admin/lab): training runs from Nick's Mac, for Nick.
+const Lab = lazy(() => import("./admin/lab/Lab.tsx").then((m) => ({ default: m.Lab })));
 // The ROM explorer (/explore), with its ~850 KB label table, only loads when opened.
 const Explorer = lazy(() => import("./explore/Explorer.tsx").then((m) => ({ default: m.Explorer })));
 // The Pokédex's looks, side by side while Nick picks (p2-dex).
@@ -41,6 +43,7 @@ export function Root() {
   // `/join` was the D19 page; old bookmarks still land on sign-in.
   if (path === "/login" || path === "/join") return <Suspense><Login /></Suspense>;
   if (path === "/admin/errors") return <Suspense><Errors /></Suspense>;
+  if (path === "/admin/lab") return <Suspense><Lab /></Suspense>;
   if (path === "/explore") return <Suspense><Explorer /></Suspense>;
   if (path === "/dev/emu") return <Suspense><EmuDebug /></Suspense>;
   if (path === "/dev/live") return <Suspense><LivePlayback /></Suspense>;

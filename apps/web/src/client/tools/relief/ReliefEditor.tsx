@@ -23,6 +23,8 @@ import {
   domeNormals, emptyDoc, FRONT, GROUND_LABELS, hip, normalColour, normalise, seedNormal, slope, TOP,
   type Normal,
 } from "./normals.ts";
+import { parseReliefLink, type ReliefLinkOptions } from "./link.ts";
+import { decodeLayer, loadPixels, overlayPrediction, pickLayer, tilesFromPrediction, type PickedLayer } from "./prefill.ts";
 import { mapRelief, pictureRelief, type Mesh } from "./shape.ts";
 import { download, EditStore, loadLocal, loadRemote, newer, saveLocal, saveRemote } from "./store.ts";
 import "./relief.css";
@@ -44,6 +46,33 @@ interface Region {
 }
 
 const rgbOf = (c: number): Rgb => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+const AREA_SIZES = ["2x2", "3x2", "4x3", "6x4"];
+
+/** Outside a picture = colour-0 pixels joined to the border (white inside the sprite, like eyes, stays inside). */
+function pictureOutside(pixels: ArrayLike<number>, w: number, h: number): Uint8Array {
+  const outside = new Uint8Array(w * h), q: number[] = [];
+  for (let i = 0; i < w * h; i++) { const x = i % w, y = (i / w) | 0; if ((x === 0 || y === 0 || x === w - 1 || y === h - 1) && pixels[i] === 0) { outside[i] = 1; q.push(i); } }
+  for (let k = 0; k < q.length; k++) { const i = q[k]!, x = i % w, y = (i / w) | 0;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) { const nx = x + dx, ny = y + dy, j = ny * w + nx;
+      if (nx >= 0 && ny >= 0 && nx < w && ny < h && !outside[j] && pixels[j] === 0) { outside[j] = 1; q.push(j); } } }
+  return outside;
+}
+
+/** The subject a link asks for, clamped to the map; `moved` when clamping changed the area. */
+function linkedSubject(link: ReliefLinkOptions, world: WorldData, dexCount: number): { subject: Subject; moved: boolean } | null {
+  if (link.map) {
+    const i = MAP_NAMES.indexOf(link.map), map = i >= 0 ? world.maps[i] : undefined;
+    if (!map) return null;
+    const [x, y, w, h] = link.area ?? [0, 0, 4, 3];
+    const bw = Math.max(1, Math.min(8, map.widthBlocks, w)), bh = Math.max(1, Math.min(8, map.heightBlocks, h));
+    const bx = Math.max(0, Math.min(map.widthBlocks - bw, x)), by = Math.max(0, Math.min(map.heightBlocks - bh, y));
+    return { subject: { kind: "map", map: i, bx, by, bw, bh }, moved: bx !== x || by !== y || bw !== w || bh !== h };
+  }
+  if (link.dex !== undefined && link.dex >= 1 && link.dex <= dexCount) return { subject: { kind: "pic", dex: link.dex }, moved: false };
+  return null;
+}
+
+type Fetched = { layer: PickedLayer; width: number; height: number; rgba: Uint8ClampedArray };
 
 export function ReliefEditor() {
   const [rom, setRom] = useState<Uint8Array | null | undefined>(undefined);
@@ -64,7 +93,12 @@ function Editor({ rom }: { rom: Uint8Array }) {
   const bump = () => setVersion((v) => v + 1);
   const [admin, setAdmin] = useState(false);
   const [saved, setSaved] = useState("Saved on this device");
-  const [subject, setSubject] = useState<Subject>({ kind: "map", map: MAP_NAMES.indexOf("PALLET_TOWN"), bx: 1, by: 1, bw: 4, bh: 3 });
+  // A link (e.g. from the relief lab) can choose the subject and prefill it from a prediction.
+  const [link] = useState(() => parseReliefLink(location.search));
+  const [linked] = useState(() => linkedSubject(link, world, dex.length));
+  const [subject, setSubject] = useState<Subject>(linked?.subject ?? { kind: "map", map: MAP_NAMES.indexOf("PALLET_TOWN"), bx: 1, by: 1, bw: 4, bh: 3 });
+  const synced = useRef<Promise<void>>(Promise.resolve());
+  const [prefilled, setPrefilled] = useState("");
   const [mode, setMode] = useState<BrushMode>("pixel");
   const [brush, setBrush] = useState<Normal>(FRONT);
   const [pitch, setPitch] = useState(30);
@@ -77,7 +111,7 @@ function Editor({ rom }: { rom: Uint8Array }) {
 
   // Sign-in decides whether the account copy is used.
   useEffect(() => {
-    void (async () => {
+    synced.current = (async () => {
       const account = await me().catch(() => null);
       if (!account?.admin) return;
       setAdmin(true);
@@ -116,12 +150,7 @@ function Editor({ rom }: { rom: Uint8Array }) {
     const entry = dex[subject.dex - 1]!;
     const pic = dexPicture(rom, entry.picture), w = pic.width * 8, h = pic.height * 8;
     const pal = world.sgbPalettes[battlePalette(rom, entry.species)]!.map(rgbOf);
-    // Outside = colour-0 pixels joined to the border (white inside the sprite, like eyes, stays inside).
-    const outside = new Uint8Array(w * h), q: number[] = [];
-    for (let i = 0; i < w * h; i++) { const x = i % w, y = (i / w) | 0; if ((x === 0 || y === 0 || x === w - 1 || y === h - 1) && pic.pixels[i] === 0) { outside[i] = 1; q.push(i); } }
-    for (let k = 0; k < q.length; k++) { const i = q[k]!, x = i % w, y = (i / w) | 0;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) { const nx = x + dx, ny = y + dy, j = ny * w + nx;
-        if (nx >= 0 && ny >= 0 && nx < w && ny < h && !outside[j] && pic.pixels[j] === 0) { outside[j] = 1; q.push(j); } } }
+    const outside = pictureOutside(pic.pixels, w, h);
     const inside = (x: number, y: number) => !outside[y * w + x];
     const arr = store.pic(subject.dex, w, h, () => domeNormals(w, h, inside));
     const a = arr;
@@ -132,6 +161,58 @@ function Editor({ rom }: { rom: Uint8Array }) {
       inside, normal: (x, y) => a[y * w + x]!, set: (x, y, n) => { a[y * w + x] = n; }, ground: () => false,
     };
   }, [subject, world, dex, rom, tileArray, store, version]);
+
+  // ---- Prefill from a lab prediction (?seed=<manifest>&sample=<id>&layer=<name>) ----
+  const fetchPrediction = useCallback(async (): Promise<Fetched | string> => {
+    const { seed, sample, layer } = link;
+    if (!seed || !sample || !layer) return "the link needs a sample and a layer";
+    if (!linked) return "the link doesn't name a map or Pokémon the editor knows";
+    if (seed.split("/").some((s) => !s || s === "." || s === "..")) return "the manifest path isn't valid";
+    const res = await fetch(`/api/admin/lab/${seed}`).catch(() => null);
+    if (!res?.ok) return `couldn't load ${seed}${res ? ` (${res.status})` : ""}`;
+    const picked = pickLayer(await res.json().catch(() => null), seed, sample, layer);
+    if (typeof picked === "string") return picked;
+    const px = await loadPixels(`/api/admin/lab/${picked.file}`).catch(() => null);
+    return px ? { layer: picked, ...px } : `couldn't load ${picked.file}`;
+  }, [link, linked]);
+  /** Fills what hasn't been painted; returns the banner. */
+  const applyPrediction = useCallback((fetched: Fetched | string): string => {
+    if (typeof fetched === "string" || !linked) return `Couldn't prefill: ${typeof fetched === "string" ? fetched : "nothing to fill"}`;
+    const { layer, width, height, rgba } = fetched, from = `${layer.label} of ${layer.title}`;
+    const pred = decodeLayer(layer.encoding, rgba, pitch);
+    if (!pred) return `${from} is ${layer.encoding}, which can't prefill directions`;
+    const s = linked.subject;
+    if (s.kind === "map") {
+      if (linked.moved) return `Couldn't prefill: the area was moved to fit the map, so ${from} doesn't line up`;
+      if (width !== s.bw * 32 || height !== s.bh * 32) return `Couldn't prefill: ${from} is ${width}×${height}, the area is ${s.bw * 32}×${s.bh * 32}`;
+      const map = world.maps[s.map]!, ts = world.tilesets[map.tileset]!, labels = blockLabels(ts), labelOf = new Map<number, Label | undefined>();
+      const tiles = tilesFromPrediction(width, height, pred, (tx, ty) => {
+        const b = map.blocks[(s.by + (ty >> 2)) * map.widthBlocks + s.bx + (tx >> 2)]!, pos = (ty & 3) * 4 + (tx & 3), t = ts.blocks[b * 16 + pos]!;
+        if (!labelOf.has(t)) labelOf.set(t, labels[b]?.[pos]);
+        return t;
+      }, (t) => store.doc.tiles[ts.name]?.[String(t)] !== undefined);
+      for (const [t, px] of tiles) overlayPrediction(tileArray(ts, t, labelOf.get(t)), px);
+      return `Prefilled from ${from}; tiles you'd already painted were kept`;
+    }
+    const entry = dex[s.dex - 1]!, pic = dexPicture(rom, entry.picture), w = pic.width * 8, h = pic.height * 8;
+    if (store.doc.pics[`mon:${s.dex}`]) return `Not prefilled from ${from}: you'd already painted this picture, so it was kept`;
+    if (width !== w || height !== h) return `Couldn't prefill: ${from} is ${width}×${height}, the picture is ${w}×${h}`;
+    const outside = pictureOutside(pic.pixels, w, h);
+    overlayPrediction(store.pic(s.dex, w, h, () => domeNormals(w, h, (x, y) => !outside[y * w + x])), pred);
+    return `Prefilled from ${from}`;
+  }, [linked, pitch, world, dex, rom, store, tileArray]);
+  // Once on open, after the account copy is in (the sync above), so tiles already painted there are kept.
+  const prefillOnce = useRef({ fetchPrediction, applyPrediction });
+  useEffect(() => {
+    if (!link.seed) return;
+    let live = true;
+    void (async () => {
+      const [fetched] = await Promise.all([prefillOnce.current.fetchPrediction(), synced.current]);
+      if (!live) return;
+      setPrefilled(prefillOnce.current.applyPrediction(fetched)); bump();
+    })();
+    return () => { live = false; };
+  }, [link]);
 
   // ---- Saving ----
   const saveTimer = useRef<number>(0);
@@ -307,10 +388,11 @@ function Editor({ rom }: { rom: Uint8Array }) {
           {subject.kind === "map" && <button type="button" aria-pressed={showMap} onClick={() => setShowMap(!showMap)}>Area</button>}
           {subject.kind === "map" && (
             <select aria-label="Area size" value={`${subject.bw}x${subject.bh}`} onChange={(e) => { const [bw, bh] = e.target.value.split("x").map(Number) as [number, number]; setSubject({ ...subject, bw, bh }); }}>
-              {["2x2", "3x2", "4x3", "6x4"].map((s) => <option key={s} value={s}>{s.replace("x", " × ")} blocks</option>)}
+              {(AREA_SIZES.includes(`${subject.bw}x${subject.bh}`) ? AREA_SIZES : [...AREA_SIZES, `${subject.bw}x${subject.bh}`]).map((s) => <option key={s} value={s}>{s.replace("x", " × ")} blocks</option>)}
             </select>
           )}
           <span className="relief-saved">{saved}</span>
+          {prefilled && <span role="status" style={{ flexBasis: "100%", color: "var(--r-on)", fontSize: 12 }}>{prefilled}</span>}
         </header>
         <div className="relief-tools">
           <div className="relief-group" role="group" aria-label="Direction">

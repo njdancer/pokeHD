@@ -46,6 +46,9 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
     settings, in-game overlays). Plain CSS with custom properties. `/explore` is a ROM explorer
     (disassembly, step debugger, asset viewers) over every pokeblue.sym label, generated into
     `packages/rom/src/generated/explorer-db.ts` by `tools/gen-explorer.ts` (`pnpm rom:symbols`).
+    `/admin/lab` is the relief lab, Nick's console for the relief-model training on his Mac: it reads
+    the run tree the trainer mirrors to the private bucket under `lab/` (docs/relief-ml/LAB-CONTRACT.md;
+    `node tools/lab-seed.ts` makes demo data for it).
   - `src/worker`: Hono app under `/api/*` (`run_worker_first`); everything else is static
     assets with SPA fallback. Durable Objects (multiplayer rooms, hibernatable WebSockets)
     arrive in the multiplayer phase.

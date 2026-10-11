@@ -114,6 +114,11 @@ export const LabRunSchema = v.looseObject({
   classes: v.optional(v.array(v.string())),
   /** Eval names in `evals/` (without `.json`). */
   evals: v.optional(v.array(v.string())),
+  /**
+   * Prediction manifests in this run (e.g. "preds/watch.json", refreshed every epoch). Those not
+   * belonging to an eval are shown on their own.
+   */
+  preds: v.optional(v.array(path)),
   images: v.optional(v.array(LabImageSchema)),
   findings: v.optional(v.array(v.string())),
   /** Hidden from lists unless asked for. */
