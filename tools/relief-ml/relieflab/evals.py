@@ -22,6 +22,13 @@ WATCH_MAPS = ["PALLET_TOWN", "OAKS_LAB", "REDS_HOUSE_1F"]
 WATCH_PICS = [1, 25, 94, 143]
 
 
+def bootstrap(scores, n=2000, seed=0):
+    """95% interval of the mean by resampling objects (pixels within an object are not independent)."""
+    a = np.asarray(scores, float); r = np.random.default_rng(seed)
+    m = a[r.integers(0, len(a), (n, len(a)))].mean(1)
+    return float(np.percentile(m, 2.5)), float(np.percentile(m, 97.5))
+
+
 def faces_of(pred):
     return pred["faces"] if "faces" in pred else (pred["normal"] @ tasks.FACES.T).argmax(-1).astype(np.uint8)
 
@@ -118,12 +125,13 @@ def testset(model, cfg, run):
         files = _map_files(img, p); files.update(truth=("png", truth), rule=("png", rf), err=("png", heat(err)))
         ps.item(f"map:{name}", name, img.shape[1], img.shape[0], files, scores=dict(acc=float((f[m] == truth[m]).mean())))
     acc = hits / n; om = float(np.mean([o["scores"]["acc"] for o in per]))
+    lo, hi = bootstrap([o["scores"]["acc"] for o in per])
     run.eval("testset", dict(title="Hand-made test set (13 objects)", split="testset", circular=False,
-                             overall=dict(acc=float(acc), obj_mean=om, rule_acc=float(rule_hits / n)),
+                             overall=dict(acc=float(acc), obj_mean=om, obj_mean_lo=lo, obj_mean_hi=hi, rule_acc=float(rule_hits / n)),
                              perClass=dict(acc={"TOP": float(K[0, 0] / max(1, K[0].sum())), "FRONT": float(K[1, 1] / max(1, K[1].sum()))}),
                              confusion=dict(labels=FACE_LABELS, matrix=np.pad(K, ((0, 3), (0, 0))).tolist()),
                              perObject=per, preds=[ps.save()]))
-    return dict(test_acc=float(acc), test_obj_mean=om)
+    return dict(test_acc=float(acc), test_obj_mean=om, test_obj_mean_lo=lo, test_obj_mean_hi=hi)
 
 
 def real_maps(model, cfg, run):
