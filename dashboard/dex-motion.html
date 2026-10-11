@@ -43,6 +43,10 @@
   --ph: 58vh;
 }
 html, body { height: 100%; overflow-x: clip; }
+/* A tool, not a document: dragging bars, handles and curves must never select text, and only the
+   preview zooms (its own pinch); the rest scrolls but can't be pinched or double-tapped bigger. */
+html, body { touch-action: pan-x pan-y; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+input, textarea { user-select: text; -webkit-user-select: text; }
 body { background: var(--ground); color: var(--ink); font: 600 14px/1.4 var(--font-ui); }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -877,6 +881,9 @@ $("reset").onclick = () => { V = clone(DEFAULTS); save(); buildAll(); };
 
 // The stage: a tap opens or closes the dex; a drag pans (once zoomed in); two fingers zoom.
 const touches = new Map();
+// Safari pinch-zooms the page through its own gesture events whatever touch-action says, so stop
+// them outside the preview (the preview pinches with its own pointer handling below).
+for (const ev of ["gesturestart", "gesturechange"]) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
 let gesture = null;
 stageWrap.addEventListener("pointerdown", (e) => {
   if (e.target.closest("button, .pin")) return;
