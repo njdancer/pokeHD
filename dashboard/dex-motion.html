@@ -1197,13 +1197,28 @@ function buildPathUI() {
       h.onpointermove = (ev) => {
         const r = stage.getBoundingClientRect(), { p0, p1 } = pathEnds();
         const lx = ((ev.clientX - r.left) / r.width) * SW, ly = ((ev.clientY - r.top) / r.height) * SH;
-        const frac = (v, a, b) => (Math.abs(b - a) < 1 ? 0 : +((v - a) / (b - a)).toFixed(3));
-        V.path["c" + (i + 1)] = [frac(lx, p0[0], p1[0]), frac(ly, p0[1], p1[1])];
+        const frac = (v, a, b) => (Math.abs(b - a) < 1 ? 0 : (v - a) / (b - a));
+        V.path["c" + (i + 1)] = [+unsquash(frac(lx, p0[0], p1[0])).toFixed(3), +unsquash(frac(ly, p0[1], p1[1])).toFixed(3)];
         fillTrackFields(); writeJson();
       };
       h.onpointerup = () => { h.onpointermove = null; save(); };
     });
   }
+}
+// Handles are drawn on a squashed scale: true to the path within half its length past either end, then
+// logarithmic, so dragging further out grows the value faster with no cap (10 sits about 2.75 lengths out).
+const SQ = 0.5;
+function squash(f) {
+  const d = f > 1 ? f - 1 : f < 0 ? -f : 0;
+  if (d <= SQ) return f;
+  const s = SQ + Math.log(1 + d - SQ);
+  return f > 1 ? 1 + s : -s;
+}
+function unsquash(s) {
+  const d = s > 1 ? s - 1 : s < 0 ? -s : 0;
+  if (d <= SQ) return s;
+  const f = SQ + Math.exp(d - SQ) - 1;
+  return s > 1 ? 1 + f : -f;
 }
 /** The path's ends in stage pixels: the closed button's centre and the open dex's. */
 function pathEnds() {
@@ -1232,12 +1247,13 @@ function drawPathUI() {
   const { p0, p1 } = pathEnds(), P = V.path;
   const pt = (fx, fy) => [p0[0] + (p1[0] - p0[0]) * fx, p0[1] + (p1[1] - p0[1]) * fy];
   const c1 = pt(...P.c1), c2 = pt(...P.c2);
+  const g1 = pt(squash(P.c1[0]), squash(P.c1[1])), g2 = pt(squash(P.c2[0]), squash(P.c2[1]));
   const set = (k, a) => { for (const n in a) PATH[k].setAttribute(n, a[n]); };
   set("curve", { d: `M${p0} C${c1} ${c2} ${p1}` });
-  set("arm1", { x1: p0[0], y1: p0[1], x2: c1[0], y2: c1[1] });
-  set("arm2", { x1: p1[0], y1: p1[1], x2: c2[0], y2: c2[1] });
+  set("arm1", { x1: p0[0], y1: p0[1], x2: g1[0], y2: g1[1] });
+  set("arm2", { x1: p1[0], y1: p1[1], x2: g2[0], y2: g2[1] });
   set("p0", { cx: p0[0], cy: p0[1] }); set("p1", { cx: p1[0], cy: p1[1] });
-  set("h0", { cx: c1[0], cy: c1[1] }); set("h1", { cx: c2[0], cy: c2[1] });
+  set("h0", { cx: g1[0], cy: g1[1] }); set("h1", { cx: g2[0], cy: g2[1] });
   const end = Math.max(...["moveX", "moveY"].map((id) => V.tracks[id].delay + V.tracks[id].duration));
   const where = (ms) => pt(bez1(P.c1[0], P.c2[0], at("moveX", ms).e), bez1(P.c1[1], P.c2[1], at("moveY", ms).e));
   let d = "";
