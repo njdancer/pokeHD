@@ -33,8 +33,11 @@ export interface DexMotion {
     blur: Track & { amount: number };
     turn: Track & { swing: number };
   };
-  /** The closed dex (the menu button): its width in CSS pixels, inset from the top-right, tilt in degrees. */
-  closed: { width: number; top: number; right: number; tiltX: number; tiltY: number; tiltZ: number };
+  /**
+   * The closed dex (the menu button): its width in CSS pixels, at most `height` tall (its screen
+   * grows taller with the phone's), inset from the top-right of the safe area, tilt in degrees.
+   */
+  closed: { width: number; height: number; top: number; right: number; tiltX: number; tiltY: number; tiltZ: number };
   /** Portrait's open pose and path. */
   open: OpenPose;
   path: MotionPath;
@@ -60,7 +63,8 @@ export const DEX_MOTION: DexMotion = {
     open: { delay: 100, duration: 420, curve: [0, 1.063, 0.29, 0.639] },
     page: { delay: 50, duration: 218, curve: [0.06, 1.112, 0.3, 1] },
   },
-  closed: { width: 40, top: 28, right: 23, tiltX: -2, tiltY: -31, tiltZ: 5 },
+  // The size and place of the settings ball it replaced (Nick 2026-10-11), not the tuner's.
+  closed: { width: 36, height: 56, top: 12, right: 12, tiltX: -2, tiltY: -31, tiltZ: 5 },
   open: { fill: 0.94, offsetY: 0 },
   path: { c1: [2.006, 0.424], c2: [1.184, 0.819] },
   close: { speed: 1.4 },
@@ -253,6 +257,43 @@ export interface DexFrame {
   width: number;
   height: number;
   unitsPerPixel: number;
+  /**
+   * The box the open screen fills, in CSS px: its size and its centre's offset from the frame's
+   * middle (a phone's safe area, capped so a big display doesn't get a huge dex). The whole
+   * frame when left out.
+   */
+  fit?: { width: number; height: number; x: number; y: number };
+  /** The safe area's top and right insets (CSS px): the closed dex sits inside them. */
+  inset?: { top: number; right: number };
+}
+
+/** The biggest the open dex's screen gets (CSS px, portrait): the largest iPhone's display, 16/17 Pro Max (Nick 2026-10-11). */
+export const MAX_SCREEN = { width: 440, height: 956 } as const;
+
+/**
+ * The box the open screen fills in a `width`×`height` frame held at `held`: the frame less its
+ * safe-area `insets`, no bigger than `max` (portrait; turned with the dex). Its shape is the
+ * same whichever way it's held, so the screen needn't change shape as the dex rolls: `portrait`
+ * is the box upright, for shaping the screen.
+ */
+export function fitBox(
+  width: number,
+  height: number,
+  held: Held,
+  insets: { top: number; right: number; bottom: number; left: number } = { top: 0, right: 0, bottom: 0, left: 0 },
+  max: { width: number; height: number } = MAX_SCREEN,
+): { width: number; height: number; x: number; y: number; portrait: { width: number; height: number } } {
+  const fw = Math.max(1, width - insets.left - insets.right), fh = Math.max(1, height - insets.top - insets.bottom);
+  // Upright: the safe area as it is when the phone is upright (its insets turned with it).
+  const pw = Math.min(max.width, Math.min(fw, fh)), ph = Math.min(max.height, Math.max(fw, fh));
+  const [bw, bh] = held ? [ph, pw] : [pw, ph];
+  return {
+    width: Math.min(bw, fw),
+    height: Math.min(bh, fh),
+    x: (insets.left - insets.right) / 2,
+    y: (insets.top - insets.bottom) / 2,
+    portrait: { width: pw, height: ph },
+  };
 }
 export interface DexPose {
   /** The model point pinned to the path (negate it for the model's offset in its holder). */
@@ -277,8 +318,9 @@ const rad = (d: number) => (d * Math.PI) / 180;
 
 /** The closed dex's box in CSS pixels (top-right of the frame, upright whatever the orientation). */
 export function buttonRect(m: DexMotion, frame: DexFrame, measure: DexMeasure): { x: number; y: number; w: number; h: number } {
-  const w = m.closed.width, h = w * (measure.shut.h / measure.shut.w);
-  return { x: frame.width - m.closed.right - w, y: m.closed.top, w, h };
+  const ratio = measure.shut.h / measure.shut.w;
+  const w = Math.min(m.closed.width, m.closed.height / ratio), h = w * ratio;
+  return { x: frame.width - (frame.inset?.right ?? 0) - m.closed.right - w, y: (frame.inset?.top ?? 0) + m.closed.top, w, h };
 }
 
 /** The open dex's scale with it rolled to `angle` degrees: its screen fills the frame. */
@@ -286,7 +328,8 @@ export function openScale(m: DexMotion, frame: DexFrame, measure: DexMeasure, an
   const k = frame.unitsPerPixel, c = Math.abs(Math.cos(rad(angle))), s = Math.abs(Math.sin(rad(angle)));
   const { w: sw, h: sh } = measure.screen;
   const w = c * sw + s * sh, h = s * sw + c * sh;
-  return (held ? m.landscape : m).open.fill * Math.min((frame.width * k) / w, (frame.height * k) / h);
+  const box = frame.fit ?? frame;
+  return (held ? m.landscape : m).open.fill * Math.min((box.width * k) / w, (box.height * k) / h);
 }
 
 /**
@@ -297,7 +340,7 @@ export function dexPose(m: DexMotion, ms: number, frame: DexFrame, measure: DexM
   const T = m.tracks, O = held ? m.landscape : m, k = frame.unitsPerPixel;
   const b = buttonRect(m, frame, measure);
   const x0 = (b.x + b.w / 2 - frame.width / 2) * k, y0 = (frame.height / 2 - b.y - b.h / 2) * k;
-  const x1 = 0, y1 = -O.open.offsetY * k;
+  const x1 = (frame.fit?.x ?? 0) * k, y1 = -((frame.fit?.y ?? 0) + O.open.offsetY) * k;
   const s0 = (b.w * k) / measure.shut.w;
   const s1 = openScale(m, frame, measure, angle, held);
   const pressIn = trackAt(T.pressIn, ms), pressOut = trackAt(T.pressOut, ms), move = trackAt(T.move, ms), scale = trackAt(T.scale, ms);
@@ -335,4 +378,23 @@ export function pageSize(m: DexMotion, frame: DexFrame, measure: DexMeasure, hel
   const s = openScale(m, frame, measure, held, held) / frame.unitsPerPixel;
   const w = Math.round(measure.screen.w * s), h = Math.round(measure.screen.h * s);
   return held ? { width: h, height: w } : { width: w, height: h };
+}
+
+/**
+ * The CSS `matrix3d` that maps a `width`×`height` box onto `quad` (a projective transform), for
+ * laying the page over the device's screen.
+ */
+export function quadTransform(width: number, height: number, quad: readonly (readonly [number, number])[]): string {
+  const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = quad as [[number, number], [number, number], [number, number], [number, number]];
+  // Square to quad (Heckbert), then scale the unit square down from the box.
+  const dx1 = x1 - x2, dx2 = x3 - x2, dx3 = x0 - x1 + x2 - x3;
+  const dy1 = y1 - y2, dy2 = y3 - y2, dy3 = y0 - y1 + y2 - y3;
+  const det = dx1 * dy2 - dx2 * dy1;
+  const g = (dx3 * dy2 - dx2 * dy3) / det;
+  const h = (dx1 * dy3 - dx3 * dy1) / det;
+  const a = x1 - x0 + g * x1, b = x3 - x0 + h * x3, c = x0;
+  const d = y1 - y0 + g * y1, e = y3 - y0 + h * y3, f = y0;
+  // Column-major, with the box's own units scaled to the unit square.
+  const m = [a / width, d / width, 0, g / width, b / height, e / height, 0, h / height, 0, 0, 1, 0, c, f, 0, 1];
+  return `matrix3d(${m.map((n) => +n.toFixed(8)).join(",")})`;
 }

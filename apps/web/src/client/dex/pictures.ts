@@ -4,6 +4,7 @@
 import {
   battlePalette,
   dexPicture,
+  pokedexNumber,
   readGlyphs,
   readSgbPalettes,
   romOffset,
@@ -16,6 +17,8 @@ import {
   type SgbPalette,
   type SpriteSheet,
 } from "@pokehd/rom";
+
+import { fanPicture, fanSetLoaded } from "../colour/fan-set.ts";
 
 const cache = new WeakMap<Uint8Array, Map<string, string>>();
 
@@ -69,9 +72,22 @@ function picture(rom: Uint8Array, at: RomSymbol, palette: number, flip: boolean)
   });
 }
 
-/** A Pokémon's front picture, facing right the way the Pokédex shows it, in its own colours. */
+/**
+ * A Pokémon's front picture, facing right the way the Pokédex shows it, in its own colours: the
+ * hand-coloured version when the player has it (D43), else its SGB palette.
+ */
 export function monPicture(rom: Uint8Array, species: number, at: RomSymbol): string {
-  return picture(rom, at, battlePalette(rom, species), true);
+  const palette = battlePalette(rom, species);
+  if (fanSetLoaded()) {
+    const fan = cached(rom, `fan ${species}`, () => {
+      const pic: Pic = dexPicture(rom, at);
+      const w = pic.width * 8, colours = sgb(rom)[palette]!;
+      const base = (x: number, y: number) => { const c = pic.pixels[y * w + x]!; return c === 0 ? null : rgba(colours[c]!); };
+      return fanPicture(pokedexNumber(rom, species), w, pic.height * 8, true, base) ?? "";
+    });
+    if (fan) return fan;
+  }
+  return picture(rom, at, palette, true);
 }
 
 /** A trainer's front picture. */

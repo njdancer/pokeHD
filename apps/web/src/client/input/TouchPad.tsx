@@ -15,6 +15,8 @@ interface StickTouch {
 }
 export interface TouchPadProps {
   onChange: (mask: number) => void;
+  /** Select and Start (off where the Pokédex menu replaces the game's own). */
+  menuButtons?: boolean;
 }
 
 /**
@@ -24,7 +26,7 @@ export interface TouchPadProps {
  * `stickDirection`). Multi-touch: each finger is tracked separately, and one that slides off a
  * button keeps it held until it lifts, as a thumb resting on a real button would.
  */
-export function TouchPad({ onChange }: TouchPadProps) {
+export function TouchPad({ onChange, menuButtons = true }: TouchPadProps) {
   const pointers = useRef(new Map<number, number>());
   const mask = useRef(0);
   const onChangeRef = useRef(onChange);
@@ -131,10 +133,12 @@ export function TouchPad({ onChange }: TouchPadProps) {
           <div ref={knob} className="touch-stick-knob" />
         </div>
       </div>
-      <div className="touch-menu">
-        {button(Button.Select, "Select", "touch-small")}
-        {button(Button.Start, "Start", "touch-small")}
-      </div>
+      {menuButtons && (
+        <div className="touch-menu">
+          {button(Button.Select, "Select", "touch-small")}
+          {button(Button.Start, "Start", "touch-small")}
+        </div>
+      )}
       <div className="touch-face">
         {button(Button.B, "B", "touch-round b")}
         {button(Button.A, "A", "touch-round a")}

@@ -1,0 +1,16 @@
+/* The Pokédex over the game (DexHost.tsx): fills its frame; only the button, the shade (open) and the page take taps. */
+.dh-root { position: absolute; inset: 0; z-index: 19; pointer-events: none; overflow: hidden; }
+.dh-shade { position: absolute; inset: -8px; visibility: hidden; }
+.dh-root.open .dh-shade { pointer-events: auto; }
+.dh-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.dh-page { position: absolute; left: 0; top: 0; transform-origin: 0 0; overflow: hidden; visibility: hidden; opacity: 0; backface-visibility: hidden; }
+.dh-root.settled .dh-page { pointer-events: auto; }
+.dh-button { position: absolute; padding: 0; border: 0; background: none; border-radius: 6px; pointer-events: auto; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.dh-root.open .dh-button { pointer-events: none; }
+.dh-button:focus-visible { outline: 3px solid #5cc2ff; outline-offset: 3px; }
+/* News: a soft glow behind the shut dex's lens. */
+.dh-button.alert::before { content: ""; position: absolute; left: 12%; top: 6%; width: 34%; aspect-ratio: 1; border-radius: 50%; box-shadow: 0 0 14px 6px #5cc2ffb0; animation: dh-glow 1.6s ease-in-out infinite; z-index: -1; }
+@keyframes dh-glow { 50% { box-shadow: 0 0 6px 2px #5cc2ff80; } }
+/* No 3D (the model couldn't load): a plain red dex button in the same corner. */
+.dh-fallback { position: absolute; top: 28px; right: 23px; width: 40px; height: 56px; border: 0; border-radius: 6px; background: linear-gradient(#e2443a, #b7271f); box-shadow: 0 3px 8px #0005; pointer-events: auto; cursor: pointer; }
+.dh-root.away:not(.open) :is(.dh-canvas, .dh-button, .dh-fallback) { visibility: hidden; }

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { checkRom, type RomHeader } from "@pokehd/rom";
 import { Cartridge } from "./Cartridge.tsx";
 import { LoadingScreen } from "./LoadingScreen.tsx";
+import { loadFanSet } from "./colour/fan-set.ts";
 import { fetchDevRom } from "./dev-rom.ts";
 import { forgetRom, loadStoredRom, storedRomIsShared, storeRom } from "./rom-store.ts";
 import { me, type Account } from "./room/account.ts";
@@ -12,6 +13,9 @@ import { MAIN_SLOT, markPlayed } from "./saves/slots.ts";
 // own chunks. The game starts downloading at once, while the ROM and account are checked.
 const gameChunk = import("./game/Game.tsx");
 const Game = lazy(() => gameChunk.then((m) => ({ default: m.Game })));
+// The Pokédex menu on the modelled dex is the game's menu (Nick 2026-10-11, testing it everywhere);
+// ?oldmenu brings back the game's own Start menu and the old dex.
+const DEX_MENU = !new URLSearchParams(location.search).has("oldmenu");
 const GameView = lazy(() => import("./GameView.tsx").then((m) => ({ default: m.GameView })));
 
 type State =
@@ -72,6 +76,10 @@ export function App() {
   // The game plays the main slot (the save everyone already had) until the slot picker ships;
   // noting it played lists it among the player's slots, here and in the cloud.
   const readyKey = state.kind === "ready" ? state.romKey : null;
+  // The fan's hand-coloured Pokémon pictures (D43), for players they're shared with.
+  useEffect(() => {
+    if (readyKey) void loadFanSet();
+  }, [readyKey]);
   useEffect(() => {
     if (readyKey) void markPlayed(readyKey, MAIN_SLOT).catch((err) => console.warn("[pokeHD] couldn't update the save slots", err));
   }, [readyKey]);
@@ -79,7 +87,7 @@ export function App() {
   if (state.kind === "ready") {
     return (
       <Suspense fallback={<LoadingScreen />}>
-        <Game rom={state.rom} romKey={state.romKey} header={state.header} onForget={forget} />
+        <Game rom={state.rom} romKey={state.romKey} header={state.header} onForget={forget} menu={DEX_MENU} />
       </Suspense>
     );
   }

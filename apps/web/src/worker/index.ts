@@ -6,6 +6,7 @@ import { cleanEmail, type CodeKind, type Player } from "./directory/store.ts";
 import { PLAYER_ID_HEADER, PLAYER_NAME_HEADER } from "./room/do.ts";
 import { locksApi } from "./locks/api.ts";
 import { savesApi } from "./saves/saves.ts";
+import { labApi } from "./lab/lab.ts";
 
 export { Directory } from "./directory/do.ts";
 export { Room } from "./room/do.ts";
@@ -36,6 +37,19 @@ app.on("GET", ["/rom", "/dev-rom"], async (c) => {
   return new Response(rom.body, {
     headers: { "content-type": "application/octet-stream", "cache-control": "private, no-store" },
   });
+});
+
+// The fan's hand-coloured Pokémon pictures (D43), a temporary stand-in for the colour work: one
+// PNG atlas, gated exactly like the cartridge above. Uploaded with ADMIN_TOKEN (PUT /admin/colour-set).
+const COLOUR_SET_KEY = "colour/fan151.png";
+const COLOUR_SET_MAX_BYTES = 4 * 1024 * 1024;
+
+app.get("/colour-set", async (c) => {
+  const allowed = (await bearerMatches(c, c.env.DEV_ROM_TOKEN)) || romAccess(c, await currentPlayer(c));
+  if (!allowed) return c.text("Not found", 404);
+  const png = await c.env.PRIVATE.get(COLOUR_SET_KEY);
+  if (!png) return c.text("Not found", 404);
+  return new Response(png.body, { headers: { "content-type": "image/png", "cache-control": "private, max-age=86400" } });
 });
 
 // Friends (D23): a player is an email address. Signing in sends a code to it; the session cookie
@@ -216,6 +230,25 @@ app.put("/admin/relief", async (c) => {
   await c.env.PRIVATE.put(RELIEF_KEY, text, { httpMetadata: { contentType: "application/json" } });
   return c.json({ ok: true, savedAt: new Date().toISOString() });
 });
+
+app.put("/admin/colour-set", async (c) => {
+  const body = await c.req.arrayBuffer();
+  if (body.byteLength > COLOUR_SET_MAX_BYTES) return c.json({ error: "too-large" }, 413);
+  const head = new Uint8Array(body, 0, Math.min(8, body.byteLength));
+  if (head[0] !== 0x89 || head[1] !== 0x50 || head[2] !== 0x4e || head[3] !== 0x47) return c.json({ error: "not-png" }, 400);
+  await c.env.PRIVATE.put(COLOUR_SET_KEY, body, { httpMetadata: { contentType: "image/png" } });
+  return c.json({ ok: true, bytes: body.byteLength });
+});
+
+app.delete("/admin/colour-set", async (c) => {
+  await c.env.PRIVATE.delete(COLOUR_SET_KEY);
+  return c.json({ ok: true });
+});
+
+// The relief lab (/admin/lab): the trainer on Nick's Mac mirrors its runs here with ADMIN_TOKEN,
+// and the dashboard reads them. A file store under `lab/` in the private bucket
+// (docs/relief-ml/LAB-CONTRACT.md).
+app.route("/admin/lab", labApi<Bindings>());
 
 /** A fresh sign-in link for a player, e.g. when the first one expired. */
 app.post("/admin/players/:id/link", async (c) => {

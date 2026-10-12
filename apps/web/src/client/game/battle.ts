@@ -5,7 +5,8 @@ import {
   type BattleScreen, type BattleScreenWatched, type BattleState, type BattleWatched, type Watch,
 } from "@pokehd/emu";
 import type { BattleView, Side } from "@pokehd/engine/battle";
-import { battlePalette, readSgbPalettes, type SgbPalette } from "@pokehd/rom";
+import { battlePalette, pokedexNumber, readSgbPalettes, type SgbPalette } from "@pokehd/rom";
+import { fanFrame } from "../colour/fan-set.ts";
 import type { BattleScene } from "./screen.ts";
 
 /**
@@ -37,6 +38,7 @@ export class BattleColours {
       this.#shown = { player: false, enemy: false };
     }
     const ramps = {} as BattleView["ramps"];
+    const art: BattleView["art"] = {};
     for (const side of ["player", "enemy"] as const) {
       const shown = screen[side] !== null;
       // A picture going away makes room for the next: out of the intro, the Pokémon; after the
@@ -49,6 +51,9 @@ export class BattleColours {
       const mon = state[side].mon;
       const id = this.#trainer[side] || !mon ? battlePalette(this.#rom, 0) : battlePalette(this.#rom, mon.species, mon.transformed);
       ramps[side] = this.#palettes[id]!;
+      // The hand-coloured front pictures (D43): only the opponent's Pokémon faces us, and a
+      // transformed one shows someone else's picture.
+      if (side === "enemy" && !this.#trainer[side] && mon && !mon.transformed) art[side] = fanFrame(pokedexNumber(this.#rom, mon.species));
     }
     return {
       enemy: screen.enemy,
@@ -57,6 +62,7 @@ export class BattleColours {
       objects: screen.objects,
       palettes: screen.palettes,
       origin: screen.origin,
+      art,
     };
   }
 }

@@ -13,21 +13,17 @@
 /* The notch and home bar, so safe areas are honest. */
 .md-phone::before { content: ""; position: absolute; z-index: 40; left: 50%; top: 0; translate: -50% 0; width: 162px; height: 32px; border-radius: 0 0 20px 20px; background: #17161a; pointer-events: none; }
 .md-phone::after { content: ""; position: absolute; z-index: 40; left: 50%; bottom: 8px; translate: -50% 0; width: 136px; height: 5px; border-radius: 3px; background: #17161acc; pointer-events: none; }
-.md-phone .m-root { --m-safe-top: 47px; --m-safe-bottom: 34px; }
+.md-phone .m-root, .md-phone .m-dex { --m-safe-top: 47px; --m-safe-bottom: 34px; }
+.md-phone { container: phone / size; }
+.md-phone.turned { width: 844px; height: 390px; }
+.md-phone.turned .m-root, .md-phone.turned .m-dex { --m-safe-top: 0px; --m-safe-bottom: 21px; --m-safe-left: 47px; --m-safe-right: 47px; }
+.md-phone.turned::before { left: 0; top: 50%; translate: 0 -50%; width: 32px; height: 162px; border-radius: 0 20px 20px 0; }
+
+.md-phone.desk { width: 1280px; height: 800px; border-radius: 12px; scale: .62; margin: -152px -243px; }
+.md-phone.desk::before, .md-phone.desk::after { display: none; }
 .md-scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .md-status { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; color: #fff; font-size: 17px; }
 .md-place { position: absolute; z-index: 1; left: 16px; top: 56px; padding: 6px 12px; border-radius: 99px; background: #fffaf0d9; font: 900 14px/1 Nunito, sans-serif; color: #3e2a1c; box-shadow: 0 2px 6px #0003; }
-
-/* The closed Pokédex in the corner (the tuner thread owns its look and animation). */
-.md-dexbtn {
-  position: absolute; z-index: 5; right: 16px; top: 52px; width: 54px; height: 68px; padding: 0; cursor: pointer; border: 0;
-  border-radius: 10px 13px 13px 10px; background: linear-gradient(160deg, #e9493c, #b72a20);
-  box-shadow: 0 6px 14px #3a0d0866, inset 0 2px 0 #ff8a7c88, inset -7px 0 0 #9b2118;
-}
-.md-dexbtn::before { content: ""; position: absolute; left: 9px; top: 10px; width: 17px; height: 17px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #bfe8ff, #2c8fd6 55%, #135a8f); border: 2px solid #f4f1ea; }
-.md-dexbtn::after { content: ""; position: absolute; left: 9px; right: 14px; bottom: 13px; height: 3px; border-radius: 2px; background: #7a160f; box-shadow: 0 -7px 0 #7a160f; }
-.md-dexbtn.alert::before { box-shadow: 0 0 12px 4px #5cc2ff; animation: md-glow 1.6s ease-in-out infinite; }
-@keyframes md-glow { 50% { box-shadow: 0 0 4px 1px #5cc2ff; } }
 
 /* Stand-ins for the game's own message box and battle menu. */
 .md-msg {
@@ -71,9 +67,8 @@
   .md-phone-col { position: fixed; inset: 0; }
   .md-phone { width: 100%; height: 100%; border-radius: 0; box-shadow: none; }
   .md-phone::before, .md-phone::after { display: none; }
-  .md-phone .m-root { --m-safe-top: env(safe-area-inset-top, 0px); --m-safe-bottom: env(safe-area-inset-bottom, 0px); }
+  .md-phone .m-root, .md-phone .m-dex { --m-safe-top: env(safe-area-inset-top, 0px); --m-safe-bottom: env(safe-area-inset-bottom, 0px); }
   .md-place { top: calc(env(safe-area-inset-top, 0px) + 12px); }
-  .md-dexbtn { top: calc(env(safe-area-inset-top, 0px) + 10px); }
   .md-paneltoggle {
     display: block; position: fixed; z-index: 50; left: 50%; translate: -50% 0; bottom: calc(env(safe-area-inset-bottom, 0px) + 1px); padding: 4px 12px; border-radius: 99px;
     border: 0; background: #2b2b33cc; color: #fff; font: 800 12px/1 Nunito, sans-serif; opacity: .7;

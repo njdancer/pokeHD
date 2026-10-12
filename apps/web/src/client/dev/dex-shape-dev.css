@@ -55,15 +55,6 @@
 .ds-size { position: absolute; z-index: 41; left: 50%; bottom: 18px; translate: -50% 0; padding: 3px 10px; border-radius: 99px; background: #17161acc; color: #fff; font: 700 12px/1.4 Nunito, sans-serif; pointer-events: none; }
 .ds-status { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 24px; text-align: center; color: #fff; }
 
-/* The menu as it is today, minus its temporary panel chrome: the dex is the frame now. */
-.ds-screen .m-root { --m-safe-top: 0px; --m-safe-bottom: 0px; position: absolute; inset: 0; }
-.ds-screen .m-shade, .ds-screen .m-corner, .ds-screen .m-dex > .m-close { display: none; }
-.ds-screen .m-dex {
-  inset: 0; border: 0; border-radius: 0; box-shadow: none;
-  transform: none; opacity: 1; transition: none; pointer-events: auto;
-}
-.ds-screen .m-screen { border-radius: 0; }
-.ds-screen .m-head { padding-right: 18px; }
 .ds-back {
   position: absolute; z-index: 70; left: 12px; top: calc(env(safe-area-inset-top, 0px) + 4px); min-height: 34px; padding: 0 14px;
   border: 0; border-radius: 99px; background: #fffaf0e6; color: #3e2a1c; font: 800 14px/1 Nunito, sans-serif; box-shadow: 0 2px 8px #0003;

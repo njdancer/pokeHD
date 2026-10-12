@@ -21,6 +21,8 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
   loads it when it has no ROM. Locally, the Vite dev server serves `rom/pokeblue.gb` at
   `/__dev/rom` and the app auto-loads it. Never expose the ROM any other way (no public assets,
   no public bucket, nobody who isn't signed in).
+  **Second exception (temporary, D43):** a fan's hand-coloured Pokémon pictures, as one atlas in
+  the same private bucket, served by `GET /api/colour-set` behind the same gate as the ROM.
 - **Keep it private.** The GitHub repo is private. Don't name public things "Pokémon".
 - **Visuals are the point.** Pixel art stays crisp (no xBR/HQx smoothing on sprites); the
   HD treatment comes from 3D geometry, lighting, materials and post-processing. It's always
@@ -46,6 +48,9 @@ A web-based HD-2D presentation of Pokémon Blue (USA/Europe), with friends-only 
     settings, in-game overlays). Plain CSS with custom properties. `/explore` is a ROM explorer
     (disassembly, step debugger, asset viewers) over every pokeblue.sym label, generated into
     `packages/rom/src/generated/explorer-db.ts` by `tools/gen-explorer.ts` (`pnpm rom:symbols`).
+    `/admin/lab` is the relief lab, Nick's console for the relief-model training on his Mac: it reads
+    the run tree the trainer mirrors to the private bucket under `lab/` (docs/relief-ml/LAB-CONTRACT.md;
+    `node tools/lab-seed.ts` makes demo data for it).
   - `src/worker`: Hono app under `/api/*` (`run_worker_first`); everything else is static
     assets with SPA fallback. Durable Objects (multiplayer rooms, hibernatable WebSockets)
     arrive in the multiplayer phase.

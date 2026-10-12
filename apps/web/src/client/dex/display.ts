@@ -37,15 +37,15 @@ const IPHONE_RADII: [w: number, h: number, r: number][] = [
   [440, 956, 62], // 16 Pro Max, 17 Pro Max
 ];
 
-/** The display's corner radius in CSS px, and whether it's known or a guess (0 on a computer). */
+/** Where the display's radius isn't known (computers, other phones): the canonical dex's small rounding (Nick). */
+export const FALLBACK_RADIUS = 4;
+
+/** The display's corner radius in CSS px, and whether it's the display's own. */
 export function displayRadius(): { radius: number; known: boolean } {
   const w = Math.min(screen.width, screen.height);
   const h = Math.max(screen.width, screen.height);
   const hit = IPHONE_RADII.find(([iw, ih]) => iw === w && ih === h);
-  if (hit) return { radius: hit[2], known: true };
-  // Some other phone with rounded corners: a middling guess.
-  if (matchMedia("(pointer: coarse)").matches && w < 600) return { radius: 32, known: false };
-  return { radius: 0, known: false };
+  return hit ? { radius: hit[2], known: true } : { radius: FALLBACK_RADIUS, known: false };
 }
 
 /** How much the open dex's screen fills the space it's given (device.ts pushes in to 1.03 × 1.05). */
