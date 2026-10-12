@@ -23,11 +23,11 @@ def node():
     return p or shutil.which("node")
 
 
-def mesh(kind, N, img, mask, depth=1.0):
+def mesh(kind, N, img, mask, depth=1.0, proto=False):
     rgb = np.repeat(tasks.SHADE[img][..., None], 3, -1)
     j = dict(kind=kind, w=int(img.shape[1]), h=int(img.shape[0]), n=np.round(N, 4).ravel().tolist(),
              c=rgb.ravel().tolist(), g=mask.astype(int).ravel().tolist(), depth=depth)
-    out = subprocess.run([node(), str(PKG / "mesh.ts")], input=json.dumps(j).encode(), capture_output=True, check=True).stdout
+    out = subprocess.run([node(), str(PKG / ("mesh_proto.ts" if proto else "mesh.ts"))], input=json.dumps(j).encode(), capture_output=True, check=True).stdout
     return np.frombuffer(out, np.float32).reshape(-1, 3, 9)
 
 
