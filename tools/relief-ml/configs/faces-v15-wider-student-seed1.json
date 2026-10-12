@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v15-wider-student",
+  "title": "faces-v15, seed 1",
+  "why": "Second seed: results must hold across training runs.",
+  "changes": ["Different random seed"],
+  "train": {"seed": 1}
+}
