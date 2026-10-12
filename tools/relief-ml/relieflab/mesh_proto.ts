@@ -7,7 +7,7 @@ const { w, h } = j;
 const N = (x: number, y: number) => { const i = (y * w + x) * 3; return [j.n[i], j.n[i + 1], j.n[i + 2]] as [number, number, number]; };
 const C = (x: number, y: number) => { const i = (y * w + x) * 3; return [j.c[i], j.c[i + 1], j.c[i + 2]] as [number, number, number]; };
 const m = j.kind === "map"
-  ? mapRelief({ width: w, height: h, normal: N, colour: C, ground: (x, y) => j.g[y * w + x] === 1 }, { sides: true, mirror: true })
+  ? mapRelief({ width: w, height: h, normal: N, colour: C, ground: (x, y) => j.g[y * w + x] === 1 }, { sides: true, mirror: true, roofs: true })
   : pictureRelief({ width: w, height: h, inside: (x, y) => j.g[y * w + x] === 1, normal: N, colour: C }, j.depth ?? 1);
 const out = new Float32Array(m.positions.length * 3);
 const n = m.positions.length / 3;

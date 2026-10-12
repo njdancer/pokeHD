@@ -43,6 +43,8 @@ export interface MapOptions {
   sides: boolean;
   /** Copy each roof slope behind its ridge, so roofs come out gabled instead of half a roof. */
   mirror: boolean;
+  /** PROTOTYPE: rebuild each roof (connected slope and hip pixels) as one solid shape. */
+  roofs?: boolean;
 }
 
 interface Seg {
@@ -53,14 +55,9 @@ interface Seg {
 
 const SLOPE = (n: Normal) => n[1] > 0.05 && n[2] > 0.05 && Math.abs(n[0]) < 0.05;
 
-/** Builds the three-quarter-view relief for a map region. Units: one pixel; y up, z towards the viewer.
- *  PROTOTYPE (relief ML, 2026-10-12): hips are planes that only slope sideways. A hip pixel's height is
- *  set by its uphill neighbour's ridge (not its height at the same depth), so the hip runs flat from
- *  front to back, is mirrored behind the ridge like slopes, and is shifted along z so it still lines up
- *  with its pixel from the game camera (screen row = height + depth). */
+/** Builds the three-quarter-view relief for a map region. Units: one pixel; y up, z towards the viewer. */
 export function mapRelief(r: MapRegion, opts: MapOptions): Mesh {
   const cols: Seg[][] = [];
-  const hipSegs: { seg: Seg; col: number }[] = [];
   for (let x = 0; x < r.width; x++) {
     const segs: Seg[] = []; cols.push(segs);
     let h = 0, z = 0;
@@ -70,54 +67,51 @@ export function mapRelief(r: MapRegion, opts: MapOptions): Mesh {
       h += dh; z += dz; segs.push(s); return s;
     };
     const closeRun = () => {
-      if (opts.mirror) for (const s of [...run].reverse()) {
-        const m = push(-(s.hl1 - s.hl0), s.z1 - s.z0, s.rgb.map((v) => v * 0.85) as unknown as Rgb, s.lean);
-        if (s.lean) hipSegs.push({ seg: m, col: x });
-      }
+      // The hidden back of a roof: the same slope, mirrored, coming back down behind the ridge.
+      if (opts.mirror) for (const s of [...run].reverse()) push(-(s.hl1 - s.hl0), s.z1 - s.z0, s.rgb.map((v) => v * 0.85) as unknown as Rgb, 0);
       run = [];
     };
     for (let y = r.height - 1; y >= 0; y--) {
       const n = r.normal(x, y), rgb = r.colour(x, y);
       if (r.ground(x, y)) {
         if (run.length) closeRun();
-        if (h > 0) { segs.push({ x, z0: z, z1: z, hl0: h, hl1: 0, hr0: h, hr1: 0, rgb, lean: 0 }); h = 0; }
+        if (h > 0) { segs.push({ x, z0: z, z1: z, hl0: h, hl1: 0, hr0: h, hr1: 0, rgb, lean: 0 }); h = 0; } // back wall down to the ground
+        // Ground keeps its natural place: as far back as its row is up the screen. Whatever stood in
+        // front of it hides the gap between that object's back and here; it never pulls the ground forward.
         z = Math.max(z, r.height - 1 - y);
       }
       const ny = Math.max(0, n[1]), nz = Math.max(0, n[2]), sum = ny + nz;
       const dh = sum < 1e-3 ? 1 : nz / sum, dz = sum < 1e-3 ? 0 : ny / sum;
       const lean = ny > 0.05 && Math.abs(n[0]) > 0.05 ? -n[0] / ny : 0;
       const s = push(dh, dz, rgb, lean);
-      if (lean) hipSegs.push({ seg: s, col: x });
-      if (SLOPE(n) || lean) run.push(s); else if (run.length && !r.ground(x, y)) run = [];
+      if (SLOPE(n)) run.push(s); else if (run.length && !r.ground(x, y)) run = [];
     }
     if (run.length) closeRun();
   }
-  // Hips: height from the uphill neighbour's top (its ridge), constant front to back, dropping by the
-  // lean towards the outside. Uphill columns first, so chains of hips settle outwards.
-  const top = new Map<number, number>();
-  const colTop = (x: number): number | null => {
+  // Hips: a pixel that leans takes the height of the column on its uphill side, then drops by its
+  // lean across its own width. Work from the uphill side outwards so neighbours are settled first.
+  const edgeAt = (x: number, z: number, side: "l" | "r"): number | null => {
     if (x < 0 || x >= r.width) return null;
-    if (top.has(x)) return top.get(x)!;
-    let best = 0;
-    for (const g of cols[x]!) if (!g.lean) best = Math.max(best, g.hl0, g.hl1, g.hr0, g.hr1);
+    let best: number | null = null;
+    for (const g of cols[x]!) {
+      if (z < g.z0 - 1e-6 || z > g.z1 + 1e-6 || g.z1 === g.z0) continue;
+      const t = (z - g.z0) / (g.z1 - g.z0), a = side === "l" ? [g.hl0, g.hl1] : [g.hr0, g.hr1];
+      const v = a[0]! + (a[1]! - a[0]!) * t;
+      if (best === null || v > best) best = v;
+    }
     return best;
   };
-  const settle = (g: Seg, x: number) => {
-    const up = g.lean > 0 ? x + 1 : x - 1;
-    const H = colTop(up);
-    if (H === null || H <= 0) return;
-    const walked = g.hl0;   // height the column walk gave this pixel
-    const lo = Math.max(0, H - Math.abs(g.lean));
-    if (g.lean > 0) { g.hr0 = g.hr1 = H; g.hl0 = g.hl1 = lo; } else { g.hl0 = g.hl1 = H; g.hr0 = g.hr1 = lo; }
-    // Keep it on its pixel from the game camera: raising it by d must bring it d nearer the viewer.
-    const d = (H + lo) / 2 - walked;
-    g.z0 -= d; g.z1 -= d;
-    top.set(x, Math.max(top.get(x) ?? 0, lo));
-  };
-  const rightward = hipSegs.filter((e) => e.seg.lean > 0).sort((a, b) => b.col - a.col);
-  const leftward = hipSegs.filter((e) => e.seg.lean < 0).sort((a, b) => a.col - b.col);
-  for (const e of rightward) settle(e.seg, e.col);
-  for (const e of leftward) settle(e.seg, e.col);
+  for (let x = r.width - 1; x >= 0; x--) for (const g of cols[x]!) if (g.lean > 0) { // rises to the right: uphill is x + 1
+    const a = edgeAt(x + 1, g.z0, "l"), b = edgeAt(x + 1, g.z1, "l");
+    if (a === null || b === null) continue;
+    g.hr0 = a; g.hr1 = b; g.hl0 = Math.max(0, a - g.lean); g.hl1 = Math.max(0, b - g.lean);
+  }
+  for (let x = 0; x < r.width; x++) for (const g of cols[x]!) if (g.lean < 0) { // rises to the left
+    const a = edgeAt(x - 1, g.z0, "r"), b = edgeAt(x - 1, g.z1, "r");
+    if (a === null || b === null) continue;
+    g.hl0 = a; g.hl1 = b; g.hr0 = Math.max(0, a + g.lean); g.hr1 = Math.max(0, b + g.lean);
+  }
+  if (opts.roofs) roofs(r, cols);
   const m = mesh();
   for (const segs of cols) for (const g of segs) {
     const { x, z0, z1, rgb } = g;
@@ -193,4 +187,88 @@ export function pictureRelief(p: Picture, depth = 1): Mesh {
     m.quad([X, Y - 1, corner(x, y + 1)], [X + 1, Y - 1, corner(x + 1, y + 1)], [X + 1, Y, corner(x + 1, y)], [X, Y, corner(x, y)], p.normal(x, y), p.colour(x, y));
   }
   return m;
+}
+
+
+/**
+ * PROTOTYPE (relief ML, 2026-10-12). A roof is a connected patch of slope and hip pixels. It is rebuilt
+ * as one solid: the lowest of four 45° planes over the ground: the front pitch (rises going back), the
+ * back pitch (its mirror behind the ridge), and the two hip ends (rise going inwards from the left and
+ * right edges). Each pixel is then placed where the game camera's ray through it meets that solid
+ * (screen row = height + depth), so the sprite still lines up exactly, and the hidden back pitch and
+ * hip backs are added behind it.
+ */
+function roofs(r: MapRegion, cols: Seg[][]) {
+  const W = r.width, H = r.height;
+  const isRoof = (x: number, y: number) => {
+    if (r.ground(x, y)) return false;
+    const n = r.normal(x, y);
+    return SLOPE(n) || (n[1] > 0.05 && Math.abs(n[0]) > 0.05);
+  };
+  const seen = new Uint8Array(W * H);
+  for (let y0 = 0; y0 < H; y0++) for (let x0 = 0; x0 < W; x0++) {
+    if (seen[y0 * W + x0] || !isRoof(x0, y0)) continue;
+    const px: [number, number][] = []; const stack: [number, number][] = [[x0, y0]]; seen[y0 * W + x0] = 1;
+    while (stack.length) {
+      const [x, y] = stack.pop()!; px.push([x, y]);
+      for (const [a, b] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]] as const)
+        if (a >= 0 && a < W && b >= 0 && b < H && !seen[b * W + a] && isRoof(a, b)) { seen[b * W + a] = 1; stack.push([a, b]); }
+    }
+    if (px.length < 4) continue;
+    // Per column: the roof's pixel rows (bottom to top) and where the walk put its lowest pixel (the eave).
+    const byCol = new Map<number, number[]>();
+    for (const [x, y] of px) (byCol.get(x) ?? byCol.set(x, []).get(x)!).push(y);
+    const eaves: { x: number; h: number; z: number; rows: number[] }[] = [];
+    for (const [x, ys] of byCol) {
+      ys.sort((a, b) => b - a);
+      const segs = cols[x]!, rowsFromBottom = H - 1 - ys[0]!;
+      // the walk pushes one seg per pixel row from the bottom (plus vertical back walls); find the eave seg
+      let k = -1, i = 0;
+      for (const g of segs) { if (g.z0 === g.z1 && g.hl1 < g.hl0) continue; if (i === rowsFromBottom) { k = segs.indexOf(g); break; } i++; }
+      if (k < 0) continue;
+      eaves.push({ x, h: segs[k]!.hl0, z: segs[k]!.z0, rows: ys });
+    }
+    if (!eaves.length) continue;
+    const med = (a: number[]) => [...a].sort((p, q) => p - q)[Math.floor(a.length / 2)]!;
+    const he = med(eaves.map((e) => e.h)), ze = med(eaves.map((e) => e.z));
+    const xa = Math.min(...eaves.map((e) => e.x)), xb = Math.max(...eaves.map((e) => e.x)) + 1;
+    // Ridge: half the tallest column of slope pixels (each slope pixel rises half a pixel).
+    let slopeRows = 0;
+    for (const e of eaves) slopeRows = Math.max(slopeRows, e.rows.filter((y) => SLOPE(r.normal(e.x, y))).length);
+    const rise = slopeRows / 2, R = he + rise, zr = ze + rise, zb = zr + rise;
+    const roofH = (x: number, z: number) => Math.max(he - 1e-6, Math.min(he + (z - ze), R - (z - zr), he + (x - xa), he + (xb - x)));
+    // Where the camera ray for screen row s (= height + depth) meets the roof, in column edge x.
+    const hit = (x: number, s: number): [number, number] => {
+      let lo = ze, hi = zb;
+      if (roofH(x, lo) + lo >= s) return [lo, roofH(x, lo)];
+      for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (roofH(x, mid) + mid >= s) hi = mid; else lo = mid; }
+      return [hi, roofH(x, hi)];
+    };
+    for (const e of eaves) {
+      const segs = cols[e.x]!, s0 = he + ze;
+      // Replace this column's roof pixels: keep everything below the eave, rebuild the roof, then the walk above.
+      const keep = segs.filter((g) => g.z1 <= ze + 1e-6 && Math.max(g.hl0, g.hl1, g.hr0, g.hr1) <= he + 1e-6);
+      const above = segs.filter((g) => !keep.includes(g) && g.z0 >= zb - 1e-6);
+      const rgbOf = (y: number) => r.colour(e.x, y);
+      const out: Seg[] = [...keep];
+      const ys = e.rows; let lastZ = ze;
+      ys.forEach((y, k) => {
+        const sA = s0 + k, sB = s0 + k + 1;
+        const [zl0, hl0] = hit(e.x, sA), [zl1, hl1] = hit(e.x, sB);
+        const [zr0, hr0] = hit(e.x + 1, sA), [zr1, hr1] = hit(e.x + 1, sB);
+        // one quad per pixel; depth from the column's middle so left and right edges stay on the same pixel row
+        const z0 = (zl0 + zr0) / 2, z1 = (zl1 + zr1) / 2;
+        out.push({ x: e.x, z0, z1, hl0, hl1, hr0, hr1, rgb: rgbOf(y), lean: 0 });
+        lastZ = z1;
+      });
+      // Hidden back: from the last visible point back to the rear eave, following the roof.
+      const steps = Math.max(1, Math.ceil(zb - lastZ));
+      const dark = rgbOf(ys[ys.length - 1]!).map((v) => v * 0.85) as unknown as Rgb;
+      for (let i = 0; i < steps; i++) {
+        const z0 = lastZ + (zb - lastZ) * i / steps, z1 = lastZ + (zb - lastZ) * (i + 1) / steps;
+        out.push({ x: e.x, z0, z1, hl0: roofH(e.x, z0), hl1: roofH(e.x, z1), hr0: roofH(e.x + 1, z0), hr1: roofH(e.x + 1, z1), rgb: dark, lean: 0 });
+      }
+      cols[e.x] = [...out, ...above];
+    }
+  }
 }
