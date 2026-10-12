@@ -1,0 +1,7 @@
+{
+  "extends": "faces-v14-self-distill",
+  "title": "faces-v14 with a wider student (width 56)",
+  "why": "Earlier, width 64 overfitted the made-up scenes. Now the real maps carry teacher labels on every pixel, so a wider student may have something real to use its extra capacity on.",
+  "changes": ["Width 40 → 56 (about 2x the weights)"],
+  "model": {"width": 56}
+}
