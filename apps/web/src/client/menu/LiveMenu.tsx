@@ -8,7 +8,7 @@ import type { Catalogue } from "../dex/catalogue.ts";
 import { DexHost, type DexSlots } from "../dex/DexHost.tsx";
 import { DexMenu, type DexMenuProps } from "./DexMenu.tsx";
 import type { PlayJournal } from "./journal.ts";
-import { LiveActions, liveModel, momentOf, requestOf, type LiveFriend, type LiveHost } from "./live.ts";
+import { currentGame, LiveActions, liveModel, momentOf, requestOf, type GameRead, type LiveFriend, type LiveHost } from "./live.ts";
 import type { AppOptions } from "./model.ts";
 import { AskSheet } from "./Sheets.tsx";
 import "./ask-sheet.css";
@@ -54,13 +54,16 @@ export interface LiveMenuProps {
 
 /** How often the open menu reads the game (it runs on behind the menu). */
 const READ_EVERY_MS = 1000;
+/** How often while the game asks a question: its sheet shows what the game just did (a purchase's money). */
+const READ_ASKING_EVERY_MS = 250;
 
 export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, open, onOpen, away, sendGift, start, onClose, journal, friends, savedAt, app, setApp, grownUps }: LiveMenuProps) {
-  const [snapshot, setSnapshot] = useState<GameSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<GameRead | null>(null);
   const [notice, setNotice] = useState<{ text: string; n: number } | null>(null);
   const trainers = useMemo(() => trainerClasses(rom), [rom]);
   const reading = open || !!ask;
-  const now = ask?.game ?? snapshot;
+  const askId = ask?.id ?? null;
+  const now = currentGame(ask, snapshot);
   const host = useRef<LiveHost>({ ...game, notice: () => {}, setApp, ...(sendGift ? { sendGift } : {}), game: now });
   useEffect(() => {
     host.current = { ...game, notice: (text) => setNotice((n) => ({ text, n: (n?.n ?? 0) + 1 })), setApp, ...(sendGift ? { sendGift } : {}), game: now };
@@ -68,21 +71,22 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
   const [actions] = useState(() => new LiveActions(rom, host));
   useEffect(() => bind(actions), [actions, bind]);
 
-  // Read the game while anything is up; it keeps running behind the menu.
+  // Read the game while anything is up; it keeps running behind the menu. Each read is tagged
+  // with the question up when it was asked for, so the newest wins (currentGame).
   useEffect(() => {
     if (!reading) return;
     let stopped = false;
     const read = () =>
       void game.read().then((s) => {
-        if (!stopped) setSnapshot(s);
+        if (!stopped) setSnapshot({ game: s, during: askId });
       });
     read();
-    const timer = setInterval(read, READ_EVERY_MS);
+    const timer = setInterval(read, askId === null ? READ_EVERY_MS : READ_ASKING_EVERY_MS);
     return () => {
       stopped = true;
       clearInterval(timer);
     };
-  }, [reading, game]);
+  }, [reading, game, askId]);
 
   const asking = ask;
   const request = useMemo(() => (asking ? requestOf(rom, asking.ask) : null), [rom, asking]);
@@ -127,7 +131,7 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
       ) : (
         menu({})
       )}
-      {asking && !request && <AskSheet rom={rom} world={world} catalogue={catalogue} ask={asking.ask} game={asking.game ?? snapshot} answer={answerFallback} />}
+      {asking && !request && <AskSheet rom={rom} world={world} catalogue={catalogue} ask={asking.ask} game={now} answer={answerFallback} />}
     </>
   );
 }

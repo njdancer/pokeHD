@@ -323,6 +323,24 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
   };
 }
 
+/** One of the menu's reads of the game, and the question (by id) that was up when it was asked for. */
+export interface GameRead {
+  game: GameSnapshot;
+  during: number | null;
+}
+
+/**
+ * The game as the menu should show it: the newest read. The game as it was when it asked is read
+ * once, the moment the question comes in; a read asked for later, under the same question, is
+ * newer and wins (a Poké Mart's list stays up while the game takes the money, QA bug 24).
+ * A read from before the question is older than the question's own.
+ */
+export function currentGame(ask: { id: number; game: GameSnapshot | null } | null, read: GameRead | null): GameSnapshot | null {
+  if (!ask) return read?.game ?? null;
+  if (read && read.during === ask.id) return read.game;
+  return ask.game ?? read?.game ?? null;
+}
+
 /** What the game is doing, for the menu's choices. */
 export function momentOf(game: GameSnapshot | null, ask: GameAsk | null): Moment {
   if (ask?.kind === "party" && ask.purpose === "next") return "fainted";
