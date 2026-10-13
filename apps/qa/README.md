@@ -8,7 +8,9 @@ talk.
 
 ## Running it (on the Mac)
 
-1. `pnpm dev` (the app on :5173; it serves `rom/pokeblue.gb`).
+1. `POKEHD_NO_HMR=1 pnpm dev` (the app on :5173; it serves `rom/pokeblue.gb`). No hot reload: with it,
+   every code change reloads the game mid-play and drops it back to its last resume point. Fixes
+   land when the player uses `restart_game`, which takes a fresh resume point first.
 2. `pnpm qa run`. It opens Chromium on the stream page, starts the bus on :4545 and the player.
    The player runs through Claude Code (the Agent SDK) signed in with the Mac's own Claude login,
    so it counts against that subscription; `--via api` uses `ANTHROPIC_API_KEY` instead.
