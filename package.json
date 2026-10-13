@@ -13,6 +13,7 @@
     "rom:fetch": "tools/fetch-dev-rom.sh",
     "invite": "tools/invite.sh",
     "errors": "node tools/errors.ts",
+    "perf": "node tools/perf.ts",
     "rom:build-disasm": "git submodule update --init vendor/pokered && make -C vendor/pokered -j8 blue",
     "rom:symbols": "pnpm rom:build-disasm && node tools/gen-symbols.ts && node tools/gen-explorer.ts",
     "test:e2e": "pnpm --filter @pokehd/web test:e2e"

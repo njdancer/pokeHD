@@ -189,6 +189,30 @@ but may still block, WebKit bug 251514) the first frame took 0.25-0.37 s of main
 sandbox, with the extension faked since its software WebGL lacks it. Scene objects keep this for good on both backends, so a new chunk's shadow pass
 or a new sprite turns up a frame late rather than stalling one.
 
+## Telemetry
+
+The numbers above come from machines we can sit at. To see how the game runs on players' devices
+(the old iPad above all), every page load reports how it went, always on and without `?stats`.
+`apps/web/src/client/perf.ts` watches every display frame while the page is visible and sends a
+window of play to `POST /api/perf`: the first after 30 s, then one a minute, and a last partial
+one (10 s or more) when the page hides or closes, at most 120 a load. Hidden time never counts.
+
+Each window has the device (as crash reports have it, plus CPU cores and touch points), the
+renderer and quality tier, and: display frames and mean fps; the median, 95th percentile and
+worst time between frames; the share of frames that missed 60 fps (over 1.25 × 16.7 ms) and the
+stalls (over 100 ms); the emulator's frames per second (the Game Boy runs at 59.7, so lower means
+the game itself is slow, not just the 3D); the engine's median CPU time per frame, its mean render
+scale, how much of the time depth of field was on and its 3D frames drawn per second (see
+"Dynamic resolution" above); how the time split between the overworld, dialog, battles, the title
+and loading (`other`), and the Pokédex menu being up; and the last map. With no renderer the
+backend is `none` and the engine's numbers are left out, but the emulator's still count.
+
+The Reports Durable Object keeps the newest 20,000 windows (at most 150 per page load) next to
+the crash reports. Read them at /admin/perf (one row per page load, newest first; open a row for
+its device and windows) or with `pnpm perf` (`pnpm perf <n>` for load n in full), which takes the
+same tokens as `pnpm errors`. A session's fps, p95, emulator speed, scale and CPU time are medians
+over its windows; missed frames are over all its frames; stalls are summed.
+
 ## What's left
 
 - **Geometry is next.** About a million triangles a frame: the voxel trees are 1,824 triangles

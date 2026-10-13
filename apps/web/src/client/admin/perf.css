@@ -1,0 +1,12 @@
+/* /admin/perf: the crash reports page's look (errors.css), with tables. */
+.perf-page > .scroll { max-width: 72rem; }
+.perf-page .scroll { overflow-x: auto; }
+.perf-page table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+.perf-page th, .perf-page td { padding: .35rem .5rem; text-align: left; white-space: nowrap; border-bottom: 1px solid #ffffff14; }
+.perf-page th { color: var(--muted); font-weight: 600; }
+.perf-page .num { text-align: right; font-variant-numeric: tabular-nums; }
+.perf-page td.bad { color: var(--bad); }
+.perf-page tr.session { cursor: pointer; }
+.perf-page tr.session:hover, .perf-page tr.session.open { background: #ffffff0d; }
+.perf-page tr.detail > td { white-space: normal; padding: 0; background: #ffffff08; }
+.perf-page .windows { font-size: .8rem; }

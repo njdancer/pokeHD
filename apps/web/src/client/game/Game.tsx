@@ -88,6 +88,7 @@ import type { AppOptions } from "../menu/model.ts";
 import { PlayJournal } from "../menu/journal.ts";
 import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
 import { noteRenderer, reportError } from "../errors.ts";
+import { PerfSampler } from "../perf.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
@@ -391,6 +392,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     let roomLink: RoomLink | null = null;
     let courier: GiftCourier | null = null;
     let raf = 0;
+    const perf = new PerfSampler();
     let stopResumePoints = () => {};
     /** Before the game goes (another slot, the page leaving it): its save and a last resume point. */
     let finish = async () => {};
@@ -830,6 +832,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         () => {}, // Offline or no server: play alone.
       );
 
+      // Every display frame feeds the perf telemetry (../perf.ts); ?stats also shows it on screen.
+      let onStatsFrame: ((now: number) => void) | null = null;
       if (showStats) {
         // For scripted play-throughs (e2e/play.e2e.ts): the newest decoded state, every frame.
         const slow: SlowFrame[] = [];
@@ -855,9 +859,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         let lastT = performance.now();
         let shown = lastT;
         let framesAtShown = 0;
-        const tick = () => {
-          raf = requestAnimationFrame(tick);
-          const now = performance.now();
+        onStatsFrame = (now) => {
           times.push(now - lastT);
           if (now - lastT > 50 && slow.length < 500) {
             const build = live?.builds.at(-1);
@@ -893,8 +895,15 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           shown = now;
           framesAtShown = emuFrames;
         };
-        tick();
       }
+      const tick = () => {
+        raf = requestAnimationFrame(tick);
+        const now = performance.now();
+        const scene = sceneRef.current;
+        perf.frame(now, engine, emuFrames, scene.inWorld ? scene.mode : null, scene.inWorld ? (latest?.mapId ?? null) : null, menuUpRef.current);
+        onStatsFrame?.(now);
+      };
+      tick();
 
       if (noRender) {
         setStartup((s) => ({ ...s, world: true }));
@@ -940,6 +949,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       stopResumePoints();
       stopJournal();
       cancelAnimationFrame(raf);
+      perf.dispose();
       joypad.dispose();
       unsubscribeRoom();
       roomLink?.dispose();
