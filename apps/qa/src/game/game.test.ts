@@ -1,5 +1,6 @@
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { SPRITE_NAMES, type MapData, type Tileset, type WorldData } from "@pokehd/rom";
+import { parseWorld, SPRITE_NAMES, type MapData, type Tileset, type WorldData } from "@pokehd/rom";
 import { GlitchWatcher, type GlitchSample } from "./glitches.ts";
 import { describeLayouts } from "./layout-log.ts";
 import { continueButton, describeButtons, describeGameBoyText, mapName, startingUp } from "./outcome.ts";
@@ -90,6 +91,27 @@ describe("buildTextMap", () => {
     );
     expect(text.split("\n")[0]).toBe("o@.");
     expect(text).toContain("o ball on the ground");
+  });
+});
+
+const ROM_PATH = new URL("../../../../rom/pokeblue.gb", import.meta.url);
+
+describe.skipIf(!existsSync(ROM_PATH))("buildTextMap on the ROM's caves", () => {
+  const rom = existsSync(ROM_PATH) ? parseWorld(new Uint8Array(readFileSync(ROM_PATH))) : null;
+  const at = (name: string, x: number, y: number): StateLite => ({ ...state(x, y), mapId: rom!.maps.findIndex((m) => m?.name === name) });
+
+  it("marks raised floor the ROM's pair collisions keep apart from the low floor (Mt Moon 1F)", () => {
+    // 1F's west strip is light floor (0x05) beside dark floor (0x20): CAVERN $20,$05 in
+    // TilePairCollisionsLand, so stepping west from (2,3) doesn't move you.
+    const text = buildTextMap(rom!, null, at("MT_MOON_1F", 2, 3), { left: 1, right: 1, up: 1, down: 1 });
+    expect(text.split("\n").slice(0, 3)).toEqual(["^..", "^@.", "^.."]);
+    expect(text).toContain("^ raised floor (no step straight between ^ and the lower floor");
+  });
+
+  it("marks the stone steps that join the two heights (Mt Moon B2F)", () => {
+    const text = buildTextMap(rom!, null, at("MT_MOON_B2F", 28, 8), { left: 1, right: 1, up: 2, down: 0 });
+    expect(text.split("\n").slice(0, 3)).toEqual(["^^^", "#//", ".@."]);
+    expect(text).toContain("/ stairs between floor heights");
   });
 });
 
