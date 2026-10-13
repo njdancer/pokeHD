@@ -93,10 +93,6 @@ export function StreamPage() {
             </div>
           </header>
 
-          <section className="qs-card qs-goal">
-            <span className="qs-goal-tag">GOAL</span>
-            <div className="qs-goal-text">{bus.status?.goal || (bus.connected ? "Deciding what to do next" : "Waiting for the player…")}</div>
-          </section>
 
           <section className="qs-card qs-stream">
             <span className="qs-ball qs-tr" />
@@ -193,16 +189,9 @@ function Feed({ feed, connected }: { feed: (ThoughtEvent | ActionEvent)[]; conne
     <ol className="qs-flow">
       {feed.map((f, i) => {
         if (f.t === "thought") {
-          if (i !== lastThought) return <li key={`t${f.id}`} className="qs-t">{f.text}</li>;
-          // The newest thought, with the caret on its last word so it never wraps alone.
-          const at = f.text.lastIndexOf(" ");
           return (
-            <li key={`t${f.id}`} className="qs-t qs-now">
-              {f.text.slice(0, at + 1)}
-              <span className="qs-nw">
-                {f.text.slice(at + 1)}
-                <span className="qs-caret" />
-              </span>
+            <li key={`t${f.id}`} className={i === lastThought ? "qs-t qs-now" : "qs-t"}>
+              {f.text}
             </li>
           );
         }

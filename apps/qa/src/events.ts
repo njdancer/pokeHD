@@ -9,7 +9,6 @@ export interface StatusEvent {
   t: "status";
   mode: StreamMode;
   turn: number;
-  goal: string;
   /** "Route 1": the map the player is on, from the game. */
   map: string;
   /** Play time as the game counts it, "h:mm". */

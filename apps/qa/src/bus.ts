@@ -101,7 +101,7 @@ export class Bus {
 
   /** Updates the status line, keeping whatever isn't given. */
   setStatus(patch: Partial<Omit<StatusEvent, "t">>): void {
-    const base: Omit<StatusEvent, "t"> = this.#status ?? { mode: "play", turn: 0, goal: "", map: "", playTime: "0:00", fps: null };
+    const base: Omit<StatusEvent, "t"> = this.#status ?? { mode: "play", turn: 0, map: "", playTime: "0:00", fps: null };
     this.emit<StatusEvent>({ t: "status", ...base, ...patch });
   }
 

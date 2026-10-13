@@ -79,10 +79,6 @@ export const TOOLS = {
     description: 'Reload the game, picking up any fixes. Comes back exactly where you are unless from is "save", which rolls back to your last in-game save.',
     shape: { from: z.enum(["now", "save"]).optional() },
   },
-  set_goal: {
-    description: "Set the goal shown to viewers: what you're trying to do right now, in one line.",
-    shape: { goal: z.string() },
-  },
 } satisfies Record<string, { description: string; shape: z.ZodRawShape }>;
 
 export type ToolName = keyof typeof TOOLS;
@@ -167,11 +163,6 @@ export class Toolbox {
           act("tap", from === "save" ? "restart from last save" : "restart game");
           return text((await this.driver.restart({ from })).text);
         }
-        case "set_goal": {
-          const goal = String(input["goal"] ?? "").trim();
-          this.bus.setStatus({ goal });
-          return text(`Goal set: ${goal}`);
-        }
         default:
           return text(`There's no tool called ${name}.`, true);
       }
@@ -196,16 +187,14 @@ export class Toolbox {
     return `Harness glitch detector, during turn ${this.turn}:\n${glitches.map((g) => `- ${g.text}`).join("\n")}\nLook into it (contact_sheet helps) and report it if it's a real bug.`;
   }
 
-  /** The opening of a conversation: notebook, bugs so far, goal, then `now`. */
+  /** The opening of a conversation: notebook, bugs so far, then `now`. */
   opening(now: string): string {
     const path = this.bus.notebookPath;
     const notebook = existsSync(path) ? readFileSync(path, "utf8").trim() : "";
     const bugs = this.bus.bugs.slice(-30).map((b) => `#${b.id} [${b.status}] ${b.title}`).join("\n");
-    const goal = this.bus.status?.goal;
     return [
       notebook ? `Your notebook:\n${notebook}` : "Your notebook is empty.",
       bugs ? `Bugs reported so far:\n${bugs}` : "No bugs reported yet.",
-      goal ? `Your goal shown to viewers: ${goal}` : "Set a goal for viewers with set_goal.",
       now,
     ].join("\n\n");
   }

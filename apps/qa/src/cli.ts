@@ -138,7 +138,7 @@ switch (command) {
   case "status": {
     const snap = await api<Snapshot>("/snapshot");
     const s = snap.status;
-    console.log(s ? `Turn ${s.turn}, ${s.mode === "talk" ? "waiting for you" : "playing"} in ${s.map || "?"} (${s.playTime}). Goal: ${s.goal || "none"}` : "No status yet.");
+    console.log(s ? `Turn ${s.turn}, ${s.mode === "talk" ? "waiting for you" : "playing"} in ${s.map || "?"} (${s.playTime}).` : "No status yet.");
     for (const f of snap.feed.slice(-8)) console.log(f.t === "thought" ? `💭 ${f.text}` : `   ${f.turn} ${f.label}`);
     break;
   }

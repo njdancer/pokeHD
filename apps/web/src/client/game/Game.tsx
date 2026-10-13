@@ -89,11 +89,10 @@ import { PlayJournal } from "../menu/journal.ts";
 import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
 import { noteRenderer, reportError } from "../errors.ts";
 import { PerfSampler } from "../perf.ts";
+import { QA_RUN } from "../qa.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
-/** ?qa: the QA player's game (apps/qa). Stats stay readable to the harness but off screen, since they show coordinates. */
-const qaRun = new URLSearchParams(location.search).has("qa");
 /** Dev: ?render=0 skips the 3D renderer (the page and its UI without a GPU, e.g. headless checks). */
 const noRender = import.meta.env.DEV && new URLSearchParams(location.search).get("render") === "0";
 /** ?classic: the game's own title screen and naming screens, as on the Game Boy (scripted play-throughs use it). */
@@ -168,6 +167,7 @@ const PIP_KEY = "pokehd.screen.pip.v1";
 const PIP_TOGGLE_CODE = "KeyP";
 
 function loadPip(): boolean {
+  if (QA_RUN) return false;
   try {
     return localStorage.getItem(PIP_KEY) !== "off";
   } catch {
@@ -386,7 +386,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Bound keys and rebinding prompts call preventDefault first (JoypadInput listens earlier).
-      if (e.code !== PIP_TOGGLE_CODE || e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (QA_RUN || e.code !== PIP_TOGGLE_CODE || e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       togglePip();
     };
     window.addEventListener("keydown", onKey);
@@ -1197,7 +1197,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const setApp = <K extends keyof AppOptions>(key: K, value: AppOptions[K]) => {
     if (key === "sound" && value) void enableSound();
     if (key === "readAloud") setReadAloud(!!value);
-    if (key === "gameBoyScreen" && value !== pipRef.current) togglePip();
+    if (key === "gameBoyScreen" && value !== pipRef.current && !QA_RUN) togglePip();
   };
   const closeMenu = () => {
     setMenuOpen(null);
@@ -1255,7 +1255,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           )}
           <div className="game-menu-tiles">
             <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Turn sound on"}</button>
-            <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Game Boy screen</button>
+            {!QA_RUN && <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Game Boy screen</button>}
             {room && <RoomBadge status={room.status} friends={room.friends.length} />}
             {gifts && room?.status === "open" && (
               <button type="button" onClick={() => { setGiftOpen((v) => !v); setSettings(false); }} aria-expanded={giftOpen}>Gift</button>
@@ -1282,7 +1282,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         <pre
           className="game-stats"
           data-testid="stats"
-          style={qaRun ? { display: "none" } : undefined}
+          style={QA_RUN ? { display: "none" } : undefined}
           data-fps={stats.fps.toFixed(1)}
           data-map={s?.mapId}
           data-x={s?.player.x}
