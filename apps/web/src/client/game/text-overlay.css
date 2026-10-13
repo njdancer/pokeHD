@@ -24,6 +24,12 @@
 
 .hd-row > * { position: absolute; }
 .hd-line { display: flex; align-items: center; white-space: pre; line-height: 1; }
+/* A title over the top border (the money box's MONEY), as a tab on the panel's edge. */
+.hd-title { position: absolute; display: flex; align-items: center; z-index: 1; }
+.hd-title > span {
+  font-size: calc(var(--tile) * .75); letter-spacing: .06em; line-height: 1; padding: calc(var(--tile) * .12) calc(var(--tile) * .35);
+  border-radius: calc(var(--tile) * .4); background: var(--hd-edge); color: #fff;
+}
 .hd-detail { margin-left: auto; padding-right: calc(var(--tile) * .4); opacity: .8; }
 .hd-more { position: absolute; display: flex; align-items: center; justify-content: center; animation: hd-more 0.9s ease-in-out infinite; }
 .hd-more::before {
