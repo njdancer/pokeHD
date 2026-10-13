@@ -245,6 +245,8 @@ export const ALLOWLIST: readonly string[] = [
   "EvosMovesPointerTable",
   "Moves",
   "TechnicalMachines",
+  "TwoOptionMenuStrings",
+  "DisplayPokemonCenterDialogue_",
   "wMaxMenuItem",
   "wBattleMonSpecies",
   "wPlayerMonNumber",
@@ -279,6 +281,7 @@ export const ALLOWLIST: readonly string[] = [
   "wSwappedMenuItem",
   "wSwitchPartyMonTempBuffer",
   "wTextBoxID",
+  "wTwoOptionMenuID",
   "wUpdateSpritesEnabled",
   // The play journal (dex menu): battles, catches, items, gifts, badges and evolutions, read at
   // the routines that make them happen

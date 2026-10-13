@@ -48,7 +48,8 @@ export function AskSheet({ rom, world, catalogue, ask, game, answer }: AskSheetP
             </button>
           )}
           <header>
-            <h2>{titleOf(ask)}</h2>
+            {/* A yes or no is headed by the game's own question. */}
+            <h2 className={ask.kind === "yes-no" ? "dm-question" : undefined}>{titleOf(ask)}</h2>
             {(ask.kind === "items" || ask.kind === "mart") && game && <span className="dm-pill">{money(game.money)}</span>}
           </header>
           <Body rom={rom} ask={ask} game={game} answer={answer} />
@@ -71,7 +72,7 @@ function titleOf(ask: GameAsk): string {
     case "quantity":
       return "How many?";
     case "yes-no":
-      return "Your choice";
+      return ask.text.replace(/\n/g, " ") || "Your choice";
   }
 }
 
@@ -154,17 +155,15 @@ function Body({ rom, ask, game, answer }: { rom: Uint8Array; ask: GameAsk; game:
       return <Quantity max={ask.max} price={ask.price} answer={answer} />;
     case "yes-no":
       return (
-        <>
-          {ask.text && <div className="dm-c dm-said">{ask.text.replace(/\n/g, " ")}</div>}
-          <div className="dm-two">
-            <button type="button" className="dm-verb alt" onClick={() => answer({ yes: false })}>
-              No
-            </button>
-            <button type="button" className="dm-verb" onClick={() => answer({ yes: true })}>
-              Yes
-            </button>
-          </div>
-        </>
+        <div className="dm-two">
+          {/* The game's own words for its options: YES/NO, HEAL/CANCEL, TRADE/CANCEL… */}
+          <button type="button" className="dm-verb alt" onClick={() => answer({ yes: false })}>
+            {niceName(ask.no) || "No"}
+          </button>
+          <button type="button" className="dm-verb" onClick={() => answer({ yes: true })}>
+            {niceName(ask.yes) || "Yes"}
+          </button>
+        </div>
       );
   }
 }
