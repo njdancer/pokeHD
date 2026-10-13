@@ -44,6 +44,8 @@ const GAME_SIZE = { width: 528, height: 1000 } as const;
 const STREAM_WINDOW = { width: 1280, height: 912 } as const;
 const STREAM_VIEWPORT = { width: 1280, height: 720 } as const;
 const STREAM_SCALE = 1.5;
+/** How often the headed stream window is checked against STREAM_VIEWPORT. */
+const FIT_EVERY_MS = 3000;
 const READY_TIMEOUT_MS = 120_000;
 const SETTLE_MAX_MS = 4000;
 const SETTLE_CALM_MS = 500;
@@ -91,6 +93,23 @@ export function createDriver(opts: DriverOptions): GameDriver {
   let input: CDPSession | null = null;
   let sheetPage: Page | null = null;
   let poller: ReturnType<typeof setInterval> | null = null;
+  let fitter: ReturnType<typeof setInterval> | null = null;
+
+  /**
+   * Keeps the headed stream page at exactly STREAM_VIEWPORT, so the capture is 16:9 with no bars:
+   * Chromium's own bars ("controlled by automated software", "sharing this tab") come and go and
+   * take their height from the page, and the window can be resized by hand.
+   */
+  async function fitWindow(): Promise<void> {
+    if (!page || !input) return;
+    const size = await page.evaluate(() => ({ w: innerWidth, h: innerHeight }));
+    const dw = STREAM_VIEWPORT.width - size.w;
+    const dh = STREAM_VIEWPORT.height - size.h;
+    if (Math.abs(dw) <= 1 && Math.abs(dh) <= 1) return;
+    const { windowId, bounds } = (await input.send("Browser.getWindowForTarget")) as { windowId: number; bounds: { width?: number; height?: number; windowState?: string } };
+    if (bounds.windowState && bounds.windowState !== "normal") return;
+    await input.send("Browser.setWindowBounds", { windowId, bounds: { width: (bounds.width ?? 0) + dw, height: (bounds.height ?? 0) + dh } });
+  }
   let polling = false;
   let busy = 0;
   let slowSince = 0;
@@ -495,6 +514,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
         busy--;
       }
       startPolling();
+      if (!direct && !(opts.headless ?? true)) fitter = setInterval(() => void fitWindow().catch(() => {}), FIT_EVERY_MS);
       const after = await settle(500);
       return outcome(null, after);
     },
@@ -704,7 +724,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
       // Stopping the harness mustn't cost the game any progress: the next run resumes from here.
       if (context && !(await takeResumePoint().catch(() => false))) console.warn("The game didn't take a resume point before closing; the next run may come back a little earlier.");
       if (poller) clearInterval(poller);
-      poller = null;
+      if (fitter) clearInterval(fitter);
+      poller = fitter = null;
       await recorder.stop();
       await context?.close().catch(() => {});
       context = page = sheetPage = null;
