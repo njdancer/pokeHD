@@ -21,11 +21,13 @@ function battleScreen(): BattleScreenWatched {
     w.picTiles.set([0xff, 0x00], n * 16);
     for (let row = 1; row < 8; row++) w.picTiles.set([0xff, 0xff], n * 16 + row * 2);
   }
-  // The HUDs' corner tiles.
+  // The HUDs' corner tiles and their HP bars' "HP:".
   w.tileMap[at(1, 3)] = 0x74;
   w.tileMap[at(10, 3)] = 0x78;
+  w.tileMap[at(2, 2)] = 0x71;
   w.tileMap[at(18, 10)] = 0x73;
   w.tileMap[at(18, 11)] = 0x77;
+  w.tileMap[at(10, 9)] = 0x71;
   // The text box, rows 12–17.
   box(w.tileMap, 0, 12, 19, 17);
   w.lcd.set([0xe3, 0, 0, 0, 0, 0, 0, 0xe4, 0xe4, 0x6c, 0, 7]);
@@ -88,6 +90,32 @@ describe("BattleScreenReader", () => {
     expect(screen.player!.pixels).toEqual(before.pixels);
     expect(screen.player!.version).toBe(before.version);
     expect(screen.cells[at(3, 10)]).toBe(CELL_UI);
+  });
+
+  it("doesn't take the party's Poké Ball border for a HUD", () => {
+    const w = battleScreen();
+    w.tileMap[at(2, 2)] = BLANK;
+    w.tileMap[at(10, 9)] = BLANK;
+    const screen = new BattleScreenReader().read(w);
+    expect(screen.huds).toEqual({ enemy: false, player: false });
+    expect(screen.cells[at(5, 2)]).toBe(CELL_HUD); // still masked like one
+  });
+
+  it("rides out a stray picture tile beside a whole picture", () => {
+    const w = battleScreen();
+    w.tileMap[at(15, 6)] = 0x4e; // a tile of the player's picture, far from home
+    expect(new BattleScreenReader().read(w).battle).toBe(true);
+    // A picture drawn somewhere else entirely (the stats screen, the Pokédex) isn't the battle.
+    const stats = battleScreen();
+    stats.tileMap.fill(BLANK);
+    for (let n = 0; n < 49; n++) stats.tileMap[at(1 + Math.floor(n / 7) + 11, 10 + (n % 7))] = n;
+    expect(new BattleScreenReader().read(stats).battle).toBe(false);
+  });
+
+  it("leaves the text box's rows to the scene until the intro draws the box", () => {
+    const w = battleScreen();
+    for (let i = at(0, 12); i < 360; i++) w.tileMap[i] = BLANK;
+    expect(new BattleScreenReader().read(w).cells.subarray(at(0, 12)).every((c) => c === CELL_SCENE)).toBe(true);
   });
 
   it("isn't the battle screen on a full-screen menu or the overworld", () => {

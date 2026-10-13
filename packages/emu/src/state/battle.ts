@@ -127,6 +127,8 @@ export const BATTLE_WATCHES = {
   /** A wild Pokémon's species, or OPP_ID_OFFSET (200) + a trainer class. */
   opponent: sym("wCurOpponent"),
   firstMonsNotOutYet: sym("wFirstMonsNotOutYet"),
+  /** Bit 5 (BIT_BATTLE_OVER_OR_BLACKOUT): a battle has just ended and the map is reloading. */
+  statusFlags4: sym("wStatusFlags4"),
   escaped: sym("wEscapedFromBattle"),
   whoseTurn: sym("hWhoseTurn"),
   animationId: sym("wAnimationID"),
