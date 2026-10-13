@@ -135,6 +135,43 @@ describe("LiveWorld battles", () => {
     expect(live.view).toBeNull();
     live.dispose();
   });
+
+  // QA bug 11: EndOfBattle clears wIsInBattle with the battle still on screen, then whites it out
+  // (GBPalWhiteOut) and reloads the map behind the white before fading back in.
+  it("holds the battle until the game whites it out, then cuts back to the walk behind the white", () => {
+    let now = 0;
+    const live = createLiveWorld(fakeWorld(), { clock: () => now });
+    const camera = new THREE.PerspectiveCamera();
+    const state = { mapId: 0, player: { x: 0, y: 3, step: null, animFrame: 0, facing: "up" as const }, npcs: [], fade: 0 };
+    const frame = (fade: number) => {
+      now += 1 / 60;
+      live.push({ ...state, fade }, now);
+      live.update(now, camera, new THREE.Vector3(), false);
+    };
+    live.push(state, now);
+    live.update(0, camera, new THREE.Vector3(), false);
+    live.setBattle(view());
+    for (let i = 0; i < 120; i++) frame(0);
+    const battle = live.root.getObjectByName("battle")!;
+    // Over: the last frame holds while the game waits for its sound effect.
+    live.setBattle(null);
+    for (let i = 0; i < 5; i++) frame(0);
+    expect(live.view).toMatchObject({ pitch: 24 });
+    expect(battle.visible).toBe(true);
+    expect(live.fade).toBe(0);
+    // White: the camera is back on the walk at once, the battle gone, the screen all white.
+    frame(-1);
+    expect(live.view).toBeNull();
+    expect(battle.visible).toBe(false);
+    expect(live.fade).toBe(-1);
+    // The game fades the field back in, as it is.
+    for (const f of [-1, -2 / 3, -1 / 3, 0]) {
+      frame(f);
+      expect(live.view).toBeNull();
+      expect(live.fade).toBe(f);
+    }
+    live.dispose();
+  });
 });
 
 describe("hand-coloured pictures (D43)", () => {
