@@ -451,6 +451,9 @@ export class EmulatorHost {
 
   dispose(): void {
     this.#worker.terminate();
+    // No answer is coming now: a page waiting on a resume point gets none rather than waiting forever.
+    for (const resolve of this.#resumePoints.values()) resolve(null);
+    this.#resumePoints.clear();
     this.#audioNode?.disconnect();
     void this.#audio.close();
   }
