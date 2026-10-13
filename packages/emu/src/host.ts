@@ -11,6 +11,7 @@ import type { LinkPortOptions } from "./link.ts";
 import type { FrameMessage, FromWorker, ToWorker, Watch } from "./protocol.ts";
 import type { ActionResult, GameAction } from "./game/actions.ts";
 import type { AskAnswer, GameAsk } from "./game/asks.ts";
+import type { BattleAnswer, BattleAsk } from "./game/battle-menus.ts";
 
 /** The main thread's end of a LinkPort running in the worker. */
 export interface HostLink {
@@ -85,6 +86,11 @@ export interface EmulatorHostOptions {
    * `answerAsk()` is called, and `act()` works.
    */
   onAsk?: (id: number, ask: GameAsk) => void;
+  /**
+   * The battle waits for the player's choice: the battle menu or the move list. Passing this has
+   * the page answer them (`answerBattle()`) in place of the game's own menus.
+   */
+  onBattleAsk?: (id: number, ask: BattleAsk) => void;
 }
 
 /** A taken gift and, on success, the save the game wrote straight after (store it first). */
@@ -206,6 +212,9 @@ export class EmulatorHost {
         case "ask":
           options.onAsk?.(data.id, data.ask);
           break;
+        case "battle-ask":
+          options.onBattleAsk?.(data.id, data.ask);
+          break;
         case "journal":
           options.onJournal?.(data.event);
           break;
@@ -221,7 +230,8 @@ export class EmulatorHost {
     const guardDex = !!options.onDexOpen;
     const menu = !!options.onAsk;
     const journal = !!options.onJournal;
-    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase, guardDex, askNames, menu, journal });
+    const battleMenus = !!options.onBattleAsk;
+    this.#post({ type: "start", rom, sram, resume, sampleRate: this.#audio.sampleRate, guardErase, guardDex, askNames, menu, journal, battleMenus });
     if (options.autosave === false) this.setAutosave(false);
   }
 
@@ -447,6 +457,11 @@ export class EmulatorHost {
   /** Answers the game's question `id` (see `onAsk`); null cancels, as B would. */
   answerAsk(id: number, answer: AskAnswer): void {
     this.#post({ type: "ask-answer", id, answer });
+  }
+
+  /** Answers the battle's question `id` (see `onBattleAsk`). */
+  answerBattle(id: number, answer: BattleAnswer): void {
+    this.#post({ type: "battle-answer", id, answer });
   }
 
   dispose(): void {

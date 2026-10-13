@@ -11,6 +11,7 @@ import { DexGuard } from "./dex-guard.ts";
 import { EraseGuard } from "./erase-guard.ts";
 import { GameActions } from "./game/actions.ts";
 import { GameAsks } from "./game/asks.ts";
+import { BattleMenus } from "./game/battle-menus.ts";
 import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
 import { JournalHooks } from "./journal-hooks.ts";
@@ -51,6 +52,7 @@ let actions: GameActions | undefined;
 /** Queued actions' cancels, by the page's id. */
 const cancels = new Map<number, () => void>();
 let asks: GameAsks | undefined;
+let battleMenus: BattleMenus | undefined;
 let scriptText = false;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
@@ -193,6 +195,7 @@ async function handle(data: ToWorker) {
           const act = (actions = new GameActions(gb, { rom: data.rom }));
           asks = new GameAsks(gb, { rom: data.rom, busy: () => act.pending > 0 && SafePoint.of(g).calling, onAsk: (id, ask) => post({ type: "ask", id, ask }) });
         }
+        battleMenus = data.battleMenus ? new BattleMenus(gb, { rom: data.rom, onAsk: (id, ask) => post({ type: "battle-ask", id, ask }) }) : undefined;
         rom = data.rom;
         if (scriptText) controls.setScriptText(rom);
         samplesPerFrame = data.sampleRate / FRAME_RATE;
@@ -319,6 +322,9 @@ async function handle(data: ToWorker) {
         break;
       case "ask-answer":
         asks?.answer(data.id, data.answer);
+        break;
+      case "battle-answer":
+        battleMenus?.answer(data.id, data.answer);
         break;
       case "gift-give":
         desk?.give(data.id, data.gift);

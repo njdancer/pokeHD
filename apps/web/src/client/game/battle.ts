@@ -2,7 +2,7 @@
 // battle screen's pictures and sprites, coloured with each side's SGB palette (p2-battles).
 import {
   BATTLE_SCREEN_WATCHES, BattleDecoder, BattleScreenReader, CELL_UI, battleTransition,
-  type BattleScreen, type BattleScreenWatched, type BattleState, type BattleWatched, type TextBox, type TextWatched, type Watch,
+  type BattleScreen, type BattleScreenWatched, type BattleState, type BattleWatched, type ScreenText, type TextBox, type TextWatched, type Watch,
 } from "@pokehd/emu";
 import type { BattleView, Side } from "@pokehd/engine/battle";
 import { battlePalette, pokedexNumber, readSgbPalettes, type SgbPalette } from "@pokehd/rom";
@@ -169,6 +169,26 @@ function uiCells(cells: Uint8Array, covered: readonly TextBox[]): Uint8Array {
     }
   }
   return keep;
+}
+
+/** Where the move lists' boxes go: the turn's (over the message box), MIMIC's and an ETHER's. */
+const MOVE_LISTS = [
+  { x: 4, y: 12 },
+  { x: 0, y: 7 },
+  { x: 4, y: 7 },
+];
+const MOVE_LIST_SIZE = { width: 16, height: 6 };
+
+/**
+ * The battle's own menus are on screen: FIGHT / PKMN / ITEM / RUN (or the Safari Zone's) or a
+ * move list. The HD battle menu answers them (BattleMenus), so these never show.
+ */
+export function battleMenuShown(text: ScreenText): boolean {
+  return (
+    text.menus.some((m) => m.kind === "battle") ||
+    text.boxes.some((b) => b.lines.some((l) => l.text.includes("THROW ROCK"))) ||
+    text.boxes.some((b) => b.width === MOVE_LIST_SIZE.width && b.height === MOVE_LIST_SIZE.height && MOVE_LISTS.some((at) => at.x === b.x && at.y === b.y))
+  );
 }
 
 /** Blank, in the game's tile set (the space character). */
