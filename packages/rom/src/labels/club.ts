@@ -20,7 +20,7 @@ export const CLUB: TilesetLabelTable = {
     0x0b: "machine",
     0x0c: "machine",
     0x0d: "machine",
-    0x0e: "floor", // checked floor
+    0x0e: "machine", // checked floor under a bicycle's wheels: solid, part of the bike
     0x0f: "floor",
     0x10: "counter",
     0x11: "machine",
@@ -36,7 +36,7 @@ export const CLUB: TilesetLabelTable = {
     0x1b: "machine",
     0x1c: "machine",
     0x1d: "machine",
-    0x1e: "floor",
+    0x1e: "machine",
     0x1f: "floor",
     0x20: "unused",
     0x21: "unused",
