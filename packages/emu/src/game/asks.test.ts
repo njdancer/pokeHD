@@ -1,14 +1,14 @@
 // ROM test for the game's questions answered by the page: the bag and party menus in a battle,
 // and the list and quantity a Poké Mart sale asks for. Skips without the dev ROM.
 import { existsSync, readFileSync } from "node:fs";
-import { encodeText, monName, pokedexNumber, romOffset, SYMBOLS, type SymbolName } from "@pokehd/rom";
+import { encodeText, monName, pokedexNumber, romOffset, SYMBOLS, type Message, type SymbolName } from "@pokehd/rom";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Button, GameBoy } from "../core.ts";
 import { CARRY } from "../ffi.ts";
 import { fromBcd } from "../gifts/gifts.ts";
 import { SafePoint } from "../gifts/safepoint.ts";
 import { playIntro } from "../testing.ts";
-import { GameAsks, type AskAnswer, type GameAsk } from "./asks.ts";
+import { askedText, GameAsks, twoOptions, type AskAnswer, type GameAsk } from "./asks.ts";
 
 const ROM_PATH = new URL("../../../../rom/pokeblue.gb", import.meta.url);
 const WASM_PATH = new URL("../generated/sameboy.wasm", import.meta.url);
@@ -21,6 +21,9 @@ const ANTIDOTE = 0x0b;
 const PARTYMON = 44;
 const ITEMLISTMENU = 3;
 const PRICEDITEMLISTMENU = 2;
+const HEAL_CANCEL_MENU = 6;
+/** wStatusFlags4's BIT_USED_POKECENTER. */
+const USED_POKECENTER = 1 << 2;
 
 const addr = (name: SymbolName) => SYMBOLS[name].address;
 const r = (gb: GameBoy, name: SymbolName, offset = 0) => gb.read(addr(name) + offset);
@@ -54,6 +57,27 @@ function setBag(gb: GameBoy, items: [number, number][]) {
   items.flat().forEach((v, i) => gb.write(addr("wNumBagItems") + 1 + i, v));
   gb.write(addr("wNumBagItems") + 1 + items.length * 2, 0xff);
 }
+
+describe("askedText", () => {
+  const welcome: Message = {
+    pages: [
+      { lines: ["Welcome to our", "POKéMON CENTER!"], wait: "arrow", next: "page" },
+      { lines: ["We heal your", "POKéMON back to"], wait: "arrow", next: "scroll" },
+      { lines: ["POKéMON back to", "perfect health!"], wait: "arrow", next: "end" },
+    ],
+    ending: "prompt",
+  };
+
+  it("gives the whole last box of the message the screen still ends with", () => {
+    expect(askedText(["POKéMON back to", "perfect health!"], welcome)).toBe("We heal your\nPOKéMON back to\nperfect health!");
+  });
+
+  it("falls back to the screen when the last message isn't what it shows", () => {
+    expect(askedText(["Is that OK?"], welcome)).toBe("Is that OK?");
+    expect(askedText(["Is that OK?"], null)).toBe("Is that OK?");
+    expect(askedText([], welcome)).toBe("");
+  });
+});
 
 describe.skipIf(!existsSync(ROM_PATH))("the game's questions (ROM)", () => {
   let rom: Uint8Array;
@@ -194,6 +218,40 @@ describe.skipIf(!existsSync(ROM_PATH))("the game's questions (ROM)", () => {
     play(600, () => out.money !== undefined);
     expect(out).toEqual({ list: 0, item: POTION, chosen: 1, max: 3, price: 300, quantity: 2, money: 300 });
   });
+
+  it("reads the two-option menus' own words from the ROM", () => {
+    expect(twoOptions(rom, 0)).toEqual(["YES", "NO"]);
+    expect(twoOptions(rom, HEAL_CANCEL_MENU)).toEqual(["HEAL", "CANCEL"]);
+    expect(twoOptions(rom, 7)).toEqual(["NO", "YES"]);
+  });
+
+  // QA bug 13: on a later visit the nurse skips "Shall we heal your POKéMON?", so the screen's
+  // two lines are only the end of her welcome ("POKéMON back to / perfect health!").
+  it.each([
+    { visited: false, text: "Shall we heal your\nPOKéMON?" },
+    { visited: true, text: "We heal your\nPOKéMON back to\nperfect health!" },
+  ])("asks the nurse's whole question (visited before: $visited)", async ({ visited, text }) => {
+    const { gb, asked, play } = await game(() => ({ yes: false }));
+    const flags = r(gb, "wStatusFlags4");
+    gb.write(addr("wStatusFlags4"), visited ? flags | USED_POKECENTER : flags & ~USED_POKECENTER);
+    let done = false;
+    const center = SYMBOLS.DisplayPokemonCenterDialogue_;
+    SafePoint.of(gb).enqueue({
+      scratch: [],
+      steps: [{ routine: "Bankswitch", registers: () => ({ bc: center.bank << 8, hl: center.address }), after: () => void (done = true) }],
+    });
+    // A through the game's own text waits (nobody shows the messages here).
+    for (let i = 0; i < 3000 && !done; i++) {
+      gb.setButtons(i % 16 < 2 ? Button.A : 0);
+      play(1);
+    }
+    gb.setButtons(0);
+    expect(done).toBe(true);
+    expect(asked).toEqual([{ kind: "yes-no", text, yes: "HEAL", no: "CANCEL" }]);
+    // CANCEL: nothing healed, and the menu's ID is back to YES/NO as the game leaves it.
+    expect(r(gb, "wCurrentMenuItem")).toBe(1);
+    expect(r(gb, "wTwoOptionMenuID")).toBe(0);
+  }, 30_000);
 
   it("cancels a list with carry, as B does", async () => {
     const { gb, play } = await game(() => null);
