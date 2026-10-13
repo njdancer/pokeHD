@@ -251,6 +251,10 @@ export const ALLOWLIST: readonly string[] = [
   // Where the field items work: the game's own tileset lists (ItemUseEscapeRope, IsBikeRidingAllowed)
   "BikeRidingTilesets",
   "EscapeRopeTilesets",
+  // Tests that start on a given map: EnterMap loads wCurMap from its header, as a warp does; and
+  // where an Escape Rope (or a blackout) takes the player.
+  "EnterMap",
+  "wLastBlackoutMap",
   "EvosMovesPointerTable",
   "Moves",
   "TechnicalMachines",
