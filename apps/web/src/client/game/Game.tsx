@@ -308,8 +308,6 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const [dialogLines, setDialogLines] = useState<string[] | null>(null);
   /** Whole messages from the script (ScriptText), in place of the game's pages. */
   const scriptRef = useRef<ScriptView | null>(null);
-  /** The message box is hidden: the player has read the message and the game is finishing it. */
-  const [hideDialog, setHideDialog] = useState(false);
   const look = useMemo(() => uiLook(), []);
   /** The signed-in player (their name is the one Oak checks, and kept the same as theirs). */
   const [account, setAccount] = useState<Account | null>(null);
@@ -646,13 +644,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           if (!fits || script) joiner.reset();
           const joined = script ? { lines: script.lines, press: false } : fits ? joiner.frame(text) : { lines: null, press: false };
           if (joined.press) host?.tap(Button.A);
-          const hidden = !!script?.hidden;
-          const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}#${hidden}` : "";
+          const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}` : "";
           if (key !== shownText) {
             shownText = key;
             setHdText(fits ? text : null);
             setDialogLines(joined.lines);
-            setHideDialog(hidden);
           }
           const scene = sceneRef.current;
           const onboard = start !== null;
@@ -1099,11 +1095,16 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     hostRef.current?.setAutosave(on);
   };
 
-  /** Reads on in a whole message from the script: its next box, or done with it. */
+  /**
+   * Reads on in a whole message from the script: its next box, or done with it. A message already
+   * read stays up while the game finishes it (scriptView), and taps on it go nowhere meanwhile:
+   * one reaching the game as it closes the box would start the talk over.
+   */
   function readOnScript(): boolean {
     const script = scriptRef.current;
     const host = hostRef.current;
-    if (!script || script.closed || script.ended || !host) return false;
+    if (!script || script.ended || !host) return false;
+    if (script.closed) return true;
     if (script.index < script.boxes.length - 1) {
       if (++script.index === script.boxes.length - 1) host.readOnMessage(script.id);
     } else {
@@ -1245,7 +1246,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         data-layout={noHd ? "full" : layout}
       />
       {onboarding?.phase === "intro" && !noHd && <IntroStage ref={introCanvas} />}
-      {hdText && !noHd && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} hideDialog={hideDialog} actions={textActions} look={look} />}
+      {hdText && !noHd && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} actions={textActions} look={look} />}
       {/* Everything that isn't the game sits behind one button (the menu), in the HD panels' look.
           With the Pokédex menu, the dex is that button and all of this lives in it. */}
       {ready && !menu && <button
