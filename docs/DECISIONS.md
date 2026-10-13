@@ -421,7 +421,11 @@ menus and text, which the HD text layer (p2-text) can take over cell by cell. It
 messages (the screen's text cells decoded on their own); the menus stay on the Game Boy screen
 until it has battle menus of its own. Either side of a battle (a trainer's transition before
 wIsInBattle is set, the faded last frame while the map reloads) the Game Boy screen stays down
-(`battleTransition`).
+(`battleTransition`, and `BattleTracker` for the frames EndOfBattle waits on a sound effect). On
+the way out the HD battle holds its last frame until the game's white-out, then the camera cuts
+back to the walk behind the white, so the game's fade-in shows the field as it is. The game's
+fades are laid over the finished HD picture (after the grade, vignette and depth of field), so
+full white is the screen's white (QA bug 11).
 
 Why: reading the screen keeps every animation and edge case the original's, with no battle logic
 of our own, and needs no list of move animations. Staging the battle where it happens keeps the

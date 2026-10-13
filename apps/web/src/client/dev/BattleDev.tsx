@@ -106,12 +106,14 @@ export function BattleDev() {
         gb.runFrame();
         frame++;
         const watched = readAll(gb, watches);
-        live!.push(overworld.decode(watched as OverworldWatched));
+        const world = overworld.decode(watched as OverworldWatched);
+        live!.push(world);
         const fight = tracker.frame(watched);
         live!.setBattle(fight.scene ? fight.view : null);
         masked = fight.scene === "scene" ? fight.screen : null;
         choosing = !!menus && !!masked && (!!menus.asking || battleMenuShown(text.decode(battleText(watched as TextWatched, masked))));
-        setLayout(screenLayout("battle", true, false, false, fight.scene));
+        // The game's own mode, so the way out of the battle (and the map after) lays out as on the game page.
+        setLayout(screenLayout(world.mode, true, false, false, fight.scene));
         setHud(masked && fight.state ? { state: fight.state, huds: masked.huds } : null);
         setStatus(fight.state ? `frame ${frame} · ${fight.state.phase}${fight.state.animation ? ` · animation ${fight.state.animation.id}` : ""}` : `frame ${frame}`);
       };

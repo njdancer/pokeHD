@@ -71,6 +71,11 @@ const DOOR_STEPS = 12;
 const SPARE_CHUNKS = 10;
 /** Seconds the camera takes to swing into a battle and back out. */
 const BATTLE_SWING = 1.1;
+/**
+ * Seconds a battle's last frame waits, once the battle has ended, for the game to fade the screen
+ * out (EndOfBattle waits for the sound effect to finish first: a fraction of a second at most).
+ */
+const LEAVE_WAIT = 0.5;
 /** Neighbouring maps nearer the player than this (steps) must be drawn before the view shows. */
 const HOLD_STEPS = 20;
 
@@ -380,11 +385,8 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   };
   const isShown = (c: Chunk) => c.group !== null && c.group.parent === root;
 
-  const fadeMaterial = new THREE.MeshBasicNodeMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false, fog: false });
-  const fadeQuad = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), fadeMaterial);
-  fadeQuad.renderOrder = 1000;
-  fadeQuad.frustumCulled = false;
-  root.add(fadeQuad);
+  /** The game's fade, for the engine to lay over the finished picture (`WorldContent.fade`). */
+  let fade = 0;
 
   /** An actor's drawn position in world units (sprite base centre), for the current map. */
   const drawn = (a: LiveActor, c: Chunk) => {
@@ -404,6 +406,11 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   let battle: BattleLayer | null = null;
   let arenaStyle = options.arena ?? "field";
   let inBattle = false;
+  /**
+   * When the battle ended (setBattle(null)), while its last frame stays on screen until the game
+   * has faded it out; null otherwise. See `setBattle`.
+   */
+  let leaving: number | null = null;
   /** 0 overworld … 1 battle, eased by the update. */
   let swing = 0;
   let swungAt = clock();
@@ -436,8 +443,16 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     get ready() {
       return !holding;
     },
+    get fade() {
+      return fade;
+    },
     setBattle(next) {
       if (next && !inBattle) startBattle();
+      // The game ends a battle (wIsInBattle cleared) with the battle still on screen, then fades
+      // it to white (EndOfBattle's GBPalWhiteOut, often the same frame) and reloads the map behind
+      // the white. The battle's last frame stays until the screen is faded out (see `update`).
+      if (!next && inBattle) leaving ??= clock();
+      if (next) leaving = null;
       inBattle = next !== null && battle !== null;
       if (next) battle?.push(next);
     },
@@ -533,24 +548,29 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         }
         for (const [slot, s] of npcSprites) if (!seen.has(slot)) s.mesh.visible = false;
 
-        // Fades: the game's own fade drawn over the HD view.
+        // Fades: the game's own fade, laid over the finished picture by the engine.
         if (holding && loaded()) holding = false;
-        const fade = latest.fade;
-        fadeQuad.visible = fade !== 0;
-        fadeMaterial.color.set(fade > 0 ? 0x000000 : 0xffffff);
-        fadeMaterial.opacity = Math.min(Math.abs(fade), 1);
+        fade = latest.fade;
       }
 
       // Battles: swing the camera between the walk and the battle, and hide the walk while it's on.
       const now = clock();
       const dt = Math.min(Math.max(now - swungAt, 0), 0.1);
       swungAt = now;
-      swing = Math.min(Math.max(swing + (inBattle ? dt : -dt) / BATTLE_SWING, 0), 1);
+      // Out of a battle: the battle holds still until the screen is all white (or black), then the
+      // camera cuts back to the walk behind it, so the game's fade-in shows the field as it is.
+      // A battle that ends without fading out (none in the game, but don't hang) swings back.
+      if (leaving !== null && (Math.abs(fade) >= 1 || now - leaving > LEAVE_WAIT)) {
+        if (Math.abs(fade) >= 1) swing = 0;
+        leaving = null;
+      }
+      const staying = inBattle || leaving !== null;
+      swing = Math.min(Math.max(swing + (staying ? dt : -dt) / BATTLE_SWING, 0), 1);
       const s = ease(swing);
       walkTarget.copy(target);
       const staged = battle !== null && swing > 0;
       if (battle) {
-        battle.root.visible = inBattle;
+        battle.root.visible = staying;
         if (staged) {
           battle.update(camera);
           target.lerpVectors(walkTarget, battle.target, s);
@@ -570,16 +590,12 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       playerSprite.visible = !away;
       for (const sprite of npcSprites.values()) if (away) sprite.mesh.visible = false;
       ghosts.group.visible = !away;
-      const hideWorld = away && inBattle && battle!.hidesWorld;
+      const hideWorld = away && staying && battle!.hidesWorld;
       for (const c of chunks.values()) if (c.group) c.group.visible = !hideWorld;
 
       ghosts.update(clock(), camera, locate);
       faceCamera(playerSprite, camera);
       for (const s of npcSprites.values()) faceCamera(s.mesh, camera);
-      // Keep the fade quad just in front of the camera, filling the view.
-      camera.getWorldDirection(fadeQuad.position);
-      fadeQuad.position.multiplyScalar(0.6).add(camera.position);
-      fadeQuad.quaternion.copy(camera.quaternion);
     },
     dispose() {
       disposed = true;
@@ -587,8 +603,6 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       for (const c of [...chunks.values(), ...spare.values()]) drop(c);
       chunks.clear();
       spare.clear();
-      fadeQuad.geometry.dispose();
-      fadeMaterial.dispose();
       ghosts.dispose();
       sprites.dispose();
       battle?.dispose();
