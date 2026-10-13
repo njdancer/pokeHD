@@ -106,7 +106,7 @@ function buildReceiveJob(gift: Gift, landed: (where: Landed) => void): Job {
         scratch: [[hMoney, 3]],
         // AddBCD saturates at 999999; hold rather than let a gift silently lose money.
         check: (gb) =>
-          fromBcd(gb.readBytes(money, 3)) + gift.amount > MAX_MONEY ? { hold: "money would pass ¥999,999" } : undefined,
+          fromBcd(gb.readBytes(money, 3)) + gift.amount > MAX_MONEY ? { hold: "money would pass ₽999,999" } : undefined,
         steps: [
           {
             routine: "Predef",

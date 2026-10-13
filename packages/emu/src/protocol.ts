@@ -80,6 +80,12 @@ export interface FrameMessage {
   count: number;
   /** Bytes for each watch, read at the end of this frame. */
   watched: Record<string, Uint8Array>;
+  /**
+   * One of the Pokédex menu's actions is running in the game this frame (GameActions): what the
+   * screen shows is its routine's own drawing (the party menu a POTION redraws, its message), which
+   * the menu reports in its own words when the action is done.
+   */
+  acting?: boolean;
 }
 
 export type FromWorker =

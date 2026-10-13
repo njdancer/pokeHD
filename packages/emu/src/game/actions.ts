@@ -120,6 +120,11 @@ export class GameActions {
     ];
   }
 
+  /** Whether one of the actions is running in the game right now (not just queued). */
+  get running(): boolean {
+    return this.#running !== null;
+  }
+
   /** Actions queued or running. */
   get pending(): number {
     return this.#queued;

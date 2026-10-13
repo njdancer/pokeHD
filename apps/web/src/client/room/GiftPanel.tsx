@@ -129,8 +129,8 @@ export function GiftPanel({ rom, courier, friends, read, onClose }: PanelProps) 
                 if (moneyOk) void send({ kind: "money", amount: money });
               }}
             >
-              <span>You have ¥{giftables.money.toLocaleString("en-US")}</span>
-              <input type="number" min={1} max={giftables.money} value={amount} placeholder="¥" aria-label="Amount" onChange={(e) => setAmount(e.target.value)} />
+              <span>You have ₽{giftables.money.toLocaleString("en-US")}</span>
+              <input type="number" min={1} max={giftables.money} value={amount} placeholder="₽" aria-label="Amount" onChange={(e) => setAmount(e.target.value)} />
               <button type="submit" disabled={status.busy || !moneyOk}>Send</button>
             </form>
           )}
@@ -145,7 +145,7 @@ export function GiftPanel({ rom, courier, friends, read, onClose }: PanelProps) 
 const WAITING: Record<string, string> = {
   "bag full": "Make room in your bag to take it.",
   "party and box full": "Make room in your party or box to take it.",
-  "money would pass ¥999,999": "Spend some money to take it.",
+  "money would pass ₽999,999": "Spend some money to take it.",
 };
 
 /** Gifts arriving, waiting for room, and the ones you sent reaching the room. */
