@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, type BrowserContext, type CDPSession, type ElementHandle, type Frame, type Page } from "@playwright/test";
+import { chromium, type Browser, type BrowserContext, type CDPSession, type ElementHandle, type Frame, type Page } from "@playwright/test";
 import { ScreenTextDecoder, TEXT_WATCHES, type TextWatched } from "@pokehd/emu";
 import { parseWorld, readGlyphs, stitchOverworld, SYMBOLS, type StitchedWorld, type WorldData } from "@pokehd/rom";
 import { GlitchWatcher } from "./glitches.ts";
@@ -92,6 +92,11 @@ export function createDriver(opts: DriverOptions): GameDriver {
   let page: Page | null = null;
   let input: CDPSession | null = null;
   let sheetPage: Page | null = null;
+  /**
+   * Contact sheets are drawn in a browser of their own, headless: a second tab in the headed stream
+   * window comes to the front to be screenshotted, hiding the stream for a few frames (a flicker).
+   */
+  let sheetBrowser: Browser | null = null;
   let poller: ReturnType<typeof setInterval> | null = null;
   let fitter: ReturnType<typeof setInterval> | null = null;
 
@@ -443,7 +448,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
     if (!picked.length) throw new Error("No recorded frames in that span");
     const scale = picked[0]!.frame.scale;
     const crop = { x: Math.round(box.x * scale), y: Math.round(box.y * scale), w: Math.round(box.width * scale), h: Math.round(box.height * scale) };
-    sheetPage ??= await need(context).newPage();
+    sheetBrowser ??= await chromium.launch({ headless: true, ...(!existsSync(chromium.executablePath()) && { channel: "chrome" }) });
+    sheetPage ??= await sheetBrowser.newPage();
     return composeSheet(sheetPage, {
       frames: picked.map(({ frame, at }) => ({ data: frame.data, label: `${at - zero >= 0 ? "+" : ""}${((at - zero) / 1000).toFixed(2)} s` })),
       crop,
@@ -731,6 +737,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
       poller = fitter = null;
       await recorder.stop();
       await context?.close().catch(() => {});
+      await sheetBrowser?.close().catch(() => {});
+      sheetBrowser = null;
       context = page = sheetPage = null;
       input = null;
     },
