@@ -83,7 +83,7 @@ describe.skipIf(!existsSync(ROM_PATH))("game actions (ROM)", () => {
       expect(result, JSON.stringify(action)).toBeDefined();
       return result!;
     };
-    return { gb, run };
+    return { gb, run, actions };
   }
 
   /** Back in the overworld loop, taking the player's steps. */
@@ -119,6 +119,28 @@ describe.skipIf(!existsSync(ROM_PATH))("game actions (ROM)", () => {
     expect(bag(gb)[1]).toEqual([POTION, 2]);
     expect(result.messages.join(" ")).toMatch(/recovered/i);
     walksAfter(gb);
+  });
+
+  it("says it's running for as long as the Potion's routine draws (QA bug 28)", async () => {
+    const { gb, actions } = await game();
+    const slot = 1;
+    gb.write(addr("wPartyMons") + slot * PARTYMON + 2, 5);
+    // Every frame: is the action running, and is the window up (the party menu ItemUseMedicine
+    // redraws, its "recovered by 20!" box)?
+    const seen: { running: boolean; window: boolean }[] = [];
+    let result: ActionResult | undefined;
+    actions.run({ kind: "use-item", item: POTION, mon: slot }, (res) => (result = res));
+    for (let i = 0; i < 1200 && !result; i++) {
+      gb.runFrame();
+      seen.push({ running: actions.running, window: gb.read(0xffb0) < 0x90 });
+    }
+    expect(result?.ok).toBe(true);
+    expect(actions.running).toBe(false);
+    const first = seen.findIndex((s) => s.running);
+    expect(first).toBeGreaterThanOrEqual(0);
+    // From the moment it starts, the window is never up without the action saying so.
+    expect(seen.slice(first).filter((s) => s.window && !s.running)).toEqual([]);
+    expect(seen.filter((s) => s.running && s.window).length).toBeGreaterThan(50);
   });
 
   it("says why when the Potion would do nothing, and keeps it", async () => {
