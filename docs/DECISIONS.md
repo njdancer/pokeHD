@@ -215,7 +215,7 @@ and `AddEnemyMonToPlayerParty` for a Pokémon (the Trade Center's routine, so th
 44-byte struct, OT and nickname land byte for byte). With a full party the Pokémon goes to the
 current box: there the game has no routine for a ready-made mon, so we append it in the PC's
 layout and set the Pokédex flags with the game's `FlagActionPredef`. A gift that doesn't fit
-(full bag, full party and box, money over ¥999,999) waits in the queue untouched.
+(full bag, full party and box, money over ₽999,999) waits in the queue untouched.
 
 Why: the spike's ROM test gave money, items and Pokémon (party and box), saved with the game's
 own `SaveGameData`, rebooted from the battery save and found them all, and held gifts that
@@ -723,3 +723,27 @@ Pokémon in battle, only while the background palette is the normal one so flash
 show. The player's own Pokémon keeps its SGB colours (the fan set has no back pictures), and so
 do trainers and a transformed Pokémon. `?fan=0` turns it off. To remove it, delete the object and
 this code.
+
+## D44. HD battle menus answer the battle's own menu and move list, with the moves up front (trial)
+
+**Status:** made by Claude 2026-10-13 under Nick's rules (D40, "any Game Boy UI showing is a
+bug"); layout pending Nick's pick. Off unless a device opens the game once with `?battlemenus`.
+
+- **Hook.** `BattleMenus` stands in for `HandleMenuInput` when it's called from the battle menu's
+  two columns (`DisplayBattleMenu`) or the move list (`SelectMenuItem`), told apart by the return
+  address. It returns what HandleMenuInput would: the keys in a (A on the choice, RIGHT or LEFT to
+  reach the other column, B to cancel a move list), wCurrentMenuItem and the cursor's place. The
+  game's code does the rest, so PKMN and ITEM still reach `GameAsks` (the Pokédex menu's sheets),
+  "No PP left!" and DISABLE are the game's, and running away rolls the game's dice. Link battles
+  keep the Game Boy's menus (both games must read the same keys).
+- **One tap a turn.** The menu question carries the moves, so a move can be picked straight away:
+  the menu gets FIGHT and the move list that follows gets the move without asking again. A move
+  list the game shows on its own (after "No PP left!", MIMIC, an ETHER in battle) is asked as such.
+- **Layouts** for Nick to compare: `moves` (2×2 moves with type and PP, then Pokémon, Bag, Run) and
+  `classic` (Fight, Pokémon, Bag, Run; Fight opens the moves). `?battlemenus=classic` picks it,
+  `=0` turns them off; the choice sticks on the device. /dev/battle?battlemenus=moves shows it on a
+  recorded battle.
+
+Why: the kid on an iPhone gets big buttons where his thumbs are, and most turns are one tap. A
+stand-in at the input routine keeps every rule and message the original's, with no battle logic
+of our own.

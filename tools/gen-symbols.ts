@@ -287,6 +287,28 @@ export const ALLOWLIST: readonly string[] = [
   "wTextBoxID",
   "wTwoOptionMenuID",
   "wUpdateSpritesEnabled",
+  // HD battle menus (p2-tapfirst): the battle menu's and the move list's waits for input, and
+  // what the page shows and answers there
+  "DisplayBattleMenu.AButtonPressed",
+  "DisplayBattleMenu.leftColumn_WaitForInput",
+  "DisplayBattleMenu.rightColumn",
+  "DisplayBattleMenu.rightColumn_WaitForInput",
+  "SelectMenuItem.notB",
+  "SelectMenuItem.select",
+  "hUILayoutFlags",
+  "wBattleMonMoves",
+  "wBattleMonPP",
+  "wEnemyMonMoves",
+  "wMenuCursorLocation",
+  "wMenuWrappingEnabled",
+  "wMoveMenuType",
+  "wNumMovesMinusOne",
+  "wNumSafariBalls",
+  "wPartyMenuAnimMonEnabled",
+  "wPlayerDisabledMove",
+  "wPlayerSelectedMove",
+  "wTopMenuItemX",
+  "wTopMenuItemY",
   // The play journal (dex menu): battles, catches, items, gifts, badges and evolutions, read at
   // the routines that make them happen
   "AddItemToInventory_",

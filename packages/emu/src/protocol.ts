@@ -9,6 +9,7 @@ import type { JournalEvent } from "./journal-hooks.ts";
 import type { LinkRole } from "./link.ts";
 import type { ActionResult, GameAction } from "./game/actions.ts";
 import type { AskAnswer, GameAsk } from "./game/asks.ts";
+import type { BattleAnswer, BattleAsk } from "./game/battle-menus.ts";
 
 /** A memory range read after every frame and sent with it: [address, length]. */
 export type Watch = readonly [address: number, length: number];
@@ -20,7 +21,8 @@ export type ToWorker =
   /** `guardDex` turns on DexGuard: the page shows its own Pokédex over the game's. */
   /** `menu` turns on the Pokédex menu's game hooks: page actions, and the game's questions asked of the page. */
   /** `journal` turns on JournalHooks (read-only): "journal" messages for the play journal. */
-  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean; menu?: boolean; journal?: boolean }
+  /** `battleMenus` has the page answer the battle menu and the move list (BattleMenus). */
+  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean; menu?: boolean; journal?: boolean; battleMenus?: boolean }
   /** Switches pacing to the audio clock; the port talks to the audio worklet. */
   | { type: "audio"; port: MessagePort }
   | { type: "buttons"; mask: number }
@@ -66,6 +68,7 @@ export type ToWorker =
   | { type: "action-cancel"; id: number }
   /** The page's answer to the game's question `id`. */
   | { type: "ask-answer"; id: number; answer: AskAnswer }
+  | { type: "battle-answer"; id: number; answer: BattleAnswer }
   /** Takes a gift out of the game at the next idle point, then saves. */
   | { type: "gift-take"; id: number; spec: GiftSpec };
 
@@ -77,6 +80,12 @@ export interface FrameMessage {
   count: number;
   /** Bytes for each watch, read at the end of this frame. */
   watched: Record<string, Uint8Array>;
+  /**
+   * One of the Pokédex menu's actions is running in the game this frame (GameActions): what the
+   * screen shows is its routine's own drawing (the party menu a POTION redraws, its message), which
+   * the menu reports in its own words when the action is done.
+   */
+  acting?: boolean;
 }
 
 export type FromWorker =
@@ -122,6 +131,8 @@ export type FromWorker =
   | { type: "action-done"; id: number; result: ActionResult }
   /** The game asks the player something (a list, the party, a quantity, yes or no): the page answers. */
   | { type: "ask"; id: number; ask: GameAsk }
+  /** The battle waits for the player's choice (the battle menu or the move list): the page answers. */
+  | { type: "battle-ask"; id: number; ask: BattleAsk }
   | { type: "error"; message: string; stack?: string };
 
 /** Worker → audio worklet: interleaved stereo float32. Worklet → worker: frames consumed. */

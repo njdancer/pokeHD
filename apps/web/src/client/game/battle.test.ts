@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CELL_HUD, CELL_SCENE, CELL_UI, TEXT_WATCHES, type BattleScreen, type TextWatched } from "@pokehd/emu";
-import { barColour, battleText, maskBattleScreen } from "./battle.ts";
+import { CELL_HUD, CELL_SCENE, CELL_UI, TEXT_WATCHES, type BattleScreen, type ScreenText, type TextWatched } from "@pokehd/emu";
+import { barColour, battleMenuShown, battleText, maskBattleScreen } from "./battle.ts";
 
 describe("maskBattleScreen", () => {
   const screen = (origin = { x: 0, y: 0 }): BattleScreen => {
@@ -62,5 +62,25 @@ describe("barColour", () => {
     expect(barColour(11, 20)).toBe("yellow"); // 26 of 48 pixels
     expect(barColour(4, 20)).toBe("red"); // 9 pixels
     expect(barColour(0, 0)).toBe("red");
+  });
+});
+
+describe("battleMenuShown", () => {
+  const text = (over: Partial<ScreenText>): ScreenText => ({
+    shown: true, boxes: [], dialog: null, menus: [], quantity: null, loose: [], pictures: false, ...over,
+  } as ScreenText);
+  const box = (x: number, y: number, width: number, height: number, lines: { row: number; col: number; text: string }[] = []) => ({ x, y, width, height, lines });
+
+  it("sees the battle menu, the Safari Zone's and the move lists", () => {
+    const fight = box(8, 12, 12, 6);
+    expect(battleMenuShown(text({ boxes: [fight], menus: [{ kind: "battle", box: fight, items: [], cursor: 0, active: true }] }))).toBe(true);
+    expect(battleMenuShown(text({ boxes: [box(0, 12, 20, 6, [{ row: 16, col: 1, text: "THROW ROCK  RUN" }])] }))).toBe(true);
+    expect(battleMenuShown(text({ boxes: [box(4, 12, 16, 6)] }))).toBe(true);
+    expect(battleMenuShown(text({ boxes: [box(0, 7, 16, 6)] }))).toBe(true);
+  });
+
+  it("leaves messages and other menus alone", () => {
+    expect(battleMenuShown(text({ boxes: [box(0, 12, 20, 6, [{ row: 14, col: 1, text: "Wild PIDGEY" }])] }))).toBe(false);
+    expect(battleMenuShown(text({ boxes: [box(4, 2, 16, 11)] }))).toBe(false);
   });
 });
