@@ -106,7 +106,7 @@ export function StreamPage() {
                 </span>
               )}
               <span className="qs-label" style={{ marginLeft: "auto" }}>
-                {turnLabel(bus.status?.turn, bus.status?.fps)}
+                {turnLabel(bus.status?.turn)}
               </span>
             </div>
             <Feed feed={bus.feed} connected={bus.connected} />
@@ -132,10 +132,9 @@ export function StreamPage() {
   );
 }
 
-function turnLabel(turn: number | undefined, fps: number | null | undefined): string {
+function turnLabel(turn: number | undefined): string {
   const parts: string[] = [];
   if (turn !== undefined) parts.push(`Turn ${turn.toLocaleString("en-US")}`);
-  if (fps != null) parts.push(`${Math.round(fps)} fps`);
   return parts.join(" · ");
 }
 
