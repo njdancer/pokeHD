@@ -46,11 +46,12 @@ export type GameAsk =
   | { kind: "party"; purpose: "switch" | "item" | "next" | "other"; inBattle: boolean }
   /**
    * Choose from a list. `list`: the bag (or the PC's item box), the Poké Mart's stock, or a
-   * list of Pokémon (Bill's PC: the team or the current box).
+   * list of Pokémon (Bill's PC: the team or the current box). `text` is what the game asked in
+   * its message box ("What do you want to deposit?"), since the same list serves several asks.
    */
-  | { kind: "items"; list: "bag" | "pc-items"; entries: { item: number; quantity: number }[]; inBattle: boolean; selling: boolean }
+  | { kind: "items"; list: "bag" | "pc-items"; entries: { item: number; quantity: number }[]; inBattle: boolean; selling: boolean; text: string }
   | { kind: "mart"; entries: number[] }
-  | { kind: "mons"; list: "team" | "box"; species: number[] }
+  | { kind: "mons"; list: "team" | "box"; species: number[]; text: string }
   /** How many: up to `max`, at `price` each (already halved when selling), 0 if no price. */
   | { kind: "quantity"; max: number; price: number }
   /** Yes or no, with what the game just said. */
@@ -178,13 +179,13 @@ export class GameAsks {
       const entries = Array.from({ length: count }, (_, i) => ({ item: g.read(list + 1 + i * 2), quantity: g.read(list + 2 + i * 2) }));
       const where = list === addr("wNumBagItems") ? "bag" : list === addr("wNumBoxItems") ? "pc-items" : null;
       if (!where) return null;
-      return { kind: "items", list: where, entries, inBattle, selling: g.read(addr("hHalveItemPrices")) !== 0 };
+      return { kind: "items", list: where, entries, inBattle, selling: g.read(addr("hHalveItemPrices")) !== 0, text: textBoxText(g) };
     }
     if (id === PRICEDITEMLISTMENU) return { kind: "mart", entries: [...g.readBytes(list + 1, count)] };
     if (id === PCPOKEMONLISTMENU) {
       const where = list === addr("wPartyCount") ? "team" : list === addr("wBoxCount") ? "box" : null;
       if (!where) return null;
-      return { kind: "mons", list: where, species: [...g.readBytes(list + 1, count)] };
+      return { kind: "mons", list: where, species: [...g.readBytes(list + 1, count)], text: textBoxText(g) };
     }
     return null;
   }

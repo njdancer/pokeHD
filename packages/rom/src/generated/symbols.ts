@@ -132,6 +132,7 @@ export const SYMBOLS = {
   YoungsterPic: { bank: 0x13, address: 0x4000 },
   _AddEnemyMonToPlayerParty: { bank: 0x03, address: 0x749d },
   hAutoBGTransferEnabled: { bank: 0x00, address: 0xffba },
+  hDownArrowBlinkCount1: { bank: 0x00, address: 0xff8b },
   hHalveItemPrices: { bank: 0x00, address: 0xff8e },
   hItemPrice: { bank: 0x00, address: 0xff8b },
   hJoy7: { bank: 0x00, address: 0xffb7 },

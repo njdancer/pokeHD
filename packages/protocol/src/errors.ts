@@ -17,7 +17,8 @@ export type ErrorKind = (typeof ERROR_KINDS)[number];
 /** A string cut to at most `max` characters. */
 const text = (max: number) => v.pipe(v.string(), v.transform((s) => s.slice(0, max)));
 
-const DeviceSchema = v.object({
+/** The browser and machine a report came from; perf reports (perf.ts) send the same. */
+export const DeviceSchema = v.object({
   ua: text(400),
   /** CSS pixels, `widthxheight`. */
   screen: text(40),
@@ -30,7 +31,12 @@ const DeviceSchema = v.object({
   gpu: v.optional(text(200)),
   /** Approximate RAM in GB (Chromium only). */
   memory: v.optional(v.number()),
+  /** Logical CPU cores (navigator.hardwareConcurrency). */
+  cores: v.optional(v.number()),
+  /** Touch points (navigator.maxTouchPoints): an iPad says it's a Mac, but a Mac has none. */
+  touch: v.optional(v.number()),
 });
+export type Device = v.InferOutput<typeof DeviceSchema>;
 
 export const ErrorReportSchema = v.object({
   kind: v.picklist(ERROR_KINDS),

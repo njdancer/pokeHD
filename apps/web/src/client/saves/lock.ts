@@ -1,7 +1,7 @@
 // One device per save (D41), the device's side: before a save is played it's claimed from the
 // lock service, and while it's played a heartbeat keeps it. Signed out or offline there's no
 // service to ask, and the game plays as before ("free"): it never stops a child playing.
-import { LOCK_BEAT_MS, parseLockAnswer, type LockAnswer, type LockHolder } from "@pokehd/protocol";
+import { deviceLabel, LOCK_BEAT_MS, parseLockAnswer, type LockAnswer, type LockHolder } from "@pokehd/protocol";
 
 export type { LockHolder };
 export type LockState = LockAnswer | { state: "free" };
@@ -27,13 +27,7 @@ function safeSession(): Storage | undefined {
 
 /** What another device sees this one called. */
 export function deviceName(ua = navigator.userAgent, touch = navigator.maxTouchPoints): string {
-  if (/iPhone/.test(ua)) return "iPhone";
-  if (/iPad/.test(ua) || (/Macintosh/.test(ua) && touch > 1)) return "iPad";
-  if (/Android/.test(ua)) return "Android";
-  if (/Macintosh/.test(ua)) return "Mac";
-  if (/Windows/.test(ua)) return "Windows PC";
-  if (/CrOS/.test(ua)) return "Chromebook";
-  return "another device";
+  return deviceLabel(ua, touch);
 }
 
 export interface SaveLockOptions {

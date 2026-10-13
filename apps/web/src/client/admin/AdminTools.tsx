@@ -6,6 +6,7 @@ const TOOLS: { href: string; name: string; what: string }[] = [
   { href: "/admin/lab", name: "Relief lab", what: "Training runs from the Mac, live" },
   { href: "/tools/relief", name: "Relief editor", what: "Paint which way each pixel faces" },
   { href: "/admin/errors", name: "Crash reports", what: "Errors from every device playing" },
+  { href: "/admin/perf", name: "Performance", what: "Frame rates from every device playing" },
   { href: "/explore", name: "ROM explorer", what: "Disassembly, step debugger, assets" },
   { href: "/dev/dex", name: "Pokédex looks", what: "The Pokédex designs side by side" },
   { href: "/dev/menu/live", name: "Pokédex menu, live", what: "The menu in the real game" },

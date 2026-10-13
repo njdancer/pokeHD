@@ -133,6 +133,8 @@ export const TEXT_WATCHES = {
   listId: sym("wListMenuID"),
   /** wOptions; the low 3 bits are the frames between letters (text speed). */
   options: sym("wOptions"),
+  /** hDownArrowBlinkCount1 and 2: they count down every pass while the game waits at a ▼. */
+  arrowBlink: sym("hDownArrowBlinkCount1", 2),
 } as const satisfies Record<string, Watch>;
 
 export type TextWatchName = keyof typeof TEXT_WATCHES;

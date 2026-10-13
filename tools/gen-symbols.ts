@@ -96,6 +96,7 @@ export const ALLOWLIST: readonly string[] = [
   "TextBoxGraphics",
   "TextBoxGraphicsEnd",
   "hAutoBGTransferEnabled",
+  "hDownArrowBlinkCount1",
   "wCurrentMenuItem",
   "wListMenuID",
   "wListScrollOffset",

@@ -1,7 +1,7 @@
 // Crash reporting: errors on players' devices go to `POST /api/errors`, and Nick reads them at
 // /admin/errors. Catches uncaught exceptions, unhandled rejections, WebGPU errors and lost GPUs;
 // React's and the emulator's failures are reported by their owners through reportError.
-import type { ErrorKind, ErrorReport } from "@pokehd/protocol";
+import type { Device, ErrorKind, ErrorReport } from "@pokehd/protocol";
 
 declare const __POKEHD_BUILD__: string;
 
@@ -33,17 +33,24 @@ export function reportError(kind: ErrorKind, error: unknown, extra: { componentS
       message,
       ...(stack ? { stack } : {}),
       ...(extra.componentStack ? { componentStack: extra.componentStack } : {}),
-      page: location.pathname + location.search,
-      build: typeof __POKEHD_BUILD__ === "string" ? __POKEHD_BUILD__ : "dev",
-      visit,
-      uptime: Math.round(performance.now() - loadedAt),
+      ...reportContext(),
       log: log.slice(),
-      device: device(),
     };
     void send(report);
   } catch {
     // Reporting must never be the thing that breaks the page.
   }
+}
+
+/** Where and when a report comes from: shared with perf reports (perf.ts). */
+export function reportContext(): Pick<ErrorReport, "page" | "build" | "visit" | "uptime" | "device"> {
+  return {
+    page: location.pathname + location.search,
+    build: typeof __POKEHD_BUILD__ === "string" ? __POKEHD_BUILD__ : "dev",
+    visit,
+    uptime: Math.round(performance.now() - loadedAt),
+    device: device(),
+  };
 }
 
 /** Tells reports which renderer the engine picked. */
@@ -116,7 +123,7 @@ function describe(error: unknown): { message: string; stack?: string } {
   }
 }
 
-function device(): ErrorReport["device"] {
+function device(): Device {
   const nav = navigator as Navigator & { standalone?: boolean; deviceMemory?: number };
   return {
     ua: nav.userAgent,
@@ -126,6 +133,8 @@ function device(): ErrorReport["device"] {
     ...(renderer ? { renderer } : {}),
     ...(gpu ? { gpu } : {}),
     ...(nav.deviceMemory ? { memory: nav.deviceMemory } : {}),
+    ...(nav.hardwareConcurrency ? { cores: nav.hardwareConcurrency } : {}),
+    ...(nav.maxTouchPoints ? { touch: nav.maxTouchPoints } : {}),
   };
 }
 

@@ -99,6 +99,8 @@ function Body({ rom, ask, game, answer }: { rom: Uint8Array; ask: GameAsk; game:
       return (
         <div className="dm-list">
           {ask.inBattle && <div className="dm-banner">Using an item uses your turn</div>}
+          {/* The same list serves the PC's deposit, withdraw and toss: the game's question says which. */}
+          {!ask.inBattle && !ask.selling && ask.text && <div className="dm-banner">{ask.text.replace(/\n/g, " ")}</div>}
           {ask.entries.map((e, index) => (
             <button key={index} type="button" className="dm-c dm-row" onClick={() => answer({ index })} disabled={ask.selling && (isKeyItem(rom, e.item) || itemPrice(rom, e.item) === 0)}>
               <ShelfIcon shelf={shelf(rom, e.item)} />

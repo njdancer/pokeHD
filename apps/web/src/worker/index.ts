@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import { ERROR_REPORT_MAX_BYTES, parseErrorReport } from "@pokehd/protocol";
+import { ERROR_REPORT_MAX_BYTES, parseErrorReport, parsePerfReport, PERF_REPORT_MAX_BYTES } from "@pokehd/protocol";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { sendSignIn, signInLink } from "./directory/mail.ts";
 import { cleanEmail, type CodeKind, type Player } from "./directory/store.ts";
@@ -168,6 +168,27 @@ app.post("/errors", async (c) => {
   return c.json({ ok: true, stored });
 });
 
+/**
+ * Perf telemetry from the game (src/client/perf.ts): one window of play at a time, from every
+ * device. Read at /admin/perf. Like crash reports: signed in or not, and the body may be text/plain.
+ */
+app.post("/perf", async (c) => {
+  const origin = c.req.header("origin");
+  if (origin && new URL(origin).host !== new URL(c.req.url).host) return c.text("Forbidden", 403);
+  const text = await c.req.text();
+  if (text.length > PERF_REPORT_MAX_BYTES) return c.json({ error: "too-big" }, 413);
+  let report;
+  try {
+    report = parsePerfReport(JSON.parse(text));
+  } catch {
+    report = null;
+  }
+  if (!report) return c.json({ error: "bad-report" }, 400);
+  const player = await currentPlayer(c).catch(() => null);
+  const stored = await reports(c).addPerf(report, player && { id: player.id, name: player.name });
+  return c.json({ ok: true, stored });
+});
+
 // Admin: Nick, signed in as ADMIN_EMAIL, from the game. ADMIN_TOKEN (a Worker secret) is for
 // scripts and tests: `pnpm invite` wraps these routes. The session cookie is SameSite=Strict, so
 // another site can't make Nick's browser call them.
@@ -176,8 +197,11 @@ app.use("/admin/*", async (c, next) => {
   const allowed =
     (await bearerMatches(c, c.env.ADMIN_TOKEN)) ||
     isAdmin(c, await currentPlayer(c)) ||
-    // Claude's cloud sandboxes only have DEV_ROM_TOKEN; Nick let it read crash reports (`pnpm errors`).
-    (c.req.method === "GET" && c.req.path.startsWith("/api/admin/errors") && (await bearerMatches(c, c.env.DEV_ROM_TOKEN)));
+    // Claude's cloud sandboxes only have DEV_ROM_TOKEN; Nick let it read crash reports and perf
+    // telemetry (`pnpm errors`, `pnpm perf`).
+    (c.req.method === "GET" &&
+      (c.req.path.startsWith("/api/admin/errors") || c.req.path.startsWith("/api/admin/perf")) &&
+      (await bearerMatches(c, c.env.DEV_ROM_TOKEN)));
   if (!allowed) return c.text("Not found", 404);
   await next();
 });
@@ -208,6 +232,15 @@ app.delete("/admin/errors", async (c) => {
   await reports(c).clear(c.req.query("fp") || undefined);
   return c.json({ ok: true });
 });
+
+/** Perf telemetry by page load, the most recently played first (`?limit=`, default 50). */
+app.get("/admin/perf", async (c) => {
+  const limit = Number(c.req.query("limit")) || undefined;
+  return c.json({ sessions: await reports(c).perfSessions(limit && Math.min(limit, 500)) });
+});
+
+/** One page load's windows (`?visit=`), in the order they were played. */
+app.get("/admin/perf/windows", async (c) => c.json({ windows: await reports(c).perfWindows(c.req.query("visit") ?? "") }));
 
 // The relief editor's painted normals (/tools/relief). Training material only: the game never reads
 // them. Kept in the private bucket so Nick's phone and Mac see the same work; scripts export them
