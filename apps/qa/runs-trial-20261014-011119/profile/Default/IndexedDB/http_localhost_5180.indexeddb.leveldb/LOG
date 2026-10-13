@@ -1,0 +1,3 @@
+2026/10/14-01:04:22.137 a0df05 Reusing MANIFEST /Users/nickdancer/Code/pokeHD-qa/apps/qa/runs/profile/Default/IndexedDB/http_localhost_5180.indexeddb.leveldb/MANIFEST-000001
+2026/10/14-01:04:22.137 a0df05 Recovering log #6
+2026/10/14-01:04:22.138 a0df05 Reusing old log /Users/nickdancer/Code/pokeHD-qa/apps/qa/runs/profile/Default/IndexedDB/http_localhost_5180.indexeddb.leveldb/000006.log 

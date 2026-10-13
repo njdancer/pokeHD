@@ -1,0 +1,48 @@
+{"t":"status","mode":"play","turn":0,"goal":"","map":"","playTime":"0:00","fps":null}
+{"id":508,"at":1791903412270,"t":"thought","turn":1,"text":"Checking the screen first to see where things stand on Route 1."}
+{"id":509,"at":1791903412301,"t":"action","turn":1,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":1,"goal":"","map":"Route 1","playTime":"0:17","fps":120}
+{"t":"status","mode":"play","turn":1,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:17","fps":120}
+{"t":"status","mode":"play","turn":2,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:17","fps":120}
+{"id":510,"at":1791903415711,"t":"thought","turn":3,"text":"The player is on Route 1 with Viridian to the north, so I'll walk up."}
+{"id":511,"at":1791903415926,"t":"action","turn":3,"kind":"joystick","label":"joystick ↑ 8 tiles"}
+{"t":"status","mode":"play","turn":3,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:17","fps":120}
+{"id":512,"at":1791903420480,"t":"action","turn":4,"kind":"joystick","label":"joystick ↑ 8 tiles"}
+{"t":"status","mode":"play","turn":4,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":513,"at":1791903424836,"t":"thought","turn":5,"text":"A ledge blocks the way north, so I'll step right to find the gap."}
+{"id":514,"at":1791903424965,"t":"action","turn":5,"kind":"joystick","label":"joystick → 3 tiles"}
+{"t":"status","mode":"play","turn":5,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":515,"at":1791903426513,"t":"action","turn":6,"kind":"joystick","label":"joystick ↑ 4 tiles"}
+{"t":"status","mode":"play","turn":6,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":516,"at":1791903431841,"t":"thought","turn":7,"text":"A wild battle started, so I'll check the screen."}
+{"id":517,"at":1791903431882,"t":"action","turn":7,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":7,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":518,"at":1791903434092,"t":"thought","turn":8,"text":"A wild Rattata appeared, and its sprite looks blurry and oversized, similar to bug #8. I'll advance the text."}
+{"id":519,"at":1791903434323,"t":"action","turn":8,"kind":"tap","label":"tap text box advance"}
+{"t":"status","mode":"play","turn":8,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":520,"at":1791903438272,"t":"action","turn":9,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":9,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":521,"at":1791903439247,"t":"action","turn":10,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":10,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":522,"at":1791903441455,"t":"thought","turn":11,"text":"The battle text box is empty right now, so I'll tap it to bring up the battle menu."}
+{"id":523,"at":1791903441670,"t":"action","turn":11,"kind":"tap","label":"tap battle text box"}
+{"t":"status","mode":"play","turn":11,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":524,"at":1791903444459,"t":"action","turn":12,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":12,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120.1}
+{"id":525,"at":1791903447182,"t":"thought","turn":13,"text":"The battle menu is showing. I'll pick FIGHT."}
+{"id":526,"at":1791903447395,"t":"action","turn":13,"kind":"tap","label":"tap FIGHT"}
+{"t":"status","mode":"play","turn":13,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":527,"at":1791903450105,"t":"action","turn":14,"kind":"tap","label":"tap A to confirm FIGHT"}
+{"t":"status","mode":"play","turn":14,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":528,"at":1791903452623,"t":"action","turn":15,"kind":"tap","label":"tap A to confirm move"}
+{"t":"status","mode":"play","turn":15,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":529,"at":1791903455767,"t":"action","turn":16,"kind":"tap","label":"tap A advance"}
+{"t":"status","mode":"play","turn":16,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":530,"at":1791903456723,"t":"action","turn":17,"kind":"wait","label":"wait 1.5s"}
+{"t":"status","mode":"play","turn":17,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":531,"at":1791903461012,"t":"action","turn":18,"kind":"tap","label":"tap A advance"}
+{"t":"status","mode":"play","turn":18,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":532,"at":1791903461961,"t":"action","turn":19,"kind":"wait","label":"wait 1.5s"}
+{"t":"status","mode":"play","turn":19,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}
+{"id":533,"at":1791903465894,"t":"action","turn":20,"kind":"tap","label":"tap FIGHT"}
+{"t":"status","mode":"play","turn":20,"goal":"Heal at Viridian Pokemon Center, then head north through Route 2 to Viridian Forest and Pewter City.","map":"Route 1","playTime":"0:18","fps":120}

@@ -37,7 +37,7 @@ import {
 } from "@pokehd/emu";
 import { createEngine, type Engine } from "@pokehd/engine";
 import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
-import { decodeText, encodeName, messageBoxes, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
+import { decodeText, encodeName, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
 import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../input/index.ts";
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { cloudBackup } from "../saves/cloud-save.ts";
@@ -82,6 +82,7 @@ import { IntroStage } from "./IntroStage.tsx";
 import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
 import { LockScreen } from "./LockScreen.tsx";
 import { Starter, type StartChoice } from "./onboarding.ts";
+import { newScriptView, scriptView, type ScriptView } from "./script-view.ts";
 import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
@@ -96,6 +97,7 @@ import { PlayJournal } from "../menu/journal.ts";
 import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
 import { noteRenderer, reportError } from "../errors.ts";
 import { PerfSampler } from "../perf.ts";
+import { QA_RUN } from "../qa.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
@@ -111,7 +113,16 @@ const BATTLE_KEYS: [number, BattleKey][] = [[Button.Up, "up"], [Button.Down, "do
 declare global {
   interface Window {
     /** Set with ?stats, for scripted play-throughs. */
-    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly frames: number; read(address: number, length: number): Promise<number[]>; readonly page: object; readonly slow: SlowFrame[] };
+    __pokehd?: {
+      readonly state: OverworldState | null;
+      readonly inWorld: boolean;
+      readonly frames: number;
+      read(address: number, length: number): Promise<number[]>;
+      /** The team, badges, play time and the rest, as the Pokédex menu reads them (the stream page's party). */
+      snapshot(): Promise<GameSnapshot>;
+      readonly page: object;
+      readonly slow: SlowFrame[];
+    };
   }
 }
 /** A display frame over 50 ms, with what the page was doing (for ?stats perf checks). */
@@ -174,6 +185,7 @@ const PIP_KEY = "pokehd.screen.pip.v1";
 const PIP_TOGGLE_CODE = "KeyP";
 
 function loadPip(): boolean {
+  if (QA_RUN) return false;
   try {
     return localStorage.getItem(PIP_KEY) !== "off";
   } catch {
@@ -304,8 +316,6 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const [dialogLines, setDialogLines] = useState<string[] | null>(null);
   /** Whole messages from the script (ScriptText), in place of the game's pages. */
   const scriptRef = useRef<ScriptView | null>(null);
-  /** The message box is hidden: the player has read the message and the game is finishing it. */
-  const [hideDialog, setHideDialog] = useState(false);
   const look = useMemo(() => uiLook(), []);
   /** The signed-in player (their name is the one Oak checks, and kept the same as theirs). */
   const [account, setAccount] = useState<Account | null>(null);
@@ -401,7 +411,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Bound keys and rebinding prompts call preventDefault first (JoypadInput listens earlier).
-      if (e.code !== PIP_TOGGLE_CODE || e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (QA_RUN || e.code !== PIP_TOGGLE_CODE || e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       togglePip();
     };
     window.addEventListener("keydown", onKey);
@@ -575,10 +585,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         onEraseAnswered: () => setErasing(null),
         ...(custom ? { onNameAsk: (ask: NameAsk) => setNameAsk(ask) } : {}),
         onScriptMessage: ({ id, message }) => {
-          const boxes = messageBoxes(message);
-          scriptRef.current = { id, boxes, index: 0, closed: false, ended: false, unfit: 0, lines: new Set(message.pages.flatMap((p) => p.lines.map((l) => l.trim())).filter(Boolean)) };
+          scriptRef.current = newScriptView(id, message);
           // All of it fits in one box: the game can print the rest while the player reads.
-          if (boxes.length <= 1) host?.readOnMessage(id);
+          if (scriptRef.current.boxes.length <= 1) host?.readOnMessage(id);
         },
         onScriptEnd: (id) => {
           if (scriptRef.current?.id === id) scriptRef.current.ended = true;
@@ -665,13 +674,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           if (!fits || script || battleScreen) joiner.reset();
           const joined = script ? { lines: script.lines, press: false } : fits && !battleScreen ? joiner.frame(text) : { lines: null, press: false };
           if (joined.press) host?.tap(Button.A);
-          const hidden = !!script?.hidden;
-          const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}#${hidden}` : "";
+          const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}` : "";
           if (key !== shownText) {
             shownText = key;
             setHdText(fits ? text : null);
             setDialogLines(joined.lines);
-            setHideDialog(hidden);
           }
           const scene = sceneRef.current;
           const onboard = start !== null;
@@ -904,6 +911,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           },
           /** For a stuck test's report: game memory, and what the page holds back. */
           read: (address: number, length: number) => h.read([[address, length]]).then(([bytes]) => Array.from(bytes!)),
+          snapshot: async () => decodeSnapshot(await h.read(SNAPSHOT_RANGES)),
           get page() {
             return { held: heldRef.current, onboarding: onboardingRef.current?.phase ?? null, starter: !!starterRef.current, script: scriptRef.current?.id ?? null };
           },
@@ -1119,11 +1127,16 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     hostRef.current?.setAutosave(on);
   };
 
-  /** Reads on in a whole message from the script: its next box, or done with it. */
+  /**
+   * Reads on in a whole message from the script: its next box, or done with it. A message already
+   * read stays up while the game finishes it (scriptView), and taps on it go nowhere meanwhile:
+   * one reaching the game as it closes the box would start the talk over.
+   */
   function readOnScript(): boolean {
     const script = scriptRef.current;
     const host = hostRef.current;
-    if (!script || script.closed || script.ended || !host) return false;
+    if (!script || script.ended || !host) return false;
+    if (script.closed) return true;
     if (script.index < script.boxes.length - 1) {
       if (++script.index === script.boxes.length - 1) host.readOnMessage(script.id);
     } else {
@@ -1243,7 +1256,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const setApp = <K extends keyof AppOptions>(key: K, value: AppOptions[K]) => {
     if (key === "sound" && value) void enableSound();
     if (key === "readAloud") setReadAloud(!!value);
-    if (key === "gameBoyScreen" && value !== pipRef.current) togglePip();
+    if (key === "gameBoyScreen" && value !== pipRef.current && !QA_RUN) togglePip();
   };
   const closeMenu = () => {
     setMenuOpen(null);
@@ -1265,7 +1278,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         data-layout={noHd ? "full" : layout}
       />
       {onboarding?.phase === "intro" && !noHd && <IntroStage ref={introCanvas} />}
-      {hdText && !noHd && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} hideDialog={hideDialog} actions={textActions} look={look} />}
+      {hdText && !noHd && !nameAsk && <TextOverlay text={hdText} dialogLines={dialogLines} actions={textActions} look={look} />}
       {/* Everything that isn't the game sits behind one button (the menu), in the HD panels' look.
           With the Pokédex menu, the dex is that button and all of this lives in it. */}
       {ready && !menu && <button
@@ -1301,7 +1314,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           )}
           <div className="game-menu-tiles">
             <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Turn sound on"}</button>
-            <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Game Boy screen</button>
+            {!QA_RUN && <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Game Boy screen</button>}
             {room && <RoomBadge status={room.status} friends={room.friends.length} />}
             {gifts && room?.status === "open" && (
               <button type="button" onClick={() => { setGiftOpen((v) => !v); setSettings(false); }} aria-expanded={giftOpen}>Gift</button>
@@ -1328,6 +1341,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         <pre
           className="game-stats"
           data-testid="stats"
+          style={QA_RUN ? { display: "none" } : undefined}
           data-fps={stats.fps.toFixed(1)}
           data-map={s?.mapId}
           data-x={s?.player.x}
@@ -1461,55 +1475,3 @@ function RoomBadge({ status, friends }: { status: RoomStatus; friends: number })
   return <span className="room-badge" data-status={status}>{text[status]}</span>;
 }
 
-/** A whole message from the script, as the page shows it (ScriptText in @pokehd/emu). */
-interface ScriptView {
-  id: number;
-  boxes: string[][];
-  /** The box showing. */
-  index: number;
-  /** The player has read it: the game is finishing it. */
-  closed: boolean;
-  /** The game is done with it (a menu took over, the box closed, or another message began). */
-  ended: boolean;
-  /** Frames the HD text couldn't show it. */
-  unfit: number;
-  /** Every line of the message, to tell its pages on screen from anything else. */
-  lines: Set<string>;
-}
-
-/** Frames the HD text may not fit before a message goes back to the game's own text. */
-const SCRIPT_UNFIT_FRAMES = 10;
-
-/**
- * This frame's message box from a whole message: the box the player is on (`lines`), or hidden
- * while the game finishes a message already read. Null when no message applies, so the game's
- * own pages show (read through by the DialogJoiner).
- */
-function scriptView(
-  ref: { current: ScriptView | null },
-  text: ScreenText,
-  fits: boolean,
-  release: (id: number) => void,
-): { lines: string[] | null; hidden: boolean } | null {
-  const script = ref.current;
-  if (!script) return null;
-  const dialog = text.dialog;
-  // The message box shows this message's pages (or nothing yet).
-  const ours = !dialog || dialog.lines.every((l) => !l.trim() || script.lines.has(l.trim()));
-  if (script.ended && (!dialog || !ours)) {
-    ref.current = null;
-    return null;
-  }
-  if (!fits) {
-    // The HD text can't show it here (a screen it doesn't draw): the game's own text takes over.
-    if (!script.closed && !script.ended && ++script.unfit > SCRIPT_UNFIT_FRAMES) {
-      release(script.id);
-      ref.current = null;
-    }
-    return null;
-  }
-  script.unfit = 0;
-  if (!ours) return null;
-  if (script.closed) return { lines: null, hidden: true };
-  return { lines: script.boxes[script.index] ?? null, hidden: false };
-}

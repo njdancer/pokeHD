@@ -1,0 +1,9 @@
+2026/10/14-00:56:46.169 a0b8c3 Reusing MANIFEST /Users/nickdancer/Code/pokeHD-qa/apps/qa/runs/profile/Default/IndexedDB/http_localhost_5180.indexeddb.leveldb/MANIFEST-000001
+2026/10/14-00:56:46.170 a0b8c3 Recovering log #6
+2026/10/14-00:56:46.170 a0b8c3 Reusing old log /Users/nickdancer/Code/pokeHD-qa/apps/qa/runs/profile/Default/IndexedDB/http_localhost_5180.indexeddb.leveldb/000006.log 
+2026/10/14-00:57:19.530 a0b8c3 Compacting 1@1 + 1@2 files
+2026/10/14-00:57:19.538 a0b8c3 Generated table #9@1: 46 keys, 26381 bytes
+2026/10/14-00:57:19.538 a0b8c3 Compacted 1@1 + 1@2 files => 26381 bytes
+2026/10/14-00:57:19.542 a0b8c3 compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/10/14-00:57:19.542 a0b8c3 Delete type=2 #7
+2026/10/14-00:57:19.542 a0b8c3 Delete type=2 #5

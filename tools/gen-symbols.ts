@@ -40,6 +40,10 @@ export const ALLOWLIST: readonly string[] = [
   "SpriteSheetPointerTable",
   // Super Game Boy palettes (p1-colour, D11)
   "SuperPalettes",
+  // The trainer card's badges and their SGB colours (the QA stream's badge row)
+  "BlkPacket_TrainerCard",
+  "GymLeaderFaceAndBadgeTileGraphics",
+  "PalPacket_TrainerCard",
   // Overworld state in WRAM and HRAM (p1-emu, p1-state-read)
   "hWY",
   "wCurMap",
