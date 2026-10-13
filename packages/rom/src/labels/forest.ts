@@ -56,6 +56,9 @@ export const FOREST: TilesetLabelTable = {
     0x30: "ground",
     0x31: "sign",
     0x32: "sign",
+    // Solid darkest shade: only Viridian Forest's border block (3) draws it, the canopy the game
+    // fills in around the forest. Trees, like the overworld's tree borders.
+    0x33: "tree",
     0x34: "lawn", // short grass among the tall grass; no encounters
     0x35: "tree",
     0x36: "tree",
@@ -88,11 +91,10 @@ export const FOREST: TilesetLabelTable = {
     0x57: "rock",
     0x5e: "lawn", // patterned grass in the Safari Zone, walkable
     0x5f: "ground",
-    // No Forest or Safari Zone block draws these.
+    // No Forest or Safari Zone map or border draws these.
     0x0d: "unused",
     0x10: "unused",
     0x11: "unused",
-    0x33: "unused",
     0x44: "unused",
     0x45: "unused",
     0x46: "unused",
