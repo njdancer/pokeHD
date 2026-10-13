@@ -25,11 +25,10 @@ describe("scriptView", () => {
     for (let f = 0; f < 3 * SCRIPT_UNFIT_FRAMES; f++) {
       expect(scriptView(ref, screen(["To make a complete", "guide on all the"]), true, (id) => released.push(id))).toEqual({
         lines: ["To make a complete", "guide on all the", "POKéMON in the", "world..."],
-        hidden: false,
       });
     }
     // An 18-letter second line with the ▼ over its last letter.
-    expect(scriptView(ref, screen(["", "That was my dream"]), true, (id) => released.push(id))?.hidden).toBe(false);
+    expect(scriptView(ref, screen(["", "That was my dream"]), true, (id) => released.push(id))).not.toBeNull();
     expect(released).toEqual([]);
   });
 
@@ -44,6 +43,25 @@ describe("scriptView", () => {
     // For longer, the page isn't showing it: the game's own waits take over.
     expect(scriptView(ref, other, true, (id) => released.push(id))).toBeNull();
     expect(released).toEqual([25]);
+    expect(ref.current).toBeNull();
+  });
+
+  // The nurse (DisplayPokemonCenterDialogue_): "OK. We'll need your POKéMON." ends with no wait of
+  // its own, and the game keeps it on screen through HealParty and the healing machine.
+  it("keeps a message the player has read up while the game's box still shows it (QA bug 19)", () => {
+    const need: Message = { pages: [{ lines: ["OK. We'll need", "your POKéMON."], wait: "end" }], ending: "done" };
+    const ref: { current: ScriptView | null } = { current: newScriptView(7, need) };
+    const shown = screen(["OK. We'll need", "your POKéMON."]);
+    const lines = ["OK. We'll need", "your POKéMON."];
+    expect(scriptView(ref, shown, true, () => {})).toEqual({ lines });
+    ref.current!.closed = true;
+    // Seconds of the healing machine: the box stays, with the message's words.
+    for (let f = 0; f < 300; f++) expect(scriptView(ref, shown, true, () => {})).toEqual({ lines });
+    // The game is done with it, but its box still shows it: still up.
+    ref.current!.ended = true;
+    expect(scriptView(ref, shown, true, () => {})).toEqual({ lines });
+    // The next message clears the box: the read one goes.
+    expect(scriptView(ref, screen(["Thank you!", ""]), true, () => {})).toBeNull();
     expect(ref.current).toBeNull();
   });
 });
