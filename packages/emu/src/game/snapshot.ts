@@ -64,9 +64,11 @@ export interface GameSnapshot {
   /** The current box in Bill's PC (1–12). */
   boxNumber: number;
   box: BoxMon[];
-  /** Pokédex flags, by Pokédex number. */
+  /** Pokédex flags, by Pokédex number (see `dexProgress`). */
   seen: Set<number>;
   owned: Set<number>;
+  /** Species the game is showing a full Pokédex page for without owning them (Oak's starters). */
+  onShow: Set<number>;
   /** wOptions: text speed, battle animations, battle style. */
   options: number;
   playTime: { hours: number; minutes: number; seconds: number };
@@ -117,10 +119,26 @@ function items(bytes: Uint8Array, capacity: number): BagItem[] {
   return Array.from({ length: n }, (_, i) => ({ item: bytes[1 + i * 2] ?? 0, quantity: bytes[2 + i * 2] ?? 0 }));
 }
 
-function flags(bytes: Uint8Array): Set<number> {
+function flags(bytes: ArrayLike<number>): Set<number> {
   const out = new Set<number>();
-  for (let n = 1; n <= 151; n++) if ((bytes[(n - 1) >> 3]! >> ((n - 1) & 7)) & 1) out.add(n);
+  for (let n = 1; n <= 151; n++) if (((bytes[(n - 1) >> 3] ?? 0) >> ((n - 1) & 7)) & 1) out.add(n);
   return out;
+}
+
+/**
+ * The player's Pokédex from wPokedexOwned and wPokedexSeen, by Pokédex number. The game never owns
+ * a species it hasn't seen: catching, gifts, trades and evolution set both flags (add_mon.asm,
+ * evos_moves.asm; a wild Pokémon is seen when the battle starts). The one exception is StarterDex
+ * (engine/events/starter_dex.asm): looking at a Poké Ball in Oak's lab sets the owned bits of
+ * 001, 002, 004 and 007 while ShowPokedexData shows the starter's page in full, then clears them.
+ * Those species are `onShow`, not caught.
+ */
+export function dexProgress(ownedBytes: ArrayLike<number>, seenBytes: ArrayLike<number>): { seen: Set<number>; owned: Set<number>; onShow: Set<number> } {
+  const seen = flags(seenBytes);
+  const owned = new Set<number>();
+  const onShow = new Set<number>();
+  for (const n of flags(ownedBytes)) (seen.has(n) ? owned : onShow).add(n);
+  return { seen, owned, onShow };
 }
 
 function teamMon(struct: Uint8Array, ot: Uint8Array, nick: Uint8Array): TeamMon {
@@ -170,8 +188,7 @@ export function decodeSnapshot(bytes: readonly Uint8Array[]): GameSnapshot {
       const s = box!.subarray(boxMons + i * BOXMON, boxMons + (i + 1) * BOXMON);
       return { species: s[0] ?? 0, level: s[3] ?? 0, nick: decodeText(boxNicks!.subarray(i * NAME, (i + 1) * NAME)) };
     }),
-    seen: flags(seen!),
-    owned: flags(owned!),
+    ...dexProgress(owned!, seen!),
     options: options![0] ?? 0,
     playTime: { hours: time![0] ?? 0, minutes: time![2] ?? 0, seconds: time![3] ?? 0 },
     repelSteps: repel![0] ?? 0,

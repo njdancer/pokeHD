@@ -139,7 +139,7 @@ function MonGrid({ open }: { open(dex: number): void }) {
 function MonPage({ dex, go }: { dex: number; go(dex: number): void }) {
   const { cat, progress, look } = useContext(DexCtx);
   const e = cat.entries[dex - 1]!;
-  const owned = progress.owned.has(dex);
+  const owned = progress.owned.has(dex) || !!progress.onShow?.has(dex);
   const homes = cat.homes.get(dex) ?? [];
   const prev = [...progress.seen].filter((d) => d < dex).sort((a, b) => b - a)[0];
   const next = [...progress.seen].filter((d) => d > dex).sort((a, b) => a - b)[0];
