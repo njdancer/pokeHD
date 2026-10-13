@@ -26,6 +26,9 @@ export interface PlayerOptions {
 }
 
 const KEEP_PLAYING = "Keep playing: take your next action with a tool.";
+/** Claude Code's request errors worth waiting out; the rest (sign-in, billing, a bad model) end the run. */
+const TRANSIENT = new Set(["rate_limit", "overloaded", "server_error", "unknown"]);
+const MAX_RETRIES = 6;
 
 export class Player {
   readonly #box: Toolbox;
@@ -108,8 +111,10 @@ export class Player {
     this.#onStop = () => wake?.();
     say(opening);
 
-    // The player's own login, not a key: drop ANTHROPIC_API_KEY so Claude Code uses the subscription.
-    const { ANTHROPIC_API_KEY: _key, ...env } = process.env;
+    // The player's own login, not a key: drop ANTHROPIC_API_KEY so Claude Code uses the subscription,
+    // and anything a parent Claude Code session (one running this command) would otherwise pass down
+    // (its proxy, its host-managed auth), which the player can't use.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDECODE$)/.test(k)));
     const session = query({
       prompt: prompt(this),
       options: {
@@ -125,17 +130,35 @@ export class Player {
         env: { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: "pokehd-qa/1" },
       },
     });
-    for await (const message of session) {
-      if (message.type === "assistant" && !message.parent_tool_use_id) {
-        this.#thoughts(message.message.content);
-        this.#log({ role: "assistant", content: message.message.content, usage: message.message.usage });
-      } else if (message.type === "result") {
-        this.#log({ result: message.subtype, ...(message.subtype !== "success" && { errors: message.errors }) });
-        if (this.#done) break;
-        say(KEEP_PLAYING);
+    let failure: string | null = null;
+    let retries = 0;
+    try {
+      for await (const message of session) {
+        if (message.type === "assistant" && !message.parent_tool_use_id) {
+          this.#log({ role: "assistant", content: message.message.content, usage: message.message.usage, ...(message.error && { error: message.error }) });
+          if (message.error) {
+            // Claude Code reports a failed request as an assistant message: not the player's words.
+            const text = message.message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join(" ");
+            if (!TRANSIENT.has(message.error) || retries >= MAX_RETRIES) {
+              failure = `${message.error}: ${text}${message.error === "authentication_failed" ? " (sign this machine in with `claude auth login`, or use --via api)" : ""}`;
+              break;
+            }
+            retries++;
+            await new Promise((r) => setTimeout(r, 2000 * 2 ** retries));
+            continue;
+          }
+          retries = 0;
+          this.#thoughts(message.message.content);
+        } else if (message.type === "result") {
+          this.#log({ result: message.subtype, ...(message.subtype !== "success" && { errors: message.errors }) });
+          if (this.#done) break;
+          say(KEEP_PLAYING);
+        }
       }
+    } finally {
+      session.close();
     }
-    session.close();
+    if (failure) throw new Error(`The player stopped: ${failure}`);
   }
 
   // ---- Messages API ----

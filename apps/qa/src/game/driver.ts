@@ -243,6 +243,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
         parts.push(rom ? buildTextMap(rom.world, rom.stitched, s) : "(No ROM here, so no map of the screen.)");
       }
     }
+    // Mid-fade, or a screen the page has no words for yet: say so rather than nothing.
+    if (!parts.length) parts.push("Nothing to read on screen right now (it may be changing). Wait, or take a screenshot.");
     const buttons = describeButtons(after);
     if (buttons) parts.push(buttons);
     return { text: parts.join("\n") };
@@ -416,6 +418,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
       mkdirSync(profileDir, { recursive: true });
       mkdirSync(opts.runDir, { recursive: true });
       context = await chromium.launchPersistentContext(profileDir, {
+        // Playwright's own Chromium when it's installed, else the machine's Google Chrome.
+        ...(!existsSync(chromium.executablePath()) && { channel: "chrome" }),
         headless: opts.headless ?? true,
         viewport: direct ? GAME_SIZE : STREAM_VIEWPORT,
         hasTouch: true,
