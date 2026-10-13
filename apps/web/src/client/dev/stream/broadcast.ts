@@ -5,6 +5,9 @@
 // on /rtc/broadcaster and answers go back to /rtc/answer, with all ICE candidates in the SDP.
 import { useEffect } from "react";
 
+/** Bits per second for the video to each viewer. */
+const MAX_BITRATE = 8_000_000;
+
 export function useBroadcast(bus: string, enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
@@ -24,7 +27,14 @@ export function useBroadcast(bus: string, enabled: boolean): void {
           pc.close();
         }
       };
-      for (const track of stream.getTracks()) pc.addTrack(track, stream);
+      for (const track of stream.getTracks()) {
+        const sender = pc.addTrack(track, stream);
+        if (track.kind !== "video") continue;
+        // WebRTC starts low and ramps up; let it reach a clean 1080p picture on the local network.
+        const params = sender.getParameters();
+        for (const encoding of params.encodings ?? []) encoding.maxBitrate = MAX_BITRATE;
+        void sender.setParameters(params).catch(() => {});
+      }
       await pc.setRemoteDescription({ type: "offer", sdp });
       await pc.setLocalDescription(await pc.createAnswer());
       await new Promise<void>((resolve) => {
@@ -38,7 +48,8 @@ export function useBroadcast(bus: string, enabled: boolean): void {
     void (async () => {
       try {
         stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: 30 },
+          // A retina window would otherwise capture at twice its size (3200×1780 on the Mac).
+          video: { frameRate: 30, width: { max: 1920 }, height: { max: 1080 } },
           audio: true,
           preferCurrentTab: true,
           selfBrowserSurface: "include",
