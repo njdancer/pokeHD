@@ -1,9 +1,11 @@
 // pnpm qa <command>: runs the player, and gives the developer its side of the conversation.
 //
-//   run [--app URL] [--port 4545] [--model ID] [--turns N] [--headless] [--game]
-//                         Start the game, the bus and the player. Needs ANTHROPIC_API_KEY and the
-//                         app served at --app (default http://localhost:5173, `pnpm dev`).
-//                         --game opens the game page alone instead of the stream page.
+//   run [--app URL] [--port 4545] [--via claude|api] [--model ID] [--turns N] [--headless] [--game]
+//                         Start the game, the bus and the player, with the app served at --app
+//                         (default http://localhost:5173, `pnpm dev`). --via claude (the default)
+//                         plays through Claude Code signed in with this machine's Claude login;
+//                         --via api uses ANTHROPIC_API_KEY. --game opens the game page alone
+//                         instead of the stream page.
 //   inbox [--wait]        The chat. --wait blocks until the player's next message, then prints it.
 //   say TEXT [--bug N] [--tag fixed|harness|question|note]
 //                         Message the player (unpauses it if it's waiting). --tag fixed --bug N
@@ -17,7 +19,8 @@ import { fileURLToPath } from "node:url";
 import { Bus } from "./bus.ts";
 import type { Bug, ChatEvent, QaEvent, Snapshot } from "./events.ts";
 import { createDriver } from "./game/driver.ts";
-import { DEFAULT_MODEL, Player } from "./player.ts";
+import { DEFAULT_MODEL, Player, type Backend } from "./player.ts";
+import { Toolbox } from "./toolbox.ts";
 
 const RUNS = fileURLToPath(new URL("../runs/", import.meta.url));
 
@@ -27,6 +30,7 @@ const { positionals, values } = parseArgs({
     app: { type: "string", default: "http://localhost:5173" },
     port: { type: "string", default: "4545" },
     model: { type: "string", default: DEFAULT_MODEL },
+    via: { type: "string", default: "claude" },
     turns: { type: "string" },
     headless: { type: "boolean", default: false },
     game: { type: "boolean", default: false },
@@ -52,13 +56,15 @@ const bugLine = (b: Bug) => `#${b.id} ${b.severity.padEnd(4)} ${b.status.padEnd(
 
 switch (command) {
   case "run": {
-    if (!process.env["ANTHROPIC_API_KEY"]) throw new Error("Set ANTHROPIC_API_KEY first.");
+    const backend = values.via as Backend;
+    if (backend !== "claude" && backend !== "api") throw new Error("--via is claude or api.");
+    if (backend === "api" && !process.env["ANTHROPIC_API_KEY"]) throw new Error("Set ANTHROPIC_API_KEY first, or use --via claude.");
     const run = new Bus(RUNS);
     await run.listen(Number(values.port));
     const streamUrl = `${values.app}/dev/stream?bus=${encodeURIComponent(bus)}`;
     console.log(`Run folder ${run.dir}\nBus ${bus}\nStream ${streamUrl}`);
     const driver = createDriver({ appUrl: values.app, runDir: run.dir, headless: values.headless, ...(values.game && { streamPath: "game" }) });
-    const player = new Player({ bus: run, driver, model: values.model, ...(values.turns && { maxTurns: Number(values.turns) }) });
+    const player = new Player({ toolbox: new Toolbox(run, driver), backend, model: values.model, ...(values.turns && { maxTurns: Number(values.turns) }) });
     const stop = () => player.stop();
     process.on("SIGINT", stop);
     process.on("SIGTERM", stop);

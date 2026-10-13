@@ -3,7 +3,7 @@
 // badges from the game itself. A port of the approved design (qa-stream v3, "Side Stage").
 // The stage is 1920×1080, scaled to fit the window (1:1 at 1920×1080, for OBS).
 // URL options: ?bus=http://localhost:4545 (the harness's event bus), ?game=/?stats&qa (the game
-// in the gap; same origin, so the page can read its team), ?handle=@someone (shown in the header).
+// in the gap; same origin, so the page can read its team), ?handle=@someone (shown in the header; Nick's by default, ?handle= hides it).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { GameSnapshot, TeamMon } from "@pokehd/emu";
 import { MAP_NAMES } from "@pokehd/rom";
@@ -15,7 +15,7 @@ import "./stream.css";
 const query = new URLSearchParams(location.search);
 const BUS = query.get("bus") ?? "http://localhost:4545";
 const GAME = query.get("game") ?? "/?stats&qa";
-const HANDLE = query.get("handle");
+const HANDLE = query.get("handle") ?? "@nj_dancer";
 const FONTS = "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800;900&display=swap";
 /** How long the mode change's slide takes (the stage's .7s transitions, plus a little). */
 const SETTLE_MS = 760;

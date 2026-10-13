@@ -9,9 +9,10 @@ talk.
 ## Running it (on the Mac)
 
 1. `pnpm dev` (the app on :5173; it serves `rom/pokeblue.gb`).
-2. `export ANTHROPIC_API_KEY=…` then `pnpm qa run`. It opens Chromium on the stream page, starts
-   the bus on :4545 and the player. `--turns 20` for a trial, `--game` for the bare game page,
-   `--model` to try another player.
+2. `pnpm qa run`. It opens Chromium on the stream page, starts the bus on :4545 and the player.
+   The player runs through Claude Code (the Agent SDK) signed in with the Mac's own Claude login,
+   so it counts against that subscription; `--via api` uses `ANTHROPIC_API_KEY` instead.
+   `--turns 20` for a trial, `--game` for the bare game page, `--model` to try another player.
 3. In OBS, capture the Chromium window (or add a Browser source on the printed stream URL with the
    same `?bus=` and a separate game; the window capture is what the player actually drives).
 
