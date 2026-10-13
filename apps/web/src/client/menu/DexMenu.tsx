@@ -5,6 +5,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import { Env, useEnv, type MenuEnv } from "./env.tsx";
 import { CloseIcon, TabIcon, type TabId } from "./icons.tsx";
+import { useFreshTapGuard } from "./fresh-tap.ts";
 import { NavContext, rootOf, TABS, type Nav, type Screen } from "./nav.tsx";
 import type { Request } from "./model.ts";
 import { EntryScreen, PokemonScreen } from "./screens/Pokemon.tsx";
@@ -314,6 +315,8 @@ function Sheet({ request, onDone }: { request: Request; onDone(): void }) {
   // The bottom of the stack stands for the list the game asked for (`root` below).
   const { stack, set, motion } = useStack([{ k: "inv" }]);
   const mustAnswer = request.kind === "fainted";
+  // The tap on A that made the game ask doesn't pick from the list sliding up under it.
+  const guard = useFreshTapGuard();
   const close = () => {
     if (!mustAnswer) env.actions.cancel();
     onDone();
@@ -338,7 +341,7 @@ function Sheet({ request, onDone }: { request: Request; onDone(): void }) {
     : request.kind === "buy" ? <ShopPick stock={request.stock} />
     : <BagPick />;
   return (
-    <div className="m-sheet" role="dialog" aria-label="The game asks">
+    <div className="m-sheet" role="dialog" aria-label="The game asks" {...guard}>
       <span className="m-grabber" aria-hidden="true" />
       {!mustAnswer && (
         <button type="button" className="m-round m-close" aria-label="Back to the game" onClick={close}>

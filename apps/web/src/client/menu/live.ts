@@ -356,7 +356,7 @@ export function currentGame(ask: { id: number; game: GameSnapshot | null } | nul
 export function momentOf(game: GameSnapshot | null, ask: GameAsk | null): Moment {
   if (ask?.kind === "party" && ask.purpose === "next") return "fainted";
   if (ask?.kind === "mons") return "pc";
-  if (ask?.kind === "mart" || (ask?.kind === "items" && ask.selling)) return "shop";
+  if (ask?.kind === "mart" || (ask?.kind === "items" && ask.selling && !ask.inBattle)) return "shop";
   if (game?.inBattle) return game.battleKind === "trainer" ? "trainer" : "wild";
   return "explore";
 }

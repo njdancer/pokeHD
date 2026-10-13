@@ -35,6 +35,8 @@ export const SYMBOLS = {
   "DisplayNamingScreen.submitNickname": { bank: 0x01, address: 0x662d },
   DisplayPartyMenu: { bank: 0x00, address: 0x13fc },
   DisplayPokemartDialogue_: { bank: 0x01, address: 0x6c20 },
+  "DisplayPokemartDialogue_.sellMenuLoop": { bank: 0x01, address: 0x6c89 },
+  "DisplayPokemartDialogue_.unsellableItem": { bank: 0x01, address: 0x6d09 },
   DisplayPokemonCenterDialogue_: { bank: 0x01, address: 0x6fe6 },
   DisplayTextBoxID: { bank: 0x00, address: 0x30e8 },
   DisplayTextID: { bank: 0x00, address: 0x2920 },
