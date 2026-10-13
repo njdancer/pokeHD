@@ -245,6 +245,9 @@ export const ALLOWLIST: readonly string[] = [
   "GoBackToPartyMenu",
   "ItemPrices",
   "hHalveItemPrices",
+  // Where the field items work: the game's own tileset lists (ItemUseEscapeRope, IsBikeRidingAllowed)
+  "BikeRidingTilesets",
+  "EscapeRopeTilesets",
   "EvosMovesPointerTable",
   "Moves",
   "TechnicalMachines",
