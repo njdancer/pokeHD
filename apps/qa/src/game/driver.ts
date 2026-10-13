@@ -11,7 +11,7 @@ import { chromium, type Browser, type BrowserContext, type CDPSession, type Elem
 import { ScreenTextDecoder, TEXT_WATCHES, type TextWatched } from "@pokehd/emu";
 import { parseWorld, readGlyphs, stitchOverworld, SYMBOLS, type StitchedWorld, type WorldData } from "@pokehd/rom";
 import { GlitchWatcher } from "./glitches.ts";
-import { describeButtons, describeGameBoyText, describePanels, mapName } from "./outcome.ts";
+import { continueButton, describeButtons, describeGameBoyText, describePanels, mapName, startingUp } from "./outcome.ts";
 import { describeLayouts, installLayoutLog, type LayoutEntry } from "./layout-log.ts";
 import { composeSheet, cropShot, MAX_SHEET_FRAMES, pickFrames, Recorder } from "./recorder.ts";
 import { readScreen, type ScreenRead } from "./screen-read.ts";
@@ -232,7 +232,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
         sig = s;
         since = Date.now();
       }
-      const calm = r.hooked && !r.loading && (!r.state || (!r.state.player.step && r.state.fade === 0));
+      // "Off we go…" on the start screen isn't calm: the game is still starting behind it.
+      const calm = r.hooked && !r.loading && !startingUp(r) && (!r.state || (!r.state.player.step && r.state.fade === 0));
       const quiet = Date.now() - since >= (r.printing ? SETTLE_CALM_MS * 2 : SETTLE_CALM_MS);
       if ((calm && quiet) || Date.now() - start > maxMs) return r;
       await sleep(100);
@@ -315,16 +316,38 @@ export function createDriver(opts: DriverOptions): GameDriver {
     }
   }
 
-  /** Taps through a start screen that only offers to carry on; anything else is left to the player. */
-  async function passContinueScreen(r: ScreenRead): Promise<void> {
-    if (!r.panels.some((p) => p.kind === "start")) return;
-    const choices = r.buttons.filter((b) => !b.pad && b.label !== "Menu");
-    if (choices.length !== 1 || !/continue|resume|carry on|keep playing/i.test(choices[0]!.label)) return;
-    const c = choices[0]!;
+  /**
+   * Taps the start screen's Continue and waits until the game is back in the world. Without
+   * `always`, only when Continue is the sole choice (anything else is left to the player).
+   */
+  async function passContinueScreen(r: ScreenRead, always = false): Promise<void> {
+    const c = continueButton(r, !always);
+    if (!c) return;
     const at = await toPage(c.x + c.w / 2, c.y + c.h / 2);
     await touch("touchStart", at);
     await sleep(60);
     await touch("touchEnd");
+    const start = Date.now();
+    for (;;) {
+      const now = await read().catch(() => null);
+      if (now?.inWorld && !now.loading && !startingUp(now)) return;
+      if (Date.now() - start > READY_TIMEOUT_MS) return;
+      await sleep(250);
+    }
+  }
+
+  /** The play time the game shows ("1:16"), or null mid-reload. */
+  async function playTime(): Promise<string | null> {
+    try {
+      const frame = await gameFrame();
+      const bytes = await frame.evaluate(
+        ([a, n]) => (window as Window & { __pokehd?: { read(a: number, n: number): Promise<number[]> } }).__pokehd?.read(a, n) ?? null,
+        [SYMBOLS.wPlayTimeHours.address, SYMBOLS.wPlayTimeMinutes.address - SYMBOLS.wPlayTimeHours.address + 1] as const,
+      );
+      return bytes ? `${bytes[0]}:${String(bytes.at(-1)).padStart(2, "0")}` : null;
+    } catch {
+      return null;
+    }
   }
 
   async function navigate(url: string): Promise<void> {
@@ -433,11 +456,18 @@ export function createDriver(opts: DriverOptions): GameDriver {
       slowSince = 0;
       last = null;
       const ready = await waitReady();
-      await passContinueScreen(ready);
+      // Restarting means carrying on: Continue loads the battery save, never "New game".
+      await passContinueScreen(ready, true);
     } finally {
       busy--;
     }
     const after = await settle(500);
+    if (from === "save" && after.inWorld && after.state) {
+      // Say where the save put the player: autosaves land every 5 minutes and after battles, so
+      // the last save can be later (or earlier) than the player remembers.
+      const time = await playTime();
+      notes.push(`Back at your last save (yours or an autosave): ${mapName(after.state.mapId)}${time ? `, ${time} played` : ""}.`);
+    }
     const out = await outcome(null, after);
     return { text: [...notes, out.text].join("\n") };
   }
@@ -669,18 +699,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
     async status(): Promise<GameStatus> {
       const r = await read();
       const map = r.loading || !r.hooked ? "Loading" : r.inWorld && r.state ? mapName(r.state.mapId) : "Title screen";
-      let playTime = "0:00";
-      try {
-        const frame = await gameFrame();
-        const bytes = await frame.evaluate(
-          ([a, n]) => (window as Window & { __pokehd?: { read(a: number, n: number): Promise<number[]> } }).__pokehd?.read(a, n) ?? null,
-          [SYMBOLS.wPlayTimeHours.address, SYMBOLS.wPlayTimeMinutes.address - SYMBOLS.wPlayTimeHours.address + 1] as const,
-        );
-        if (bytes) playTime = `${bytes[0]}:${String(bytes.at(-1)).padStart(2, "0")}`;
-      } catch {
-        // Not readable mid-reload; the time stays at 0:00 this once.
-      }
-      return { map, playTime, fps: r.fps };
+      // Not readable mid-reload; the time stays at 0:00 this once.
+      return { map, playTime: (await playTime()) ?? "0:00", fps: r.fps };
     },
 
     async collectEvidence(dir, turn) {

@@ -51,6 +51,26 @@ export function describeButtons(read: Pick<ScreenRead, "buttons" | "joystick">):
   return lines.join("\n");
 }
 
+/** The page's start screen (Continue / New game, or its "Off we go…" once a choice is made). */
+const onStartScreen = (read: Pick<ScreenRead, "panels">) => read.panels.some((p) => p.kind === "start");
+const choices = (read: Pick<ScreenRead, "buttons">) => read.buttons.filter((b) => !b.pad && b.label !== "Menu");
+
+/**
+ * The start screen's Continue, which carries on from the battery save. With `onlyChoice`, only
+ * when it's the sole thing to tap (anything else is left to the player); never "New game".
+ */
+export function continueButton(read: Pick<ScreenRead, "panels" | "buttons">, onlyChoice: boolean): ScreenButton | null {
+  if (!onStartScreen(read)) return null;
+  const all = choices(read);
+  if (onlyChoice && all.length !== 1) return null;
+  return all.find((b) => /^(continue|resume|carry on|keep playing)\b/i.test(b.label.trim())) ?? null;
+}
+
+/** A choice made on the start screen ("Off we go…", nothing to tap): the game is starting behind it. */
+export function startingUp(read: Pick<ScreenRead, "panels" | "buttons">): boolean {
+  return onStartScreen(read) && choices(read).length === 0;
+}
+
 /** Text boxes from the Game Boy screen (decoded tiles), for when the page draws none of its own. */
 export function describeGameBoyText(boxes: readonly { lines: readonly { text: string }[] }[]): string {
   const lines = boxes

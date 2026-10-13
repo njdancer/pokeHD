@@ -68,7 +68,7 @@ export const TOOLS = {
     },
   },
   restart_game: {
-    description: 'Reload the game, picking up any fixes. Comes back exactly where you are unless from is "save", which rolls back to your last in-game save.',
+    description: 'Reload the game, picking up any fixes. Comes back exactly where you are unless from is "save", which rolls back to your last in-game save: your own, or an autosave (every 5 minutes of play and after battles), so it may be later than you think. The result says where that was.',
     shape: { from: z.enum(["now", "save"]).optional() },
   },
 } satisfies Record<string, { description: string; shape: z.ZodRawShape }>;
