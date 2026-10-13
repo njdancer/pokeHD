@@ -7,7 +7,7 @@ import type { TilesetLabelTable } from "./types.ts";
  */
 export const FOREST: TilesetLabelTable = {
   tiles: {
-    0x00: "ground", // beside a big tree's trunk
+    0x00: "tree", // beside a big tree's trunk: solid, part of the tree's footprint
     0x01: "window",
     0x02: "tree", // the forest's small trees
     0x03: "tree",
@@ -34,7 +34,9 @@ export const FOREST: TilesetLabelTable = {
     0x1b: "statue",
     0x1c: "roof",
     0x1d: "cliff",
-    0x1e: "ground", // the raised ground's top edge
+    // The raised ground's top edge: between low and raised ground, which the ROM's pair collisions
+    // keep apart, so it marks the step like the cliff sides do. Only ever the top half of a step.
+    0x1e: "cliff",
     0x1f: "cliff",
     0x21: "sign",
     0x22: "sign",
