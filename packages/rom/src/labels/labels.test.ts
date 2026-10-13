@@ -198,6 +198,22 @@ describe.skipIf(!existsSync(ROM_PATH))("labels", () => {
     }
   });
 
+  it("labels every tile of every map's border block, which the game draws outside the map", () => {
+    // Viridian Forest's border is all FOREST 0x33, which no map block uses: it rendered as the
+    // "unused" magenta all around the forest.
+    const wrong = new Set<string>();
+    for (const m of world.maps) {
+      if (!m) continue;
+      const tileset = world.tilesets.find((t) => t.id === m.tileset)!;
+      const labels = blockLabels(tileset)[m.borderBlock]!;
+      labels.forEach((l, i) => {
+        const tile = tileset.blocks[m.borderBlock * 16 + i]!;
+        if (!l || l === "unused") wrong.add(`${m.name}: ${tileset.name} block ${m.borderBlock} tile 0x${tile.toString(16)} is ${l ?? "unlabelled"}`);
+      });
+    }
+    expect([...wrong]).toEqual([]);
+  });
+
   const REST = ["SHIP", "SHIP_PORT", "CEMETERY", "INTERIOR", "LOBBY", "MANSION", "LAB", "CLUB", "FACILITY", "PLATEAU", "UNDERGROUND"];
 
   it("hand-labels every tileset", () => {
