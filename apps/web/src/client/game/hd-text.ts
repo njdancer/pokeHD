@@ -20,6 +20,24 @@ export function hdTextFits(text: ScreenText | null, mode: OverworldMode, inWorld
 }
 
 /**
+ * On the battle screen, read from its text and menu cells only (`battleTextTiles`): true for the
+ * game's messages ("Go! CHARMANDER!", "Enemy PIDGEY fainted!"), which the HD layer draws in place
+ * of the Game Boy's box. The battle's menus (FIGHT/PKMN/ITEM/RUN, the moves) stay on the Game Boy
+ * screen until the HD layer has two-column menus of its own (p2-tapfirst).
+ */
+export function battleTextFits(text: ScreenText | null): boolean {
+  return (
+    text !== null &&
+    text.shown &&
+    text.boxes.length > 0 &&
+    text.menus.length === 0 &&
+    text.quantity === null &&
+    text.loose.length === 0 &&
+    !text.pictures
+  );
+}
+
+/**
  * During Oak's HD introduction (before the world): the message box and any boxes, with nothing
  * outside them (the name list stays hidden under the page's own name question).
  */

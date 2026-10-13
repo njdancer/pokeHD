@@ -3,7 +3,7 @@ import { SYMBOLS } from "@pokehd/rom";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Button, GameBoy } from "../core.ts";
 import { playIntro } from "../testing.ts";
-import { BattleDecoder, decodeBattleState, monStatus } from "./battle-decode.ts";
+import { BattleDecoder, battleTransition, decodeBattleState, monStatus } from "./battle-decode.ts";
 import { BATTLE_SCREEN_WATCHES, BattleScreenReader, type BattleScreen, type BattleScreenWatched } from "./battle-screen.ts";
 import {
   BATTLE_STRUCT_LENGTH,
@@ -71,6 +71,32 @@ function trainerBattle(): BattleWatched {
   party(w.enemyParty, [[19], [0], [7, 1 << 6]]);
   return w;
 }
+
+describe("battleTransition", () => {
+  it("is the way into a trainer battle once the opponent is set, before wIsInBattle", () => {
+    const w = blank();
+    expect(battleTransition(w)).toBeNull();
+    w.opponent[0] = 200 + RIVAL1;
+    expect(battleTransition(w)).toBe("in");
+    w.inBattle[0] = 2;
+    expect(battleTransition(w)).toBeNull();
+  });
+
+  it("leaves a link battle's versus screen alone", () => {
+    const w = blank();
+    w.opponent[0] = 200 + RIVAL1;
+    w.linkState[0] = 4;
+    expect(battleTransition(w)).toBeNull();
+  });
+
+  it("is the way out while the overworld reloads the map after a battle", () => {
+    const w = blank();
+    w.statusFlags4[0] = 1 << 5;
+    expect(battleTransition(w)).toBe("out");
+    w.statusFlags4[0] = ~(1 << 5) & 0xff;
+    expect(battleTransition(w)).toBeNull();
+  });
+});
 
 describe("decodeBattleState", () => {
   it("is null outside a battle", () => {
@@ -193,6 +219,8 @@ describe.skipIf(!hasRom)("decoding the first rival battle", () => {
   const states: (BattleState | null)[] = [];
   /** The battle screen alongside each state, null outside the battle. */
   const screens: (BattleScreen | null)[] = [];
+  /** battleTransition and whether the window is up, each frame from the rival's challenge on. */
+  const between: { transition: ReturnType<typeof battleTransition>; window: boolean; inBattle: boolean }[] = [];
 
   const read = (name: keyof typeof SYMBOLS) => gb.read(SYMBOLS[name].address);
   const where = () => [read("wCurMap"), read("wXCoord"), read("wYCoord")];
@@ -272,6 +300,7 @@ describe.skipIf(!hasRom)("decoding the first rival battle", () => {
         watched[name as keyof BattleWatched] = gb.readBytes(address, length);
       }
       const state = decoder.decode(watched);
+      between.push({ transition: battleTransition(watched), window: read("hWY") < 144, inBattle: watched.inBattle[0] !== 0 });
       states.push(state);
       const screen = { tileMap: watched.tileMap } as BattleScreenWatched;
       for (const [name, [address, length]] of Object.entries(BATTLE_SCREEN_WATCHES)) {
@@ -287,6 +316,12 @@ describe.skipIf(!hasRom)("decoding the first rival battle", () => {
     for (let i = 0; states.at(-1) !== null; i++) {
       if (i > 10_000) throw new Error("The battle never ended");
       mash(i);
+      decode();
+    }
+    // Back in the lab, until the window first goes down.
+    for (let i = 0; between.at(-1)!.window; i++) {
+      if (i > 600) throw new Error("The map never came back");
+      frame();
       decode();
     }
   }, 120_000);
@@ -307,6 +342,23 @@ describe.skipIf(!hasRom)("decoding the first rival battle", () => {
       phase: "intro",
       arena: { mapId: OAKS_LAB, tileset: DOJO, onWater: false },
     });
+  });
+
+  it("tells the trainer transition and the way back from the rest of the overworld", () => {
+    const start = between.findIndex((f) => f.inBattle);
+    const end = between.findLastIndex((f) => f.inBattle) + 1;
+    // The spiral runs with the window up, between the rival's words and wIsInBattle.
+    const into = between.slice(0, start);
+    const spiral = into.findLastIndex((f) => f.transition !== "in") + 1;
+    expect(start - spiral).toBeGreaterThan(60);
+    expect(into.slice(spiral).some((f) => f.window)).toBe(true);
+    // Before it, the rival's words: no transition while his text box is up.
+    expect(into.slice(0, spiral).every((f) => f.transition === null)).toBe(true);
+    expect(between.slice(start, end).every((f) => f.transition === null)).toBe(true);
+    // Out: every frame from the end of the battle until the window goes down.
+    const out = between.slice(end);
+    expect(out.length).toBeGreaterThan(5);
+    expect(out.slice(0, -1).every((f) => f.transition === "out")).toBe(true);
   });
 
   it("decodes both first Pokémon once the intro is over", () => {
@@ -348,6 +400,9 @@ describe.skipIf(!hasRom)("decoding the first rival battle", () => {
     }
     const intro = states.flatMap((s, i) => (s?.phase === "intro" ? [screens[i]!] : []));
     expect(intro.some((screen) => screen.objects.length > 0)).toBe(true);
+    // Once shown, the battle screen stays the battle screen: no full-screen menu in this battle.
+    const shown = screens.filter((screen) => screen !== null);
+    expect(shown.slice(shown.findIndex((screen) => screen.battle)).every((screen) => screen.battle)).toBe(true);
     // The player's trainer slides away before the Pokémon comes out.
     expect(intro.some((screen) => screen.player && screen.player.dx < 0)).toBe(true);
     // The last faint: the enemy's picture goes, then the rival slides back in.

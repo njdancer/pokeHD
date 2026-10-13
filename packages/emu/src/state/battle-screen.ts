@@ -54,17 +54,25 @@ const SIDES: Record<Side, SideLayout> = {
 };
 /** How far a picture may slide from home, in tiles, and still count as that picture. */
 const MAX_SLIDE = PIC_TILES;
+/** At most one picture tile in this many may sit where no picture can be, on the battle screen. */
+const STRAY_PER_PICTURE_TILE = 8;
 /** Slides are counted by a key, (dy + SLIDE_KEY) * 64 + dx + SLIDE_KEY. */
 const SLIDE_KEY = 32;
 
 /**
  * Each HUD's cells, and two of its border tiles that only it draws, at fixed spots, so it counts
- * as shown only when it's intact on screen.
+ * as shown only when it's intact on screen. `hp` is where its HP bar's "HP:" ($71, DrawHPBar)
+ * goes, which must show too unless a box covers it (the move menu's TYPE box): the border alone
+ * is the party's Poké Balls (SetupPlayerAndEnemyPokeballs draws them as sprites on the same border,
+ * PlaceEnemyHUDTiles / PlacePlayerHUDTiles) while a trainer is out, before any Pokémon, when the
+ * battle struct still holds the last battle's.
  */
-const HUDS: Record<Side, { x0: number; y0: number; x1: number; y1: number; marks: [x: number, y: number, tile: number][] }> = {
-  enemy: { x0: 0, y0: 0, x1: 11, y1: 3, marks: [[1, 3, 0x74], [10, 3, 0x78]] },
-  player: { x0: 9, y0: 7, x1: 19, y1: 11, marks: [[18, 10, 0x73], [18, 11, 0x77]] },
+const HUDS: Record<Side, { x0: number; y0: number; x1: number; y1: number; marks: [x: number, y: number, tile: number][]; hp: [x: number, y: number] }> = {
+  enemy: { x0: 0, y0: 0, x1: 11, y1: 3, marks: [[1, 3, 0x74], [10, 3, 0x78]], hp: [2, 2] },
+  player: { x0: 9, y0: 7, x1: 19, y1: 11, marks: [[18, 10, 0x73], [18, 11, 0x77]], hp: [10, 9] },
 };
+/** The HP bar's "HP:" tile. */
+const HP_LABEL = 0x71;
 
 /** One side's picture as drawn this frame. */
 export interface BattlePicture {
@@ -109,7 +117,7 @@ export interface BattleScreen {
   objects: BattleObject[];
   /** Per cell, 20×18 row-major: CELL_SCENE, CELL_HUD or CELL_UI. All UI when `battle` is false. */
   cells: Uint8Array;
-  /** Which HUDs are on screen, intact. */
+  /** Which HUDs are on screen, intact, HP bar and all (not just the border the party's Poké Balls sit on). */
   huds: Record<Side, boolean>;
   /** rBGP, rOBP0, rOBP1. */
   palettes: [bgp: number, obp0: number, obp1: number];
@@ -205,21 +213,25 @@ export class BattleScreenReader {
       const key = (dy + SLIDE_KEY) * 64 + dx + SLIDE_KEY;
       offsets[side].set(key, (offsets[side].get(key) ?? 0) + 1);
     }
-    const huds = { enemy: hudShown(tileMap, "enemy"), player: hudShown(tileMap, "player") };
-    const pictureTiles = [...offsets.enemy.values(), ...offsets.player.values()].reduce((a, b) => a + b, 0);
-    // A cleared screen between steps of the intro counts too; a full-screen menu doesn't.
-    const cleared = tileMap.subarray(0, 12 * COLS).every((tile) => tile === BLANK);
-    const battle = stray === 0 && (pictureTiles > 0 || huds.enemy || huds.player || cleared);
-    if (!battle) {
-      return { battle, enemy: null, player: null, objects, cells, huds, palettes, origin };
-    }
-
     const inBox = new Uint8Array(COLS * ROWS);
     for (const b of boxes(tileMap)) {
       for (let y = b.y0; y <= b.y1; y++) for (let x = b.x0; x <= b.x1; x++) inBox[y * COLS + x] = 1;
     }
+    // A HUD's border with the party's Poké Balls on it is masked like a HUD, but has no card.
+    const framed = { enemy: hudFramed(tileMap, "enemy"), player: hudFramed(tileMap, "player") };
+    const huds = { enemy: framed.enemy && hpShown(tileMap, "enemy", inBox), player: framed.player && hpShown(tileMap, "player", inBox) };
+    const pictureTiles = [...offsets.enemy.values(), ...offsets.player.values()].reduce((a, b) => a + b, 0);
+    // A cleared screen between steps of the intro counts too; a full-screen menu doesn't.
+    const cleared = tileMap.subarray(0, 12 * COLS).every((tile) => tile === BLANK);
+    // A tile or two out of place beside a picture is a moment of an animation (the opponent's
+    // send-out leaves one for three frames); a full-screen menu's picture is all out of place.
+    const battle = stray * STRAY_PER_PICTURE_TILE < Math.max(pictureTiles, 1) && (pictureTiles > 0 || framed.enemy || framed.player || cleared);
+    if (!battle) {
+      return { battle, enemy: null, player: null, objects, cells, huds, palettes, origin };
+    }
+
     for (const side of ["enemy", "player"] as const) {
-      if (!huds[side]) continue;
+      if (!framed[side]) continue;
       const h = HUDS[side];
       for (let y = h.y0; y <= h.y1; y++) for (let x = h.x0; x <= h.x1; x++) if (!inBox[y * COLS + x]) cells[y * COLS + x] = CELL_HUD;
     }
@@ -228,6 +240,9 @@ export class BattleScreenReader {
       const tile = byte(tileMap, i);
       if (!inBox[i] && cells[i] !== CELL_HUD && (tile === BLANK || tile < PIC_TILE_COUNT)) cells[i] = CELL_SCENE;
     }
+    // Before the intro draws the text box its rows are blank, showing only the palette's colour
+    // (black while the silhouettes slide in): the scene too.
+    if (tileMap.subarray(12 * COLS, ROWS * COLS).every((tile) => tile === BLANK)) cells.fill(CELL_SCENE, 12 * COLS);
 
     const picture = (side: Side): BattlePicture | null => {
       const { first, home } = SIDES[side];
@@ -284,8 +299,13 @@ export class BattleScreenReader {
   }
 }
 
-function hudShown(tileMap: Uint8Array, side: Side): boolean {
+function hudFramed(tileMap: Uint8Array, side: Side): boolean {
   return HUDS[side].marks.every(([x, y, tile]) => byte(tileMap, y * COLS + x) === tile);
+}
+
+function hpShown(tileMap: Uint8Array, side: Side, inBox: Uint8Array): boolean {
+  const [x, y] = HUDS[side].hp;
+  return byte(tileMap, y * COLS + x) === HP_LABEL || inBox[y * COLS + x] === 1;
 }
 
 /** The sprites on screen, from OAM. */

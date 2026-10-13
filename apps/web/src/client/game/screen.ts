@@ -12,8 +12,9 @@ export type ScreenLayout = "full" | "battle" | "dialog" | "corner" | "hidden";
 
 /**
  * What a battle shows, for the layout: `scene`, the battle screen (drawn in HD, with text and
- * menus over it); `transition`, the way into a battle, before the battle screen appears (the
- * HD view plays it); `menu`, a full-screen menu (party, Pokédex, evolution).
+ * menus over it); `transition`, the way into a battle before the battle screen appears, and the
+ * way out until the map is back (the HD view plays both); `menu`, a full-screen menu (party,
+ * Pokédex, evolution).
  */
 export type BattleScene = "scene" | "transition" | "menu";
 
@@ -77,6 +78,9 @@ export function screenLayout(mode: OverworldMode, inWorld: boolean, pip: boolean
   // The page's own start screen and HD introduction stand in for the screen until the world loads.
   if (!inWorld && onboarding) return "hidden";
   if (inWorld && mode === "battle" && battle) return battle === "scene" ? "battle" : battle === "transition" ? "hidden" : "full";
+  // Either side of a battle the game puts the window up over its transition (a trainer's spiral,
+  // the faded-out last frame) before wIsInBattle says so: nothing there the HD view doesn't play.
+  if (inWorld && mode === "dialog" && battle === "transition") return pip ? "corner" : "hidden";
   if (!inWorld || mode === "battle") return "full";
   if (mode === "dialog" && !hdText) return "dialog";
   return pip ? "corner" : "hidden";

@@ -119,6 +119,28 @@ const animating = (watched: BattleWatched, soundArmed: boolean) =>
 
 const showsMenuCursor = (tileMap: Uint8Array) => tileMap.includes(MENU_CURSOR_TILE);
 
+/** wStatusFlags4's BIT_BATTLE_OVER_OR_BLACKOUT. */
+const BATTLE_OVER = 1 << 5;
+
+/**
+ * The game is on its way into or out of a battle while wIsInBattle is 0, so `decodeBattleState`
+ * says null, but the screen shows only the battle's own transition:
+ * - `in`: a trainer battle's transition (the spiral, the closing bars). InitBattleCommon plays it
+ *   (DoBattleTransitionAndInitBattleVariables) before it sets wIsInBattle, and every way into a
+ *   trainer battle sets wCurOpponent first, after the trainer's words (StartTrainerBattle's
+ *   InitBattleEnemyParameters, or the map script). A wild battle sets wIsInBattle first. A link
+ *   battle's opening "versus" screen is left out: that one is worth showing.
+ * - `out`: EndOfBattle has cleared wIsInBattle and wCurOpponent, and the overworld loop sets
+ *   BIT_BATTLE_OVER_OR_BLACKOUT (.battleOccurred) until EnterMap has reloaded the map (or
+ *   HandleBlackOut clears it). Meanwhile the screen is the battle's faded-out last frame.
+ */
+export function battleTransition(watched: Pick<BattleWatched, "inBattle" | "opponent" | "linkState" | "statusFlags4">): "in" | "out" | null {
+  if (byte(watched.inBattle, 0) !== 0) return null;
+  if (byte(watched.statusFlags4, 0) & BATTLE_OVER) return "out";
+  if (byte(watched.opponent, 0) !== 0 && byte(watched.linkState, 0) !== LINK_STATE_BATTLING) return "in";
+  return null;
+}
+
 /**
  * Decodes one frame's `BATTLE_WATCHES` bytes, or returns null outside a battle. Pure, but blind
  * to what only the frames before can tell (`BattleDecoder` handles it): the transition into a
