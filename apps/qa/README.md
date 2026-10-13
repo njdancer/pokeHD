@@ -40,6 +40,10 @@ The developer is a Claude Code session on the same machine. Its loop:
 - Fix it on a branch, merge, and `pnpm qa say "Fixed: … restart_game to pick it up" --tag fixed --bug 7`.
   If the player is waiting for a reply, this unpauses it.
 - `pnpm qa bugs`, `pnpm qa status` for the overview.
+- The player's instructions are `apps/qa/prompt.md`. To change what it's told, edit that file, then
+  `pnpm qa say "…what changed…" --tag prompt`: the player rewrites its notebook as a handoff and a
+  new conversation (a chapter) starts on the new prompt, with no restart. Chapters also start on
+  their own when the player's context passes 90k tokens, before Claude Code's own compaction.
 - Never help the player play. If it asks where to go or how to get past something, don't give
   directions or hints: check whether what it describes is a bug, say whether it is, and if it
   isn't, tell it to try something different.
