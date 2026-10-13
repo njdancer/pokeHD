@@ -112,6 +112,8 @@ export function StreamPage() {
             <Feed feed={bus.feed} connected={bus.connected} />
           </section>
 
+          <Thread chat={bus.chat} />
+
           <Chat chat={bus.chat} />
 
           <section className="qs-card qs-info">
@@ -145,7 +147,7 @@ function turnLabel(turn: number | undefined): string {
  */
 function trim(stage: HTMLElement, bugsToo: boolean) {
   for (const el of stage.querySelectorAll(".qs-cut")) el.classList.remove("qs-cut");
-  for (const list of stage.querySelectorAll<HTMLElement>(".qs-flow, .qs-chat")) {
+  for (const list of stage.querySelectorAll<HTMLElement>(".qs-flow, .qs-thread, .qs-chat")) {
     const rows = [...list.children] as HTMLElement[];
     // Rows measure from the list when it is positioned (the chat), else from the card around it.
     const top = (row: HTMLElement) => (row.offsetParent === list ? row.offsetTop : row.offsetTop - list.offsetTop);
@@ -214,7 +216,54 @@ const CHIP: Record<ChatTag, [string, string]> = {
   harness: ["qs-c-har", "Harness"],
   question: ["qs-c-q", "Question"],
   note: ["qs-c-note", "Note"],
+  prompt: ["qs-c-prompt", "Prompt"],
 };
+
+/** A message's chip: its tag, or "Bug #n" for an untagged message about a bug. */
+function chipOf(m: ChatEvent): [string, string] | null {
+  if (m.tag === "bug" || (!m.tag && m.bug !== undefined)) return [CHIP.bug[0], m.bug !== undefined ? `Bug #${m.bug}` : CHIP.bug[1]];
+  if (!m.tag) return null;
+  const chip = CHIP[m.tag];
+  return m.tag === "fixed" && m.bug !== undefined ? [chip[0], `Fixed #${m.bug}`] : chip;
+}
+
+/**
+ * The conversation while Haiku plays (most of Opus's replies arrive then): a compact card under
+ * the feed with the latest messages, newest at the bottom, each clamped to a few lines. In talk
+ * mode it makes way for the full chat.
+ */
+function Thread({ chat }: { chat: ChatEvent[] }) {
+  const shown = chat.slice(-6);
+  return (
+    <section className="qs-card qs-threadcard" aria-label="Haiku and Opus, latest messages">
+      <span className="qs-ball qs-tr" />
+      <div className="qs-streamhead">
+        <span className="qs-who qs-h">Haiku</span>
+        <span className="qs-amp">&amp;</span>
+        <span className="qs-who qs-o">Opus</span>
+        <span className="qs-label" style={{ marginLeft: "auto" }}>
+          Dev chat
+        </span>
+      </div>
+      <ol className="qs-thread">
+        {shown.length === 0 && <li className="qs-none">No messages yet.</li>}
+        {shown.map((m, i) => {
+          const haiku = m.from === "player";
+          const chip = chipOf(m);
+          return (
+            <li key={m.id} className={`qs-tm ${haiku ? "qs-from-haiku" : "qs-from-opus"}${i === shown.length - 1 ? " qs-latest" : ""}`}>
+              <span className="qs-av">{haiku ? "H" : "O"}</span>
+              <p className="qs-tmtext">
+                {chip && <span className={`qs-chip ${chip[0]}`}>{chip[1]}</span>}
+                {m.text}
+              </p>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
 
 /** `at` as the harness writes it (ms, or seconds since the epoch), as "12:41", or "just now". */
 function timeOf(at: number, now: number): string {
@@ -240,14 +289,13 @@ function Chat({ chat }: { chat: ChatEvent[] }) {
     <section className="qs-chat" aria-label="Haiku and Opus conversation">
       {shown.map((m, i) => {
         const haiku = m.from === "player";
-        const chip = m.tag ? CHIP[m.tag] : null;
-        const chipText = chip && (m.tag === "bug" && m.bug !== undefined ? `Bug #${m.bug}` : chip[1]);
+        const chip = chipOf(m);
         return (
           <div key={m.id} className={`qs-msg ${haiku ? "qs-from-haiku" : "qs-from-opus"}${i === shown.length - 1 ? " qs-latest" : ""}`}>
             <div className="qs-av">{haiku ? "H" : "O"}</div>
             <div className="qs-bubble">
               <div className="qs-meta">
-                {haiku ? "Haiku" : "Opus"} {chip && <span className={`qs-chip ${chip[0]}`}>{chipText}</span>}
+                {haiku ? "Haiku" : "Opus"} {chip && <span className={`qs-chip ${chip[0]}`}>{chip[1]}</span>}
                 <span className="qs-time">{timeOf(m.at, now)}</span>
               </div>
               {m.text}
