@@ -5,7 +5,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { SYMBOLS } from "@pokehd/rom";
 import { beforeAll, describe, expect, it } from "vitest";
 import { AutoSave, hasSave, loadResumePoint, otherTrainersSave } from "./autosave.ts";
-import { GameBoy } from "./core.ts";
+import { Button, GameBoy } from "./core.ts";
+import { rng } from "./fuzz.ts";
 import { saveCommits } from "./gifts/desk.ts";
 import { saveGame } from "./gifts/gifts.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
@@ -142,4 +143,43 @@ describe.skipIf(!existsSync(ROM_PATH))("autosave and resume points", () => {
     // A damaged point is refused.
     expect(loadResumePoint(await boot(sram), point.slice(0, 100), sram)).toBeDefined();
   }, 60_000);
+
+  it("restores exactly the game it was taken from, at any moment (QA bug #7)", async () => {
+    // Play on from a save with random buttons (walking, talking, menus), taking a point now and
+    // then. Each point, resumed in a fresh emulator on the stored save, must then play the same
+    // buttons into the same game, byte for byte: work RAM, high RAM, the save and the screen.
+    const gb = await fromStart();
+    const safe = SafePoint.of(gb);
+    safe.enqueue({ scratch: [], steps: [saveGame] });
+    for (let i = 0; i < 600 && safe.pending > 0; i++) gb.runFrame();
+    frames(gb, 30);
+    const buttons = [Button.A, Button.B, Button.Up, Button.Down, Button.Left, Button.Right, Button.Start, 0];
+    const r = rng(0x7);
+    const inputs = Array.from({ length: 2400 }, () => r.pick(buttons));
+    const snapshot = (g: GameBoy) => [g.readBytes(0xc000, 0x2000), g.readBytes(0xff80, 0x7f), g.saveSram(), Uint8Array.from(g.frame)];
+    const points: { at: number; state: Uint8Array; sram: Uint8Array }[] = [];
+    const after = new Map<number, Uint8Array[]>();
+    const AHEAD = 180;
+    for (let f = 0; f < inputs.length; f++) {
+      if (f % 211 === 17 && f + AHEAD < inputs.length) points.push({ at: f, state: gb.saveState(), sram: gb.saveSram() });
+      gb.setButtons(f % 6 < 3 ? inputs[f]! : 0);
+      gb.runFrame();
+      for (const p of points) if (f + 1 === p.at + AHEAD) after.set(p.at, snapshot(gb));
+    }
+    expect(points.length).toBeGreaterThan(5);
+    for (const p of points) {
+      const resumed = await boot(p.sram);
+      expect(loadResumePoint(resumed, p.state, p.sram)).toBeUndefined();
+      for (let f = p.at; f < p.at + AHEAD; f++) {
+        resumed.setButtons(f % 6 < 3 ? inputs[f]! : 0);
+        resumed.runFrame();
+      }
+      const [wram, hram, sram, screen] = snapshot(resumed);
+      const [wantWram, wantHram, wantSram, wantScreen] = after.get(p.at)!;
+      expect(wram, `work RAM, point at frame ${p.at}`).toEqual(wantWram);
+      expect(hram, `high RAM, point at frame ${p.at}`).toEqual(wantHram);
+      expect(sram, `save RAM, point at frame ${p.at}`).toEqual(wantSram);
+      expect(screen, `screen, point at frame ${p.at}`).toEqual(wantScreen);
+    }
+  }, 120_000);
 });

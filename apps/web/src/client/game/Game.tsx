@@ -47,13 +47,15 @@ import { giftStorage } from "../saves/gift-store.ts";
 import {
   deleteResumePoint,
   fetchCloudResumePoint,
+  gameLeaving,
+  gameLeft,
   loadAutosave,
   pickResumePoint,
   readResumePoint,
   saveAutosave,
-  storeResumePoint,
   uploadResumePoint,
 } from "../saves/resume-store.ts";
+import { ResumeKeeper } from "../saves/resume-keeper.ts";
 import { listPlayers, me, setMyName, type Account } from "../room/account.ts";
 import { Friends } from "../room/Friends.tsx";
 import { AdminTools } from "../admin/AdminTools.tsx";
@@ -142,8 +144,14 @@ const PRESS: Record<Parameters<TextActions["press"]>[0], number> = { A: Button.A
  */
 type Onboarding = { phase: "choose" } | { phase: "starting"; choice: StartChoice } | { phase: "intro" } | null;
 
-/** How often a resume point is taken while playing (also whenever the page is hidden). */
-const RESUME_POINT_MS = 60_000;
+/**
+ * How often a resume point is taken and stored while playing (also whenever the page is hidden,
+ * and after a save): what a reload or a crash can lose. The page can't take one as it goes (see
+ * resume-keeper.ts), so this is kept short.
+ */
+const RESUME_POINT_MS = 2000;
+/** How often the newest resume point goes to the cloud (also whenever the page is hidden). */
+const RESUME_UPLOAD_MS = 60_000;
 /** The loading screen gives up waiting for the HD world after this long, rather than stay up for good. */
 const LOADING_GIVE_UP_MS = 12_000;
 /** How long start-up waits for the cloud (a save for an empty device, a resume point). */
@@ -432,6 +440,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     holder.current!.prepend(canvas);
 
     (async () => {
+      // A game on this slot that's still going (a remount) stores its last point first.
+      await gameLeft(romKey);
+      if (disposed) return;
       const world = parseWorld(rom);
       setWorld(world);
       live = createLiveWorld(world);
@@ -737,7 +748,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         playJournalRef.current = null;
       };
       // A point the emulator turned down is stale (the save changed since) or damaged.
-      if (resume && !started.resumed) void deleteResumePoint(romKey);
+      if (resume && !started.resumed) void slot.enqueue(() => deleteResumePoint(romKey)).catch(() => {});
       if (custom && resume && !started.resumed) setOnboarding({ phase: "choose" });
       if (started.resumed) {
         // Before the first frame: the worker says it's ready before it runs one.
@@ -746,35 +757,40 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         setTimeout(() => !disposed && setResumed(false), 30_000);
       }
 
-      // Resume points: every minute, and when the page is hidden or closed. Only in the world:
-      // resuming to the title screen or intro would gain nothing.
+      // Resume points: every couple of seconds of play, after a save, and when the page is hidden
+      // or closed. Only in the world: resuming to the title screen or intro would gain nothing.
       const h = host;
       // Signed-in players' points go to the cloud too, until the server says they're signed out.
-      let upload = true;
+      const keeper = new ResumeKeeper({
+        key: romKey,
+        take: () => h.resumePoint(),
+        save: () => slot.latest,
+        enqueue: slot.enqueue,
+        upload: (state, save, keepalive) => uploadResumePoint(romKey, state, save, keepalive),
+      });
+      /** Emulated frames at the last point: a paused game has nothing new to keep. */
+      let pointFrames = -1;
       const takeResumePoint = (leaving = false) => {
         if (!sceneRef.current.inWorld) return;
-        void h.resumePoint().then(async (state) => {
-          if (!state || disposed) return;
-          const save = slot.latest;
-          await storeResumePoint(romKey, state, save);
-          if (upload && save) upload = await uploadResumePoint(romKey, state, save, leaving).catch(() => true);
-        });
+        if (!leaving && emuFrames === pointFrames) return;
+        pointFrames = emuFrames;
+        void keeper.take().then(() => (leaving ? keeper.upload(true) : undefined), () => {});
       };
-      const resumeTimer = setInterval(takeResumePoint, RESUME_POINT_MS);
+      const resumeTimer = setInterval(() => takeResumePoint(), RESUME_POINT_MS);
+      const uploadTimer = setInterval(() => void keeper.upload(), RESUME_UPLOAD_MS);
       finish = async () => {
-        if (!sceneRef.current.inWorld) return;
-        const state = await h.resumePoint(); // hands over any newer save first
-        const save = slot.latest;
-        if (!state) return;
-        await storeResumePoint(romKey, state, save);
-        if (upload && save) await uploadResumePoint(romKey, state, save, true).catch(() => {});
+        // Not when the game was stopped on purpose first (back to the save, an import): its
+        // emulator is gone, and a point now would undo that.
+        if (!sceneRef.current.inWorld || hostRef.current !== h) return;
+        await keeper.take(); // hands over any newer save first
+        await keeper.upload(true);
       };
       // A save makes every earlier point stale (it no longer holds the stored save), so take a
       // new one straight after; the delay lets the save routine finish its last writes.
       let saveTimer: ReturnType<typeof setTimeout> | undefined;
       pointAfterSave = () => {
         clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => takeResumePoint(), 2000);
+        saveTimer = setTimeout(() => takeResumePoint(true), 2000);
       };
       const onHidden = () => document.visibilityState === "hidden" && takeResumePoint(true);
       const onPageHide = () => takeResumePoint(true);
@@ -782,6 +798,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       addEventListener("pagehide", onPageHide);
       stopResumePoints = () => {
         clearInterval(resumeTimer);
+        clearInterval(uploadTimer);
         clearTimeout(saveTimer);
         document.removeEventListener("visibilitychange", onHidden);
         removeEventListener("pagehide", onPageHide);
@@ -968,7 +985,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       h?.setPaused(true);
       const l = lock;
       const held = holding;
-      void Promise.race([finish().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]).then(async () => {
+      const last = Promise.race([finish().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
+      gameLeaving(romKey, last);
+      void last.then(async () => {
         h?.dispose();
         if (held) {
           await cloudBackup(romKey).flush(true).catch(() => {});
