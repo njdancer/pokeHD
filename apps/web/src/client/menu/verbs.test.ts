@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { MenuEnv } from "./env.tsx";
 import type { Item, MenuActions, MenuModel, Moment, Mon } from "./model.ts";
 import type { Nav } from "./nav.tsx";
-import { monVerbs } from "./verbs.ts";
+import { ID, itemVerbs, monVerbs } from "./verbs.ts";
 
 const POTION: Item = { id: 0x14, name: "POTION", kind: "Healing", count: 1, text: "" };
 const TM34: Item = { id: 0xc9 + 33, name: "TM34", kind: "Machines", count: 1, text: "" };
@@ -40,5 +40,44 @@ describe("monVerbs after a pick from the bag", () => {
     monVerbs(env, nav, 0, { use: POTION.id })[0]!.run!();
     expect(nav.close).toHaveBeenCalled();
     expect(nav.reset).not.toHaveBeenCalled();
+  });
+});
+
+// The field items follow the game's own checks where the player stands (QA: the Escape Rope was
+// greyed out "Inside caves" in Mt. Moon, exactly where ItemUseEscapeRope lets it work).
+describe("itemVerbs for the field items", () => {
+  const ROPE: Item = { id: ID.ESCAPE_ROPE, name: "ESCAPE ROPE", kind: "Travel", count: 1, text: "" };
+  const BIKE: Item = { id: ID.BICYCLE, name: "BICYCLE", kind: "Key", text: "" };
+  function at(field: MenuModel["field"], moment: Moment = "explore", biking = false) {
+    const s = setup(moment);
+    Object.assign(s.env.model, { field, biking, bag: [ROPE, BIKE] });
+    return { ...s, nav: { ...s.nav, sheet: moment !== "explore" } };
+  }
+
+  it("uses an Escape Rope where the game lets it work", () => {
+    const { env, nav, actions } = at({ escapeRope: true, bike: true });
+    const [v] = itemVerbs(env, nav, ROPE);
+    expect(v!.off).toBeUndefined();
+    v!.run!();
+    expect(actions.useItem).toHaveBeenCalledWith(ID.ESCAPE_ROPE);
+    expect(nav.close).toHaveBeenCalled();
+  });
+
+  it("greys the Escape Rope out elsewhere and in battle", () => {
+    const town = at({ escapeRope: false, bike: true });
+    expect(itemVerbs(town.env, town.nav, ROPE)[0]!.off).toBe("Only in caves and dungeons");
+    const wild = at({ escapeRope: true, bike: true }, "wild");
+    expect(itemVerbs(wild.env, wild.nav, ROPE)[0]!.off).toBe("Not in battle");
+  });
+
+  it("offers the bike only where cycling is allowed, and getting off anywhere", () => {
+    const inside = at({ escapeRope: false, bike: false });
+    expect(itemVerbs(inside.env, inside.nav, BIKE)[0]).toMatchObject({ label: "Ride it", off: "No cycling here" });
+    const outside = at({ escapeRope: false, bike: true });
+    expect(itemVerbs(outside.env, outside.nav, BIKE)[0]!.off).toBeUndefined();
+    const riding = at({ escapeRope: false, bike: false }, "explore", true);
+    const [off] = itemVerbs(riding.env, riding.nav, BIKE);
+    expect(off!.label).toBe("Get off");
+    expect(off!.off).toBeUndefined();
   });
 });

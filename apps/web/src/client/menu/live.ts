@@ -22,7 +22,7 @@ import {
 } from "@pokehd/rom";
 import type { Catalogue } from "../dex/catalogue.ts";
 import type { Friend as RoomFriend } from "../room/client.ts";
-import { itemLine, itemPrice, shelf } from "./items.ts";
+import { bikeAllowed, escapeRopeWorks, itemLine, itemPrice, shelf } from "./items.ts";
 import type { PlayJournal } from "./journal.ts";
 import type { AppOptions, GameOptions, Item, ItemKind, Learns, MenuActions, MenuModel, Moment, Mon, Person, PersonKind, Request } from "./model.ts";
 
@@ -160,6 +160,16 @@ export function outdoorSpot(world: WorldData, map: number): { map: number; x: nu
     frontier = next;
   }
   return null;
+}
+
+/**
+ * What the field items can do where the player stands, by the game's own checks. The map header's
+ * tileset is the one the game loads into wCurMapTileset for it.
+ */
+export function fieldOf(rom: Uint8Array, world: WorldData, game: Pick<GameSnapshot, "map" | "transport">): MenuModel["field"] {
+  const tileset = world.maps[game.map]?.tileset;
+  if (tileset === undefined) return { escapeRope: false, bike: false };
+  return { escapeRope: escapeRopeWorks(rom, game.map, tileset), bike: game.transport !== "surf" && bikeAllowed(rom, game.map, tileset) };
 }
 
 /** Per ROM: how each Pokémon grows (it takes a scan of every species). */
@@ -309,6 +319,7 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
     app,
     repel: game.repelSteps,
     biking: game.transport === "bike",
+    field: fieldOf(rom, world, game),
     layers: {
       encounters,
       finds,
@@ -345,7 +356,7 @@ export function currentGame(ask: { id: number; game: GameSnapshot | null } | nul
 export function momentOf(game: GameSnapshot | null, ask: GameAsk | null): Moment {
   if (ask?.kind === "party" && ask.purpose === "next") return "fainted";
   if (ask?.kind === "mons") return "pc";
-  if (ask?.kind === "mart" || (ask?.kind === "items" && ask.selling)) return "shop";
+  if (ask?.kind === "mart" || (ask?.kind === "items" && ask.selling && !ask.inBattle)) return "shop";
   if (game?.inBattle) return game.battleKind === "trainer" ? "trainer" : "wild";
   return "explore";
 }
