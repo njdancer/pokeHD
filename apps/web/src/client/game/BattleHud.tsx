@@ -31,9 +31,10 @@ function Card({ side, mon }: { side: Side; mon: BattleMon }) {
   );
 }
 
-export function BattleHud({ state, huds }: { state: BattleState; huds: Record<Side, boolean> }) {
+/** `menuUp`: the HD battle menu is up at the bottom, and the player's card sits above it. */
+export function BattleHud({ state, huds, menuUp = false }: { state: BattleState; huds: Record<Side, boolean>; menuUp?: boolean }) {
   return (
-    <div className="battle-hud">
+    <div className={menuUp ? "battle-hud menu-up" : "battle-hud"}>
       {huds.enemy && state.enemy.mon && <Card side="enemy" mon={state.enemy.mon} />}
       {huds.player && state.player.mon && <Card side="player" mon={state.player.mon} />}
     </div>

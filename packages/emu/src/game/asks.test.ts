@@ -1,13 +1,13 @@
 // ROM test for the game's questions answered by the page: the bag and party menus in a battle,
 // and the list and quantity a Poké Mart sale asks for. Skips without the dev ROM.
 import { existsSync, readFileSync } from "node:fs";
-import { encodeText, monName, pokedexNumber, romOffset, SYMBOLS, type Message, type SymbolName } from "@pokehd/rom";
+import { SYMBOLS, type Message, type SymbolName } from "@pokehd/rom";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Button, GameBoy } from "../core.ts";
 import { CARRY } from "../ffi.ts";
 import { fromBcd } from "../gifts/gifts.ts";
 import { SafePoint } from "../gifts/safepoint.ts";
-import { playIntro } from "../testing.ts";
+import { playIntro, setBag, setParty } from "../testing.ts";
 import { askedText, GameAsks, twoOptions, type AskAnswer, type GameAsk } from "./asks.ts";
 
 const ROM_PATH = new URL("../../../../rom/pokeblue.gb", import.meta.url);
@@ -31,32 +31,6 @@ const hp = (gb: GameBoy, slot: number) => (r(gb, "wPartyMons", slot * PARTYMON +
 const frames = (gb: GameBoy, n: number) => {
   for (let i = 0; i < n; i++) gb.runFrame();
 };
-
-function setParty(gb: GameBoy, rom: Uint8Array, mons: { species: number; level: number }[]) {
-  gb.write(addr("wPartyCount"), mons.length);
-  mons.forEach(({ species, level }, n) => {
-    const base = romOffset(SYMBOLS.BaseStats) + (pokedexNumber(rom, species) - 1) * 28;
-    const hpMax = Math.floor((rom[base + 1]! * 2 * level) / 100) + level + 10;
-    const stat = (k: number) => Math.floor((rom[base + k]! * 2 * level) / 100) + 5;
-    const s = new Uint8Array(PARTYMON);
-    s.set([species, hpMax >> 8, hpMax & 255, level, 0, rom[base + 6]!, rom[base + 7]!, 0]);
-    s.set(rom.subarray(base + 15, base + 19), 8);
-    s.set([20, 20, 20, 20].map((pp, i) => (s[8 + i] ? pp : 0)), 29);
-    s.set([level, hpMax >> 8, hpMax & 255], 33);
-    [2, 3, 4, 5].forEach((k, i) => s.set([0, stat(k)], 36 + i * 2));
-    gb.write(addr("wPartySpecies") + n, species);
-    s.forEach((v, k) => gb.write(addr("wPartyMons") + n * PARTYMON + k, v));
-    encodeText("RED").forEach((v, k) => gb.write(addr("wPartyMonOT") + n * 11 + k, v));
-    encodeText(monName(rom, species)).forEach((v, k) => gb.write(addr("wPartyMonNicks") + n * 11 + k, v));
-  });
-  gb.write(addr("wPartySpecies") + mons.length, 0xff);
-}
-
-function setBag(gb: GameBoy, items: [number, number][]) {
-  gb.write(addr("wNumBagItems"), items.length);
-  items.flat().forEach((v, i) => gb.write(addr("wNumBagItems") + 1 + i, v));
-  gb.write(addr("wNumBagItems") + 1 + items.length * 2, 0xff);
-}
 
 describe("askedText", () => {
   const welcome: Message = {
