@@ -22,19 +22,16 @@ interface Props {
   text: ScreenText;
   /** More message lines than the game's two, read at once (DialogJoiner): the box grows up. */
   dialogLines?: readonly string[] | null;
-  /** Leave the message box out (a whole message already read, which the game is finishing). */
-  hideDialog?: boolean;
   actions?: TextActions;
   look?: UiLook;
 }
 
-export function TextOverlay({ text, dialogLines, hideDialog, actions, look = "ball" }: Props) {
+export function TextOverlay({ text, dialogLines, actions, look = "ball" }: Props) {
   return (
     <div className="hd-text" data-testid="hd-text" data-look={look} aria-live="polite">
       <div className="hd-text-stage">
         {text.boxes.filter((box, i) => !emptyUnder(box, text.boxes.slice(i + 1))).map((box) => {
           const dialog = text.dialog && same(text.dialog.box, box);
-          if (dialog && hideDialog) return null;
           // The message box keeps one key as it grows, so it doesn't pop in again.
           return dialog ? (
             <Box key="dialog" box={grown(box, dialogLines)} text={text} actions={actions} dialogLines={dialogLines} />
