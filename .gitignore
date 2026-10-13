@@ -30,3 +30,6 @@ playwright-report/
 
 # Blender save backups
 *.blend1
+
+# QA runs: screenshots, recordings and saves of the game
+apps/qa/runs/

@@ -1,0 +1,16 @@
+{
+  "name": "@pokehd/qa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "qa": "node src/cli.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "~0.128.0",
+    "@playwright/test": "~1.56.1",
+    "@pokehd/emu": "workspace:*",
+    "@pokehd/rom": "workspace:*"
+  },
+  "devDependencies": { "@types/node": "^24.13.3" }
+}
