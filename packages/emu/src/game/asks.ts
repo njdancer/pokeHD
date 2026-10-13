@@ -10,15 +10,16 @@
 // | `DisplayPartyMenu`, `GoBackToPartyMenu` | wWhichPokemon, wCurPartySpecies, carry for "cancelled" |
 // | `DisplayListMenuID` (item, priced item and PC Pokémon lists) | wWhichPokemon, wCurItem or wCurPartySpecies, the name, wMaxItemQuantity, then `GetItemPrice` |
 // | `DisplayChooseQuantityMenu` | wItemQuantity, hMoney (the total, halved when selling), a = $ff for "cancelled" |
-// | `DisplayTextBoxID` with a yes/no | wCurrentMenuItem, wMenuExitMethod |
+// | `DisplayTextBoxID` with a two-option menu (YES/NO, HEAL/CANCEL…) | wCurrentMenuItem, wChosenMenuItem, wMenuExitMethod, wTwoOptionMenuID back to 0 |
 // | `HandleMenuInput`, straight after a battle switch or a PC Pokémon list | A on the first item (SWITCH, DEPOSIT, WITHDRAW) |
 //
 // The page has already said what it wants done with the Pokémon it chose, so the little menu
 // the game puts up next (SWITCH / STATS / CANCEL, DEPOSIT / STATS / CANCEL) gets its first item.
-import { decodeText, encodeText, itemName, SYMBOLS, type SymbolName } from "@pokehd/rom";
+import { decodeText, encodeText, hasText, itemName, messageBoxes, romOffset, SYMBOLS, type Message, type SymbolName } from "@pokehd/rom";
 import type { GameBoy } from "../core.ts";
 import { readWord, StandIn, type Answer } from "../ffi.ts";
 import { fromBcd, toBcd } from "../gifts/gifts.ts";
+import { enemyPrefix, printingMessage } from "../script-text.ts";
 
 const addr = (name: SymbolName) => SYMBOLS[name].address;
 
@@ -30,6 +31,12 @@ const CANCELLED_MENU = 2;
 const CHOSE_FIRST_ITEM = 1;
 const CHOSE_SECOND_ITEM = 2;
 const TWO_OPTION_MENU = 0x14;
+/** wTwoOptionMenuID of the one menu whose first option is the "no" (clearing the save). */
+const NO_YES_MENU = 7;
+/** TwoOptionMenuStrings: width, height, blank line, then a pointer to "FIRST<NEXT>SECOND@". */
+const TWO_OPTION_ENTRY = 5;
+const CHAR_NEXT = 0x4e;
+const CHAR_END = 0x50;
 const NORMAL_PARTY_MENU = 0;
 const USE_ITEM_PARTY_MENU = 1;
 const BATTLE_PARTY_MENU = 2;
@@ -54,8 +61,12 @@ export type GameAsk =
   | { kind: "mons"; list: "team" | "box"; species: number[]; text: string }
   /** How many: up to `max`, at `price` each (already halved when selling), 0 if no price. */
   | { kind: "quantity"; max: number; price: number }
-  /** Yes or no, with what the game just said. */
-  | { kind: "yes-no"; text: string };
+  /**
+   * Yes or no: `text` is the question the game just asked (the whole of its last box, not only
+   * the two lines left on the screen), `yes` and `no` the game's own words for the two options
+   * ("YES"/"NO", "HEAL"/"CANCEL", "TRADE"/"CANCEL"…), answered by `{ yes: true }` and `{ yes: false }`.
+   */
+  | { kind: "yes-no"; text: string; yes: string; no: string };
 
 /** The page's answer: an index into the team or list, a quantity, yes/no, or null to cancel. */
 export type AskAnswer = { index: number } | { quantity: number } | { yes: boolean } | null;
@@ -67,13 +78,40 @@ export interface GameAsksOptions {
   busy(): boolean;
 }
 
+/** The text box's lines on the Game Boy screen (the empty ones left out). */
+export function textBoxLines(gb: GameBoy): string[] {
+  const map = addr("wTileMap");
+  return [14, 16].map((row) => decodeText(gb.readBytes(map + row * 20 + 1, 18)).trim()).filter(Boolean);
+}
+
 /** The text box's two lines on the Game Boy screen. */
 export function textBoxText(gb: GameBoy): string {
-  const map = addr("wTileMap");
-  return [14, 16]
-    .map((row) => decodeText(gb.readBytes(map + row * 20 + 1, 18)).trim())
-    .filter(Boolean)
-    .join("\n");
+  return textBoxLines(gb).join("\n");
+}
+
+/**
+ * What the game asked: the last HD box of the message it last printed, when the screen's text
+ * box still ends with it, else the screen's lines. The two-line box on the Game Boy scrolls, so
+ * by the time a question's menu opens the start of the question may be gone ("We heal your" of
+ * "We heal your POKéMON back to perfect health!", which the nurse asks over on later visits).
+ */
+export function askedText(shown: readonly string[], printed: Message | null): string {
+  const last = printed ? messageBoxes(printed).at(-1)?.map((l) => l.trim()) : undefined;
+  if (last && shown.length > 0 && last.length >= shown.length && last.slice(-shown.length).every((l, i) => l === shown[i])) return last.join("\n");
+  return shown.join("\n");
+}
+
+/** A two-option menu's words, [first, second], from the ROM's TwoOptionMenuStrings. */
+export function twoOptions(rom: Uint8Array, menu: number): [string, string] {
+  const table = SYMBOLS.TwoOptionMenuStrings;
+  const entry = romOffset(table) + menu * TWO_OPTION_ENTRY;
+  const pointer = rom[entry + 3]! | (rom[entry + 4]! << 8);
+  const at = romOffset({ bank: table.bank, address: pointer });
+  const end = rom.indexOf(CHAR_END, at);
+  const bytes = rom.subarray(at, end < 0 ? at + 16 : end);
+  const split = bytes.indexOf(CHAR_NEXT);
+  if (split < 0) return [decodeText(bytes), ""];
+  return [decodeText(bytes.subarray(0, split)), decodeText(bytes.subarray(split + 1))];
 }
 
 export class GameAsks {
@@ -84,9 +122,17 @@ export class GameAsks {
   #answer: { id: number; answer: AskAnswer } | null = null;
   /** The page chose a Pokémon to switch in or move in the PC: the game's next small menu gets its first item. */
   #thenFirst = false;
+  /** The message the game printed last, to read a question whole when its menu opens. */
+  #printed: Message | null = null;
+  readonly #removePrinted: () => void;
 
   constructor(gb: GameBoy, options: GameAsksOptions) {
     this.#options = options;
+    const enemy = enemyPrefix(options.rom);
+    this.#removePrinted = gb.addHook("PrintText_NoCreatingTextBox", (g) => {
+      const message = printingMessage(g, options.rom, enemy);
+      if (hasText(message)) this.#printed = message;
+    });
     const free = () => !options.busy();
     const party = (g: GameBoy) => this.#ask(g, () => this.#partyAsk(g), (a) => this.#partyAnswer(g, a));
     // Any other menu the game opens first means the moment has passed.
@@ -103,10 +149,14 @@ export class GameAsks {
       ),
       new StandIn(gb, "DisplayChooseQuantityMenu", free, (g) => this.#ask(g, () => this.#quantityAsk(g), (a) => this.#quantityAnswer(g, a))),
       new StandIn(gb, "DisplayTextBoxID", (g) => free() && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU, (g) =>
-        this.#ask(g, () => ({ kind: "yes-no", text: textBoxText(g) }), (a) => {
+        this.#ask(g, () => this.#yesNoAsk(g), (a) => {
           const yes = a !== null && "yes" in a && a.yes;
-          g.write(addr("wCurrentMenuItem"), yes ? 0 : 1);
-          g.write(addr("wMenuExitMethod"), yes ? CHOSE_FIRST_ITEM : CHOSE_SECOND_ITEM);
+          // NO/YES (clearing the save) puts the "no" first.
+          const first = yes !== (g.read(addr("wTwoOptionMenuID")) === NO_YES_MENU);
+          g.write(addr("wCurrentMenuItem"), first ? 0 : 1);
+          g.write(addr("wChosenMenuItem"), first ? 0 : 1);
+          g.write(addr("wMenuExitMethod"), first ? CHOSE_FIRST_ITEM : CHOSE_SECOND_ITEM);
+          g.write(addr("wTwoOptionMenuID"), 0);
           return {};
         }),
       ),
@@ -128,6 +178,14 @@ export class GameAsks {
 
   dispose(): void {
     for (const s of this.#standIns) s.dispose();
+    this.#removePrinted();
+  }
+
+  #yesNoAsk(g: GameBoy): GameAsk {
+    const menu = g.read(addr("wTwoOptionMenuID"));
+    const [first, second] = twoOptions(this.#options.rom, menu);
+    const [yes, no] = menu === NO_YES_MENU ? [second, first] : [first, second];
+    return { kind: "yes-no", text: askedText(textBoxLines(g), this.#printed), yes, no };
   }
 
   /** Asks the page once, then waits until it answers. */
