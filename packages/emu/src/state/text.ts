@@ -24,6 +24,8 @@ export interface TextBox {
   height: number;
   /** The rows of text inside the borders. */
   lines: TextLine[];
+  /** Text printed over the top border: the money box's "MONEY". */
+  title?: TextLine;
 }
 
 /**

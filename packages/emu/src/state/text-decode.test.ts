@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { readGlyphs, SYMBOLS, type Glyph } from "@pokehd/rom";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Button, GameBoy } from "../core.ts";
+import { SafePoint } from "../gifts/safepoint.ts";
 import { playIntro } from "../testing.ts";
 import { ScreenTextDecoder } from "./text-decode.ts";
 import { SCREEN_COLS, TEXT_WATCHES, type ScreenText, type TextWatched } from "./text.ts";
@@ -9,6 +10,8 @@ import { SCREEN_COLS, TEXT_WATCHES, type ScreenText, type TextWatched } from "./
 const ROM_PATH = new URL("../../../../rom/pokeblue.gb", import.meta.url);
 const WASM_PATH = new URL("../generated/sameboy.wasm", import.meta.url);
 const hasRom = existsSync(ROM_PATH);
+/** DisplayTextBoxID's MONEY_BOX (constants/menu_constants.asm). */
+const MONEY_BOX = 0x13;
 
 describe("ScreenTextDecoder", () => {
   // Made-up glyphs: tile `code` holds a pattern unique to it, and the screen buffer is drawn in
@@ -174,6 +177,40 @@ describe("ScreenTextDecoder", () => {
     expect(text.menus[0]?.active).toBe(true);
     expect(text.dialog?.state).toBe("idle");
   });
+
+  it("reads the money box, whose MONEY is printed over its top border", () => {
+    const decoder = new ScreenTextDecoder(glyphs);
+    // MONEY_BOX_TEMPLATE: a box from 11,0 to 19,2 with MONEY at 13,0, the money at 12,1.
+    const text = decoder.decode(
+      screen([
+        "...........┌─MONEY─┐",
+        "...........│ 1807  │",
+        "...........└───────┘",
+        ...Array<string>(9).fill(""),
+        "┌──────────────────┐",
+        "│                  │",
+        "│ITS 50 FOR A      │",
+        "│                  │",
+        "│CHILDS TICKET    ▼│",
+        "└──────────────────┘",
+      ]),
+    );
+    expect(text.loose).toEqual([]);
+    expect(text.pictures).toBe(false);
+    expect(text.boxes.map((b) => [b.x, b.y, b.width, b.height])).toEqual([
+      [11, 0, 9, 3],
+      [0, 12, 20, 6],
+    ]);
+    expect(text.boxes[0]).toMatchObject({ title: { row: 0, col: 13, text: "MONEY" }, lines: [{ row: 1, col: 13, text: "1807" }] });
+    expect(text.boxes[1]?.title).toBeUndefined();
+    expect(text.dialog).toMatchObject({ lines: ["ITS 50 FOR A", "CHILDS TICKET"], state: "waiting" });
+  });
+
+  it("doesn't take text between two corners on a row as a box without sides", () => {
+    const decoder = new ScreenTextDecoder(glyphs);
+    const text = decoder.decode(screen(["┌─AB─┐", "  CD  "]));
+    expect(text.boxes).toEqual([]);
+  });
 });
 
 describe.skipIf(!hasRom)("decoding the game's text", () => {
@@ -277,4 +314,39 @@ describe.skipIf(!hasRom)("decoding the game's text", () => {
     expect(text.menus[0]?.cursor).toBe(1);
     expect(cursor()).toBe(1);
   });
+
+  it("reads the money box the game draws with MONEY over its border", () => {
+    for (let i = 0; i < 10 && frame().shown; i++) press(Button.B);
+    expect(frame().shown).toBe(false);
+    // ¥1807, then the box as the museum's clerk, a Poké Mart or the Magikarp salesman put it up.
+    gb.write(SYMBOLS.wPlayerMoney.address, 0x00);
+    gb.write(SYMBOLS.wPlayerMoney.address + 1, 0x18);
+    gb.write(SYMBOLS.wPlayerMoney.address + 2, 0x07);
+    let tileMap: Uint8Array | undefined;
+    SafePoint.of(gb).enqueue({
+      scratch: [],
+      steps: [
+        { routine: "LoadFontTilePatterns" },
+        {
+          routine: "DisplayTextBoxID",
+          before: (g) => g.write(SYMBOLS.wTextBoxID.address, MONEY_BOX),
+          after: (g) => void (tileMap = g.readBytes(TEXT_WATCHES.tileMap[0], TEXT_WATCHES.tileMap[1])),
+        },
+      ],
+    });
+    for (let i = 0; i < 600 && !tileMap; i++) frame();
+    expect(tileMap).toBeDefined();
+    // The box as drawn, read at the frame's end like every other frame here (VRAM is only
+    // readable outside the LCD's drawing), with the window up as DisplayTextID puts it.
+    const watched = {} as TextWatched;
+    for (const [name, [address, length]] of Object.entries(TEXT_WATCHES)) {
+      watched[name as keyof TextWatched] = gb.readBytes(address, length);
+    }
+    const drawn = decoder.decode({ ...watched, tileMap: tileMap!, windowY: new Uint8Array([0]) });
+    expect(drawn.loose).toEqual([]);
+    expect(drawn.pictures).toBe(false);
+    expect(drawn.boxes).toEqual([
+      { x: 11, y: 0, width: 9, height: 3, title: { row: 0, col: 13, text: "MONEY" }, lines: [{ row: 1, col: 14, text: "¥1807" }] },
+    ]);
+  }, 30_000);
 });
