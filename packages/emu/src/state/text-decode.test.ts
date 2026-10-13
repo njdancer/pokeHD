@@ -120,6 +120,43 @@ describe("ScreenTextDecoder", () => {
     for (let i = 0; i < 20; i++) decoder.decode(box("THERE", "A"));
     expect(decoder.decode(box("THERE", "A")).dialog?.state).toBe("idle");
   });
+
+  it("takes a ▼ under a menu still showing its ▶ as the game waiting at the text, not the menu", () => {
+    const decoder = new ScreenTextDecoder(glyphs);
+    // The PC's menu just chosen, and "Accessed my PC." waiting below it; the arrow blinks.
+    const pc = (arrow: boolean, blink: number) =>
+      screen(
+        [
+          "┌──────────┐",
+          "│▶SOMEONE  │",
+          "│          │",
+          "│ LOG OFF  │",
+          "└──────────┘",
+          ...Array<string>(7).fill(""),
+          "┌──────────────────┐",
+          "│                  │",
+          "│ACCESSED MY PC    │",
+          "│                  │",
+          `│${" ".repeat(17)}${arrow ? "▼" : " "}│`,
+          "└──────────────────┘",
+        ],
+        { arrowBlink: new Uint8Array([blink, 6]) },
+      );
+    let text = decoder.decode(pc(true, 200));
+    expect(text.dialog?.state).toBe("waiting");
+    expect(text.menus[0]).toMatchObject({ cursor: 0, active: false });
+    // Off between blinks: the counters still move while the game waits.
+    for (let i = 0; i < 20; i++) {
+      text = decoder.decode(pc(false, 199 - i));
+      expect(text.dialog?.state).toBe("waiting");
+      expect(text.menus[0]?.active).toBe(false);
+    }
+    // A, and the game takes the menu again: the counters stop and the arrow is gone.
+    decoder.decode(pc(false, 7));
+    text = decoder.decode(pc(false, 7));
+    expect(text.menus[0]?.active).toBe(true);
+    expect(text.dialog?.state).toBe("idle");
+  });
 });
 
 describe.skipIf(!hasRom)("decoding the game's text", () => {

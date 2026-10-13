@@ -265,6 +265,8 @@ export class ScreenTextDecoder {
   readonly #chars: (string | null)[] = Array<string | null>(0xa0).fill(null);
   #frame = 0;
   #dialog: { lines: string; changed: number; waiting: boolean } | null = null;
+  /** hDownArrowBlinkCount1 and 2 as last seen, which only move while the game waits at a ▼. */
+  #blink = -1;
 
   constructor(glyphs: readonly Glyph[]) {
     this.#table = glyphTable(glyphs);
@@ -316,8 +318,19 @@ export class ScreenTextDecoder {
       else quantity ??= decodeQuantity(box);
     }
     menus.sort((a, b) => Number(b.active) - Number(a.active));
-    // While a menu takes input, the text above it has finished.
-    if (dialog && menus[0]?.active) {
+    const blink = ((watched.arrowBlink[0] ?? 0) << 8) | (watched.arrowBlink[1] ?? 0);
+    const blinking = this.#blink >= 0 && blink !== this.#blink;
+    this.#blink = blink;
+    // At a ▼ the game waits for A or B (WaitForTextScrollButtonPress), so no menu takes input,
+    // though one just chosen still shows its ▶ (the PC's menu while it says "Accessed my PC.").
+    // The arrow blinks; between blinks, the waiting loop still moves the blink counters.
+    const prompt = !!dialog && (cell(grid, MORE_ARROW.x, MORE_ARROW.y) === CURSOR.more || (dialog.state === "waiting" && blinking));
+    if (dialog && prompt) {
+      dialog.state = "waiting";
+      this.#dialog!.waiting = true;
+      for (const menu of menus) menu.active = false;
+    } else if (dialog && menus[0]?.active) {
+      // While a menu takes input, the text above it has finished.
       dialog.state = "idle";
       this.#dialog!.waiting = false;
     }
