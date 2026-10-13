@@ -125,3 +125,27 @@ export async function composeSheet(page: Page, input: SheetInput): Promise<Buffe
   }, input);
   return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
 }
+
+/**
+ * Crops a screenshot of the whole window (`png`, base64, at device pixels) to `box` (CSS pixels in a
+ * window `viewportWidth` CSS pixels wide), as a PNG at the box's CSS size.
+ */
+export async function cropShot(page: Page, png: string, box: { x: number; y: number; width: number; height: number }, viewportWidth: number): Promise<Buffer> {
+  const dataUrl = await page.evaluate(
+    async ({ png, box, viewportWidth }) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${png}`;
+      await img.decode();
+      const k = img.naturalWidth / viewportWidth;
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(box.width);
+      canvas.height = Math.round(box.height);
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(img, box.x * k, box.y * k, box.width * k, box.height * k, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/png");
+    },
+    { png, box, viewportWidth },
+  );
+  return Buffer.from(dataUrl.slice(dataUrl.indexOf(",") + 1), "base64");
+}
