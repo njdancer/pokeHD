@@ -44,6 +44,8 @@ export function pickFrames<T extends { t: number }>(frames: readonly T[], from: 
 export class Recorder {
   readonly frames: RecordedFrame[] = [];
   readonly turns = new Map<number, number>();
+  /** Every frame as it arrives (JPEG), for the live view. */
+  readonly listeners = new Set<(jpeg: Buffer) => void>();
   #session: CDPSession | null = null;
 
   async start(page: Page, maxWidth = 960): Promise<void> {
@@ -55,6 +57,10 @@ export class Recorder {
       const t = Date.now();
       this.frames.push({ t, data: e.data, scale: Math.min(1, maxWidth / viewport.width) });
       while (this.frames.length && this.frames[0]!.t < t - KEEP_MS) this.frames.shift();
+      if (this.listeners.size) {
+        const jpeg = Buffer.from(e.data, "base64");
+        for (const listener of this.listeners) listener(jpeg);
+      }
       void session.send("Page.screencastFrameAck", { sessionId: e.sessionId }).catch(() => {});
     });
     await session.send("Page.startScreencast", { format: "jpeg", quality: 80, maxWidth, maxHeight: Math.round((viewport.height * maxWidth) / viewport.width), everyNthFrame: 1 });

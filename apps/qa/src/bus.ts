@@ -27,6 +27,7 @@ export class Bus {
   #bugs: Bug[];
   #listeners = new Set<(e: QaEvent) => void>();
   #server: Server | null = null;
+  #live: ((listener: (jpeg: Buffer) => void) => () => void) | null = null;
 
   /** `root` holds every run (runs/), the shared bugs.json and notebook.md; this run gets its own folder. */
   constructor(root: string) {
@@ -126,6 +127,11 @@ export class Bus {
     this.emit({ t: "bugs", list: [...this.#bugs].sort(byPriority) });
   }
 
+  /** Where /live.mjpeg gets its frames: the game driver's recording of the whole window. */
+  setLive(subscribe: (listener: (jpeg: Buffer) => void) => () => void): void {
+    this.#live = subscribe;
+  }
+
   on(listener: (e: QaEvent) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -134,14 +140,15 @@ export class Bus {
   /**
    * Serves the stream page and the developer CLI on localhost:
    * GET /snapshot, GET /events (SSE), GET /bugs/:id, POST /chat {text, tag?, bug?} (the developer
-   * talking), POST /bugs/:id {status}.
+   * talking), POST /bugs/:id {status}, and the live view: GET /watch (a page) and /live.mjpeg.
+   * `host` 0.0.0.0 makes it reachable from other devices on the network.
    */
-  listen(port: number): Promise<number> {
+  listen(port: number, host = "127.0.0.1"): Promise<number> {
     const server = createServer((req, res) => {
       void this.#handle(req, res).catch((error: unknown) => send(res, 500, { error: String(error) }));
     });
     this.#server = server;
-    return new Promise((resolve) => server.listen(port, "127.0.0.1", () => resolve((server.address() as AddressInfo).port)));
+    return new Promise((resolve) => server.listen(port, host, () => resolve((server.address() as AddressInfo).port)));
   }
 
   close(): void {
@@ -156,6 +163,24 @@ export class Bus {
     const url = new URL(req.url ?? "/", "http://localhost");
     const bugMatch = /^\/bugs\/(\d+)$/.exec(url.pathname);
     if (req.method === "GET" && url.pathname === "/snapshot") return send(res, 200, this.snapshot());
+    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/watch")) return void res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(WATCH_PAGE);
+    if (req.method === "GET" && url.pathname === "/live.mjpeg") {
+      if (!this.#live) return send(res, 503, { error: "the game isn't running yet" });
+      // Motion JPEG: every frame replaces the last; <img> plays it in any browser, Safari included.
+      res.writeHead(200, { "content-type": "multipart/x-mixed-replace; boundary=frame", "cache-control": "no-cache" });
+      res.flushHeaders();
+      let busy = false;
+      const off = this.#live((jpeg) => {
+        // A slow viewer skips frames rather than queueing them.
+        if (busy) return;
+        busy = !res.write(`--frame\r\ncontent-type: image/jpeg\r\ncontent-length: ${jpeg.length}\r\n\r\n`);
+        busy = !res.write(jpeg) || busy;
+        res.write("\r\n");
+        if (busy) res.once("drain", () => (busy = false));
+      });
+      req.on("close", off);
+      return;
+    }
     if (req.method === "GET" && url.pathname === "/events") {
       res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
       res.write(": hello\n\n");
@@ -189,6 +214,12 @@ export class Bus {
     send(res, 404, { error: "not found" });
   }
 }
+
+const WATCH_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude QA live</title>
+<style>html,body{margin:0;height:100%;background:#111}img{display:block;width:100%;height:100%;object-fit:contain}</style>
+</head><body><img src="/live.mjpeg" alt="The QA stream, live"></body></html>`;
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));

@@ -53,6 +53,8 @@ export interface GameDriver {
   screenshot(): Promise<Buffer>;
   /** A grid of recorded frames from `before` seconds before turn `turn` began to `after` seconds after, PNG. */
   contactSheet(turn: number, before: number, after: number, fps: number): Promise<Buffer>;
+  /** Calls `listener` with each recorded frame of the whole window (JPEG) as it arrives; returns the unsubscribe. */
+  onFrame(listener: (jpeg: Buffer) => void): () => void;
   /** Glitches noticed since the last call. */
   takeGlitches(): Glitch[];
   status(): Promise<GameStatus>;

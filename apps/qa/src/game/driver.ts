@@ -459,6 +459,11 @@ export function createDriver(opts: DriverOptions): GameDriver {
 
     restart,
 
+    onFrame(listener) {
+      recorder.listeners.add(listener);
+      return () => recorder.listeners.delete(listener);
+    },
+
     markTurn(turn) {
       recorder.markTurn(turn);
     },

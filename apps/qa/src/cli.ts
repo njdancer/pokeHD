@@ -5,7 +5,8 @@
 //                         (default http://localhost:5173, `pnpm dev`). --via claude (the default)
 //                         plays through Claude Code signed in with this machine's Claude login;
 //                         --via api uses ANTHROPIC_API_KEY. --game opens the game page alone
-//                         instead of the stream page.
+//                         instead of the stream page. --lan serves the bus, and a live view of
+//                         the window at /watch, to other devices on the network.
 //   inbox [--wait]        The chat. --wait blocks until the player's next message, then prints it.
 //   say TEXT [--bug N] [--tag fixed|harness|question|note]
 //                         Message the player (unpauses it if it's waiting). --tag fixed --bug N
@@ -14,6 +15,7 @@
 //   bug N [STATUS]        A bug's report and attachment folder; with STATUS (open, fixing, fixed,
 //                         wontfix) sets it.
 //   status                What the player is doing.
+import { networkInterfaces } from "node:os";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { Bus } from "./bus.ts";
@@ -34,6 +36,7 @@ const { positionals, values } = parseArgs({
     turns: { type: "string" },
     headless: { type: "boolean", default: false },
     game: { type: "boolean", default: false },
+    lan: { type: "boolean", default: false },
     wait: { type: "boolean", default: false },
     all: { type: "boolean", default: false },
     bug: { type: "string" },
@@ -50,6 +53,10 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   return json;
 }
 
+function lanAddresses(): string[] {
+  return Object.values(networkInterfaces()).flatMap((list) => (list ?? []).filter((i) => i.family === "IPv4" && !i.internal).map((i) => i.address));
+}
+
 const time = (at: number) => new Date(at).toTimeString().slice(0, 5);
 const chatLine = (c: ChatEvent) => `${time(c.at)} ${c.from === "player" ? "Haiku" : "Opus "}${c.tag ? ` [${c.tag}${c.bug !== undefined ? ` #${c.bug}` : ""}]` : ""}: ${c.text}`;
 const bugLine = (b: Bug) => `#${b.id} ${b.severity.padEnd(4)} ${b.status.padEnd(7)} turn ${b.turn}: ${b.title}`;
@@ -60,10 +67,12 @@ switch (command) {
     if (backend !== "claude" && backend !== "api") throw new Error("--via is claude or api.");
     if (backend === "api" && !process.env["ANTHROPIC_API_KEY"]) throw new Error("Set ANTHROPIC_API_KEY first, or use --via claude.");
     const run = new Bus(RUNS);
-    await run.listen(Number(values.port));
+    await run.listen(Number(values.port), values.lan ? "0.0.0.0" : "127.0.0.1");
     const streamUrl = `${values.app}/dev/stream?bus=${encodeURIComponent(bus)}`;
     console.log(`Run folder ${run.dir}\nBus ${bus}\nStream ${streamUrl}`);
+    if (values.lan) for (const address of lanAddresses()) console.log(`Watch live at http://${address}:${values.port}/watch`);
     const driver = createDriver({ appUrl: values.app, runDir: run.dir, headless: values.headless, ...(values.game && { streamPath: "game" }) });
+    run.setLive((listener) => driver.onFrame(listener));
     const player = new Player({ toolbox: new Toolbox(run, driver), backend, model: values.model, ...(values.turns && { maxTurns: Number(values.turns) }) });
     const stop = () => player.stop();
     process.on("SIGINT", stop);

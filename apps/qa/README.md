@@ -13,6 +13,8 @@ talk.
    The player runs through Claude Code (the Agent SDK) signed in with the Mac's own Claude login,
    so it counts against that subscription; `--via api` uses `ANTHROPIC_API_KEY` instead.
    `--turns 20` for a trial, `--game` for the bare game page, `--model` to try another player.
+   `--lan` also serves a live view of the window to the network: it prints
+   `http://<mac's address>:4545/watch`, which plays in any browser (a phone included).
 3. In OBS, capture the Chromium window (or add a Browser source on the printed stream URL with the
    same `?bus=` and a separate game; the window capture is what the player actually drives).
 

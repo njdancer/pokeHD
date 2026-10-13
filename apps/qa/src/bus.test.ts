@@ -49,4 +49,22 @@ describe("Bus", () => {
     expect(seen.map((e) => e.t)).toEqual(["bugs", "bugs", "chat"]);
     expect(readFileSync(join(b.dir, "events.jsonl"), "utf8").trim().split("\n")).toHaveLength(3);
   });
+
+  it("streams the live view as motion JPEG", async () => {
+    const b = bus();
+    const listeners = new Set<(jpeg: Buffer) => void>();
+    b.setLive((l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    });
+    const port = await b.listen(0);
+    const res = await fetch(`http://127.0.0.1:${port}/live.mjpeg`);
+    expect(res.headers.get("content-type")).toContain("multipart/x-mixed-replace");
+    const reader = res.body!.getReader();
+    for (const l of listeners) l(Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+    let text = "";
+    while (!text.includes("\r\n\r\n")) text += Buffer.from((await reader.read()).value!).toString("latin1");
+    expect(text).toContain("--frame\r\ncontent-type: image/jpeg\r\ncontent-length: 4");
+    await reader.cancel();
+  });
 });
