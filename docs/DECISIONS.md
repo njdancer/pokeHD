@@ -417,7 +417,11 @@ scroll/window registers (`BattleScreenReader` in `packages/emu`). Pictures stand
 billboards in the 3D world where the player is, coloured with the SGB palette the game would use
 (`battlePalette`); the camera swings from the overworld to a side-on battle view. Names, levels
 and HP come from `BattleState` as HD cards. The Game Boy screen stays on top, masked down to the
-menus and text, which the HD text layer (p2-text) can take over cell by cell.
+menus and text, which the HD text layer (p2-text) can take over cell by cell. It takes the
+messages (the screen's text cells decoded on their own); the menus stay on the Game Boy screen
+until it has battle menus of its own. Either side of a battle (a trainer's transition before
+wIsInBattle is set, the faded last frame while the map reloads) the Game Boy screen stays down
+(`battleTransition`).
 
 Why: reading the screen keeps every animation and edge case the original's, with no battle logic
 of our own, and needs no list of move animations. Staging the battle where it happens keeps the

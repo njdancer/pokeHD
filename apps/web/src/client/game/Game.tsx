@@ -67,11 +67,11 @@ import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
 import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
-import { BattleTracker, maskBattleScreen } from "./battle.ts";
+import { BattleTracker, battleText, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
 import { TextOverlay, type TextActions } from "./TextOverlay.tsx";
-import { hdTextFits, introTextFits, textKey } from "./hd-text.ts";
+import { battleTextFits, hdTextFits, introTextFits, textKey } from "./hd-text.ts";
 import { NamePrompt } from "./NamePrompt.tsx";
 import { StartScreen } from "./StartScreen.tsx";
 import { IntroStage } from "./IntroStage.tsx";
@@ -598,17 +598,18 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           const fight = battles?.frame(watched);
           const battle = hd && inWorld ? fight?.scene : undefined;
           live!.setBattle(battle ? (fight?.view ?? null) : null);
-          if (battle === "scene" && fight?.screen) maskBattleScreen(image.data, fight.screen);
-          ctx.putImageData(image, 0, 0);
-          const huds = battle === "scene" && fight?.state && fight.screen ? { state: fight.state, huds: fight.screen.huds } : null;
+          const battleScreen = battle === "scene" ? (fight?.screen ?? null) : null;
+          const huds = battle === "scene" && fight?.state && fight.huds ? { state: fight.state, huds: fight.huds } : null;
           const hudKey = huds ? JSON.stringify([huds.huds, huds.state.player.mon, huds.state.enemy.mon]) : "";
           if (hudKey !== shownHud) {
             shownHud = hudKey;
             setBattleHud(huds);
           }
           roomClient?.sendPresence(toPresence(state, inWorld));
-          // Text and menus: drawn by the HD text layer when it can show all of them.
-          const text = textDecoder.decode(bytes as unknown as TextWatched);
+          // Text and menus: drawn by the HD text layer when it can show all of them. On the battle
+          // screen only its text and menu cells are read (the HUDs and pictures are drawn in HD).
+          const textBytes = bytes as unknown as TextWatched;
+          const text = textDecoder.decode(battleScreen ? battleText(textBytes, battleScreen) : textBytes);
           if (talking) {
             const d = text.dialog;
             if (!d) {
@@ -636,15 +637,18 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
             liftPictures(new Uint8ClampedArray(pixels), introImage);
             introCanvas.current.getContext("2d")!.putImageData(introImage, 0, 0);
           }
-          const fits = intro ? introTextFits(text) : hdTextFits(text, state.mode, inWorld);
+          const fits = intro ? introTextFits(text) : battleScreen ? battleTextFits(text) : hdTextFits(text, state.mode, inWorld);
+          if (battleScreen) maskBattleScreen(image.data, battleScreen, fits ? text.boxes : []);
+          ctx.putImageData(image, 0, 0);
           // Nothing on the Game Boy screen the HD view doesn't show: keep it down.
           const mapOnly = trackMapOnly((bytes as unknown as TextWatched).tileMap, state.mode, inWorld);
           const quiet = fits || mapOnly;
           // Whole messages from the script: the page shows the message the game is printing.
           const script = scriptView(scriptRef, text, fits, (id) => host?.releaseMessage(id));
           // Otherwise whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
-          if (!fits || script) joiner.reset();
-          const joined = script ? { lines: script.lines, press: false } : fits ? joiner.frame(text) : { lines: null, press: false };
+          // Not in battle, where the game moves on by itself between some messages.
+          if (!fits || script || battleScreen) joiner.reset();
+          const joined = script ? { lines: script.lines, press: false } : fits && !battleScreen ? joiner.frame(text) : { lines: null, press: false };
           if (joined.press) host?.tap(Button.A);
           const hidden = !!script?.hidden;
           const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}#${hidden}` : "";

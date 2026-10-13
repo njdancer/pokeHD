@@ -1,8 +1,8 @@
 // Turns what the emulator reports during a battle into what the HD battle layer draws: the
 // battle screen's pictures and sprites, coloured with each side's SGB palette (p2-battles).
 import {
-  BATTLE_SCREEN_WATCHES, BattleDecoder, BattleScreenReader, CELL_UI,
-  type BattleScreen, type BattleScreenWatched, type BattleState, type BattleWatched, type Watch,
+  BATTLE_SCREEN_WATCHES, BattleDecoder, BattleScreenReader, CELL_UI, battleTransition,
+  type BattleScreen, type BattleScreenWatched, type BattleState, type BattleWatched, type TextBox, type TextWatched, type Watch,
 } from "@pokehd/emu";
 import type { BattleView, Side } from "@pokehd/engine/battle";
 import { battlePalette, pokedexNumber, readSgbPalettes, type SgbPalette } from "@pokehd/rom";
@@ -73,9 +73,20 @@ export interface BattleFrame {
   screen: BattleScreen | null;
   /** For the HD battle layer; null outside a battle. */
   view: BattleView | null;
-  /** For the layout; undefined outside a battle. */
+  /**
+   * Which HUDs the HD cards stand in for: the screen's, held through a frame or two the game
+   * spends redrawing one (opening the move menu clears the area before its box is drawn).
+   */
+  huds: BattleScreen["huds"] | null;
+  /**
+   * For the layout; undefined outside a battle. `transition` also covers the moments either side
+   * of one, while wIsInBattle is still 0 (see `battleTransition`).
+   */
   scene: BattleScene | undefined;
 }
+
+/** Frames a HUD may be missing before its HD card goes. */
+const HUD_HOLD_FRAMES = 2;
 
 /**
  * Follows battles frame by frame for the game page. The battle screen's ~3.8 KB of video memory
@@ -91,6 +102,8 @@ export class BattleTracker {
   #watching = false;
   /** The battle screen has shown since the battle began: anything else now is a menu. */
   #seen = false;
+  /** Frames since each HUD was last on screen. */
+  #hudGone: Record<Side, number> = { player: Infinity, enemy: Infinity };
 
   constructor(rom: Uint8Array, base: Record<string, Watch>, watch: (watches: Record<string, Watch>) => void) {
     this.#colours = new BattleColours(rom);
@@ -108,39 +121,74 @@ export class BattleTracker {
         this.#reader.reset();
         this.#colours.reset();
         this.#seen = false;
+        this.#hudGone = { player: Infinity, enemy: Infinity };
       }
-      return { state, screen: null, view: null, scene: undefined };
+      const between = battleTransition(watched as BattleWatched);
+      return { state, screen: null, view: null, huds: null, scene: between ? "transition" : undefined };
     }
     if (!this.#watching) {
       this.#watching = true;
       this.#watch({ ...this.#base, ...BATTLE_SCREEN_WATCHES });
     }
     // The first frame or so, until the extra watches arrive.
-    if (!watched["picTiles"]) return { state, screen: null, view: null, scene: "transition" };
+    if (!watched["picTiles"]) return { state, screen: null, view: null, huds: null, scene: "transition" };
     const screen = this.#reader.read(watched as BattleScreenWatched);
     if (screen.battle) this.#seen = true;
     const scene: BattleScene = screen.battle ? "scene" : this.#seen ? "menu" : "transition";
-    return { state, screen, view: this.#colours.view(state, screen), scene };
+    for (const side of ["player", "enemy"] as const) this.#hudGone[side] = screen.huds[side] ? 0 : this.#hudGone[side] + 1;
+    const huds = { player: this.#hudGone.player <= HUD_HOLD_FRAMES, enemy: this.#hudGone.enemy <= HUD_HOLD_FRAMES };
+    return { state, screen, view: this.#colours.view(state, screen), huds, scene };
   }
 }
 
 /**
  * Clears the Game Boy screen's pixels everywhere but text and menus (CELL_UI cells), so it can
- * sit over the HD battle. `data` is the 160×144 RGBA frame.
+ * sit over the HD battle. `data` is the 160×144 RGBA frame. `covered` are boxes the HD text layer
+ * draws instead, cleared too.
  */
-export function maskBattleScreen(data: Uint8ClampedArray, screen: BattleScreen): void {
+export function maskBattleScreen(data: Uint8ClampedArray, screen: BattleScreen, covered: readonly TextBox[] = []): void {
   const { x: ox, y: oy } = screen.origin;
+  const keep = uiCells(screen.cells, covered);
   for (let y = 0; y < 144; y++) {
     const row = Math.floor((y - oy) / 8);
     for (let x = 0; x < 160; x++) {
       const col = Math.floor((x - ox) / 8);
       const inside = row >= 0 && row < 18 && col >= 0 && col < 20;
-      if (inside && screen.cells[row * 20 + col] === CELL_UI) continue;
+      if (inside && keep[row * 20 + col]) continue;
       data[(y * 160 + x) * 4 + 3] = 0;
     }
   }
 }
 
+/** Per cell, 1 where the Game Boy screen still shows: text and menus not under `covered`. */
+function uiCells(cells: Uint8Array, covered: readonly TextBox[]): Uint8Array {
+  const keep = cells.map((c) => (c === CELL_UI ? 1 : 0));
+  for (const b of covered) {
+    for (let y = Math.max(b.y, 0); y < Math.min(b.y + b.height, 18); y++) {
+      for (let x = Math.max(b.x, 0); x < Math.min(b.x + b.width, 20); x++) keep[y * 20 + x] = 0;
+    }
+  }
+  return keep;
+}
+
+/** Blank, in the game's tile set (the space character). */
+const BLANK_TILE = 0x7f;
+/** hWY at the top: the window, and so the screen buffer, on screen. */
+const ON_SCREEN = new Uint8Array([0]);
+
+/**
+ * The text decoder's bytes for the battle screen: everything but text and menus (CELL_UI cells)
+ * blanked, so it reads the message box and menus and not the HUDs' names and levels (the HD cards
+ * show those) or the pictures. The buffer counts as on screen: the battle screen was read from it,
+ * even while the intro shows it through the background with the window down.
+ */
+export function battleText(watched: TextWatched, screen: BattleScreen): TextWatched {
+  return {
+    ...watched,
+    tileMap: watched.tileMap.map((tile, i) => (screen.cells[i] === CELL_UI ? tile : BLANK_TILE)),
+    windowY: ON_SCREEN,
+  };
+}
 /** The HP bar's width in the game, in pixels, and the colour thresholds GetHealthBarColor uses. */
 const BAR_PIXELS = 48;
 const GREEN_FROM = 27;
