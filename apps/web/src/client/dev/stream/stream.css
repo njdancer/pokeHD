@@ -111,7 +111,7 @@
 .qs[data-mode="talk"] .qs-paused-pill { display: inline-flex; animation: qs-pop .5s var(--ease); }
 
 /* ---------- play: interleaved stream ---------- */
-.qs .qs-stream { left: 604px; top: 200px; width: 744px; height: 852px; display: flex; flex-direction: column; padding: 20px 26px 22px 30px; }
+.qs .qs-stream { left: 604px; top: 200px; width: 744px; height: 468px; display: flex; flex-direction: column; padding: 20px 26px 22px 30px; }
 .qs .qs-streamhead { display: flex; align-items: center; gap: 14px; flex: none; margin-bottom: 8px; }
 .qs .qs-streamhead .qs-who { font-family:"Fredoka",sans-serif; font-weight:700; font-size: 36px; color: var(--blue); }
 .qs .qs-dots { display: inline-flex; gap: 7px; }
@@ -124,6 +124,8 @@
 }
 .qs .qs-flow li { flex: none; }
 .qs .qs-t { font-size: 30px; line-height: 1.22; padding: 2px 0 2px 22px; border-left: 6px solid #b9d8f0; color: var(--muted); }
+/* Older thoughts keep to two lines, so the shorter feed (the dev chat sits under it) still shows a few. */
+.qs .qs-t:not(.qs-now, .qs-cut) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .qs .qs-t.qs-now {
   color: var(--ink); font-size: 35px; font-weight: 800; border-left-color: var(--blue);
   background: var(--haiku-tint); border-radius: 0 18px 18px 0; padding: 10px 16px 12px 22px;
@@ -137,6 +139,31 @@
 .qs .qs-a.qs-new { color: var(--accent-dark); }
 .qs .qs-a.qs-new .qs-ic { background: var(--accent); border-color: var(--accent-dark); color: #fff; }
 .qs .qs-a.qs-new .qs-tagnew { font-size: 22px; background: var(--accent); color: #fff; border-radius: 10px; padding: 1px 10px; letter-spacing: .06em; }
+
+/* ---------- play: the dev chat under the feed (Haiku and Opus, latest few messages) ---------- */
+.qs .qs-threadcard { left: 604px; top: 692px; width: 744px; height: 360px; display: flex; flex-direction: column; padding: 16px 26px 20px 26px; }
+.qs .qs-threadcard .qs-streamhead { gap: 10px; margin-bottom: 6px; }
+.qs .qs-threadcard .qs-who.qs-o { color: var(--accent); }
+.qs .qs-amp { font-family:"Fredoka",sans-serif; font-weight: 600; font-size: 30px; color: var(--muted); }
+.qs .qs-thread {
+  list-style: none; margin: 0; padding: 0; flex: 1; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 8px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 32px); mask-image: linear-gradient(to bottom, transparent 0, #000 32px);
+}
+.qs .qs-tm { flex: none; display: flex; align-items: flex-start; gap: 12px; padding: 7px 14px 8px 8px; border-radius: 18px; border: 3px solid transparent; opacity: .78; }
+.qs .qs-tm.qs-from-haiku { background: var(--haiku-tint); }
+.qs .qs-tm.qs-from-opus { background: var(--opus-tint); }
+.qs .qs-tm.qs-latest { opacity: 1; }
+.qs .qs-tm.qs-latest.qs-from-haiku { border-color: var(--blue); }
+.qs .qs-tm.qs-latest.qs-from-opus { border-color: var(--accent); }
+.qs .qs-tm .qs-av { width: 40px; height: 40px; font-size: 22px; border-width: 3px; box-shadow: 0 0 0 3px var(--edge); margin-top: 1px; }
+.qs .qs-tmtext {
+  margin: 0; min-width: 0; font-size: 27px; line-height: 1.25; font-weight: 700; color: var(--ink);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+.qs .qs-tm.qs-latest .qs-tmtext { -webkit-line-clamp: 3; }
+.qs .qs-tmtext .qs-chip { display: inline-block; font-size: 20px; line-height: 1.35; margin-right: 10px; vertical-align: 3px; font-weight: 900; }
+.qs .qs-thread .qs-none { padding: 2px 0 2px 4px; }
 
 /* ---------- right column ---------- */
 .qs .qs-info, .qs .qs-bugs { left: 1372px; width: 520px; transition: left .7s var(--ease), width .7s var(--ease), top .7s var(--ease), height .7s var(--ease); }
@@ -229,10 +256,12 @@
 .qs .qs-chip { color: #fff; border-radius: 10px; padding: 0 10px; font-size: 22px; letter-spacing: .04em; text-transform: uppercase; }
 .qs .qs-chip.qs-c-bug { background: var(--red); } .qs .qs-chip.qs-c-fix { background: var(--green); } .qs .qs-chip.qs-c-har { background: #7a5bc4; }
 .qs .qs-chip.qs-c-q { background: var(--blue); } .qs .qs-chip.qs-c-note { background: var(--muted); }
+.qs .qs-chip.qs-c-prompt { background: var(--gold); }
 .qs .qs-msg.qs-latest .qs-bubble { box-shadow: 0 0 0 6px rgba(224,112,42,.22); }
 
 /* ---------- mode transitions ---------- */
-.qs .qs-stream { transition: opacity .5s var(--ease), transform .7s var(--ease); }
+.qs .qs-stream, .qs .qs-threadcard { transition: opacity .5s var(--ease), transform .7s var(--ease); }
+.qs[data-mode="talk"] .qs-threadcard { opacity: 0; transform: translateY(40px); pointer-events: none; }
 .qs .qs-chat { transition: opacity .5s var(--ease) .15s, transform .7s var(--ease); opacity: 0; transform: translateX(-60px); pointer-events: none; }
 .qs .qs-chat .qs-msg { opacity: 0; transform: translateY(24px); transition: opacity .4s var(--ease), transform .5s var(--ease); }
 .qs[data-mode="talk"] .qs-stream { opacity: 0; transform: translateY(40px); pointer-events: none; }
