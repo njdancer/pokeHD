@@ -12,3 +12,4 @@ export * from "./text/message.ts";
 export * from "./colour/sgb.ts";
 export * from "./dex/dex.ts";
 export * from "./dex/growth.ts";
+export * from "./trainer-card/badges.ts";

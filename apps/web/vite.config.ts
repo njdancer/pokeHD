@@ -77,6 +77,10 @@ function buildId(): string {
 export default defineConfig({
   plugins: [devRom(), devShots(), react(), cloudflare()],
   define: { __POKEHD_BUILD__: JSON.stringify(buildId()) },
+  // POKEHD_NO_HMR=1 (the QA stream): no hot reload, so changing the code never reloads the game
+  // mid-play and drops it back to an old resume point. Fixes land when the player restarts the game,
+  // which takes a fresh resume point first.
+  ...(process.env["POKEHD_NO_HMR"] && { server: { hmr: false } }),
   environments: {
     client: {
       build: {
