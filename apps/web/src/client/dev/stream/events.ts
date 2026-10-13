@@ -40,7 +40,7 @@ export interface ActionEvent {
   label: string;
 }
 
-export type ChatTag = "bug" | "fixed" | "harness" | "question" | "note";
+export type ChatTag = "bug" | "fixed" | "harness" | "question" | "note" | "prompt";
 
 export interface ChatEvent {
   t: "chat";
