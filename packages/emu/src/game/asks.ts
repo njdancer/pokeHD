@@ -114,6 +114,22 @@ export function twoOptions(rom: Uint8Array, menu: number): [string, string] {
   return [decodeText(bytes.subarray(0, split)), decodeText(bytes.subarray(split + 1))];
 }
 
+/**
+ * The bag list the game is opening is the Poké Mart's sell list: DisplayListMenuID was called
+ * from DisplayPokemartDialogue_'s sell loop (its return address, at the stack's top on entry, is
+ * there). The Start menu's bag, the battle's and the sell list are all the same ITEMLISTMENU on
+ * wNumBagItems. hHalveItemPrices doesn't tell them apart: the Mart sets it only at the quantity
+ * prompt after the list, it stays set when the player walks out, and its byte is also
+ * hFourTileSpriteCount, which loading a map's sprites sets (QA bug 34: the battle bag in Mt. Moon
+ * read as the sell list).
+ */
+export function sellList(g: GameBoy): boolean {
+  const loop = SYMBOLS["DisplayPokemartDialogue_.sellMenuLoop"];
+  if (g.read(addr("hLoadedROMBank")) !== loop.bank) return false;
+  const back = readWord(g, g.registers.sp);
+  return back > loop.address && back <= addr("DisplayPokemartDialogue_.unsellableItem");
+}
+
 export class GameAsks {
   readonly #options: GameAsksOptions;
   readonly #standIns: StandIn[];
@@ -237,7 +253,7 @@ export class GameAsks {
       const entries = Array.from({ length: count }, (_, i) => ({ item: g.read(list + 1 + i * 2), quantity: g.read(list + 2 + i * 2) }));
       const where = list === addr("wNumBagItems") ? "bag" : list === addr("wNumBoxItems") ? "pc-items" : null;
       if (!where) return null;
-      return { kind: "items", list: where, entries, inBattle, selling: g.read(addr("hHalveItemPrices")) !== 0, text: textBoxText(g) };
+      return { kind: "items", list: where, entries, inBattle, selling: !inBattle && where === "bag" && sellList(g), text: textBoxText(g) };
     }
     if (id === PRICEDITEMLISTMENU) return { kind: "mart", entries: [...g.readBytes(list + 1, count)] };
     if (id === PCPOKEMONLISTMENU) {
