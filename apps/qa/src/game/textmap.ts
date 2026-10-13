@@ -1,7 +1,7 @@
 // The player's view of the world as text: one character per step (16×16 px square) around them,
 // only as far as the screen shows, built from the map data the ROM holds (walls, grass, water,
 // doors) and the people standing about. Nothing hidden: no hidden items, nothing off screen.
-import { localStep, globalStep, SPRITE_NAMES, type MapData, type StitchedWorld, type WorldData } from "@pokehd/rom";
+import { localStep, globalStep, SPRITE_NAMES, type MapData, type StitchedWorld, type Tileset, type WorldData } from "@pokehd/rom";
 import type { StateLite } from "./screen-read.ts";
 
 /** How far the map reaches from the player, in steps; about what the portrait HD camera shows. */
@@ -17,6 +17,8 @@ const LEGEND: Record<string, string> = {
   "@": "you",
   ".": "walkable",
   "#": "blocked",
+  "^": "raised floor (no step straight between ^ and the lower floor, grass or water beside it; use stairs /)",
+  "/": "stairs between floor heights",
   '"': "tall grass",
   "~": "water",
   D: "door/stairs/exit",
@@ -40,10 +42,26 @@ function tileAt(world: WorldData, map: MapData, x: number, y: number): number {
   return tileset.blocks[block * 16 + (((y & 1) * 2 + 1) * 4 + (x & 1) * 2)]!;
 }
 
+/**
+ * The raised floor of a tileset whose floor has two heights: the one tile in every one of the ROM's
+ * land pair collisions (TilePairCollisionsLand: CAVERN's light floor 0x05, the Safari Zone's 0x2e),
+ * and the lower tiles it can't be stepped to or from directly. The game refuses a step between such
+ * a pair (CheckForTilePairCollisions); the HD view shows the seam as a rock face.
+ */
+function heights(tileset: Tileset): { raised: number; lower: Set<number> } | null {
+  const pairs = tileset.semantics.pairCollisions.filter((p) => !p.surfing);
+  const first = pairs[0];
+  if (!first) return null;
+  const raised = [first.tileA, first.tileB].find((t) => pairs.every((p) => p.tileA === t || p.tileB === t));
+  if (raised === undefined) return null;
+  return { raised, lower: new Set(pairs.map((p) => (p.tileA === raised ? p.tileB : p.tileA))) };
+}
+
 function terrain(world: WorldData, map: MapData, x: number, y: number): string {
   const tileset = world.tilesets[map.tileset]!;
   const sem = tileset.semantics;
   const tile = tileAt(world, map, x, y);
+  const levels = heights(tileset);
   const inside = x >= 0 && y >= 0 && x < map.widthBlocks * 2 && y < map.heightBlocks * 2;
   if (inside) {
     if (map.warps.some((w) => w.x === x && w.y === y)) return "D";
@@ -54,6 +72,12 @@ function terrain(world: WorldData, map: MapData, x: number, y: number): string {
   if (ledge) return ledge.facing === "down" ? "v" : ledge.facing === "left" ? "<" : ">";
   if (!sem.walkable.includes(tile)) return "#";
   if (sem.grass !== null && tile === sem.grass) return '"';
+  if (levels) {
+    if (tile === levels.raised) return "^";
+    // Floor of neither height beside raised floor (stone steps, Safari Zone stairs) joins the two.
+    const beside = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => tileAt(world, map, x + dx!, y + dy!) === levels.raised);
+    if (!levels.lower.has(tile) && beside) return "/";
+  }
   return ".";
 }
 
