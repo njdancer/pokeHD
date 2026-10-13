@@ -27,6 +27,8 @@ const MenuLive = lazy(() => import("./dev/MenuLive.tsx").then((m) => ({ default:
 const DialogDev = lazy(() => import("./dev/DialogDev.tsx").then((m) => ({ default: m.DialogDev })));
 // The relief editor: paint which way each pixel faces, for training data only (never used in play).
 const ReliefEditor = lazy(() => import("./tools/relief/ReliefEditor.tsx").then((m) => ({ default: m.ReliefEditor })));
+// The QA stream's broadcast overlay (Haiku plays, Opus fixes), captured by OBS at 1920×1080.
+const StreamPage = lazy(() => import("./dev/stream/StreamPage.tsx").then((m) => ({ default: m.StreamPage })));
 const StyleCompare = lazy(() => import("./dev/StyleCompare.tsx").then((m) => ({ default: m.StyleCompare })));
 // Dev-only tools, left out of production builds.
 const MapViewer = import.meta.env.DEV
@@ -61,6 +63,7 @@ export function Root() {
   if (path === "/dev/menu/live") return <Suspense><MenuLive /></Suspense>;
   if (path === "/dev/dialog") return <Suspense><DialogDev /></Suspense>;
   if (path === "/tools/relief") return <Suspense><ReliefEditor /></Suspense>;
+  if (path === "/dev/stream") return <Suspense><StreamPage /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;
   if (Shots && path === "/dev/shots") return <Suspense><Shots /></Suspense>;
   if (MapViewer && location.hash === "#maps") return <Suspense><MapViewer /></Suspense>;

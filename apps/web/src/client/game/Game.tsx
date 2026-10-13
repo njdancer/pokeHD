@@ -100,7 +100,16 @@ const classic = new URLSearchParams(location.search).has("classic");
 declare global {
   interface Window {
     /** Set with ?stats, for scripted play-throughs. */
-    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly frames: number; read(address: number, length: number): Promise<number[]>; readonly page: object; readonly slow: SlowFrame[] };
+    __pokehd?: {
+      readonly state: OverworldState | null;
+      readonly inWorld: boolean;
+      readonly frames: number;
+      read(address: number, length: number): Promise<number[]>;
+      /** The team, badges, play time and the rest, as the Pokédex menu reads them (the stream page's party). */
+      snapshot(): Promise<GameSnapshot>;
+      readonly page: object;
+      readonly slow: SlowFrame[];
+    };
   }
 }
 /** A display frame over 50 ms, with what the page was doing (for ?stats perf checks). */
@@ -849,6 +858,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           },
           /** For a stuck test's report: game memory, and what the page holds back. */
           read: (address: number, length: number) => h.read([[address, length]]).then(([bytes]) => Array.from(bytes!)),
+          snapshot: async () => decodeSnapshot(await h.read(SNAPSHOT_RANGES)),
           get page() {
             return { held: heldRef.current, onboarding: onboardingRef.current?.phase ?? null, starter: !!starterRef.current, script: scriptRef.current?.id ?? null };
           },
