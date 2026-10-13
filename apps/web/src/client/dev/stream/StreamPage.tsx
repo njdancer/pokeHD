@@ -1,22 +1,19 @@
-// The QA stream's broadcast page (/dev/stream): Haiku plays pokeHD in the game gap while the
+// The QA stream's overlay (/dev/stream/overlay, framed by StreamHost at /dev/stream): Haiku plays pokeHD in the game gap while the
 // overlay shows its thoughts and taps, its chat with Opus, the bug tracker, and the team and
 // badges from the game itself. A port of the approved design (qa-stream v3, "Side Stage").
 // The stage is 1920×1080, scaled to fit the window (1:1 at 1920×1080, for OBS).
 // URL options: ?bus=http://localhost:4545 (the harness's event bus), ?game=/?stats&qa (the game
-// in the gap; same origin, so the page can read its team), ?handle=@someone (shown in the header; Nick's by default, ?handle= hides it).
+// in the gap, read through the host page: same origin, so the overlay can read its team),
+// ?handle=@someone (shown in the header; Nick's by default, ?handle= hides it).
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { GameSnapshot, TeamMon } from "@pokehd/emu";
 import { MAP_NAMES } from "@pokehd/rom";
 import { useBus } from "./bus.ts";
 import type { ActionEvent, ActionKind, Bug, ChatEvent, ChatTag, StreamMode, ThoughtEvent } from "./events.ts";
 import { badgePictures, monPic, useGameSnapshot, useRom } from "./game.ts";
+import { BUS, HANDLE, useFit, useFonts } from "./stage.ts";
 import "./stream.css";
 
-const query = new URLSearchParams(location.search);
-const BUS = query.get("bus") ?? "http://localhost:4545";
-const GAME = query.get("game") ?? "/?stats&qa";
-const HANDLE = query.get("handle") ?? "@nj_dancer";
-const FONTS = "https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800;900&display=swap";
 /** How long the mode change's slide takes (the stage's .7s transitions, plus a little). */
 const SETTLE_MS = 760;
 
@@ -33,34 +30,13 @@ function mapName(map: number): string {
 
 const playTimeOf = (s: GameSnapshot) => `${s.playTime.hours}:${String(s.playTime.minutes).padStart(2, "0")}`;
 
-function useFonts() {
-  useEffect(() => {
-    if (document.querySelector(`link[href="${FONTS}"]`)) return;
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = FONTS;
-    document.head.append(link);
-  }, []);
-}
-
-/** The 1920×1080 stage's scale for the window. */
-function useFit(): number {
-  const fit = () => Math.min(innerWidth / 1920, innerHeight / 1080);
-  const [scale, setScale] = useState(fit);
-  useEffect(() => {
-    const onResize = () => setScale(fit());
-    addEventListener("resize", onResize);
-    return () => removeEventListener("resize", onResize);
-  }, []);
-  return scale;
-}
-
 export function StreamPage() {
   useFonts();
   const scale = useFit();
   const bus = useBus(BUS);
   const rom = useRom();
-  const frame = useRef<HTMLIFrameElement>(null);
+  // The game is the host page's (StreamHost), beside this frame.
+  const frame = useMemo(() => ({ current: parent !== window ? (parent.document.getElementById("game") as HTMLIFrameElement | null) : null }), []);
   const game = useGameSnapshot(frame);
   const stage = useRef<HTMLDivElement>(null);
   const mode: StreamMode = bus.status?.mode === "talk" ? "talk" : "play";
@@ -87,17 +63,6 @@ export function StreamPage() {
       <div className="qs-fit" style={{ transform: `translate(-50%,-50%) scale(${scale})` }}>
         <div className="qs" ref={stage} data-mode={mode}>
           <div data-gap>
-            <iframe id="game" className="qs-game" ref={frame} src={GAME} title="pokeHD" allow="autoplay; fullscreen; gamepad" />
-            <div className="qs-veil">
-              <div className="qs-veil-badge qs-display">
-                <span className="qs-pausebars">
-                  <i />
-                  <i />
-                </span>
-                PAUSED
-              </div>
-              <div className="qs-veil-sub">Haiku is talking to Opus</div>
-            </div>
           </div>
 
           <header className="qs-card qs-head">

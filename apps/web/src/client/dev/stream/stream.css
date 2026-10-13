@@ -1,4 +1,4 @@
-/* The QA stream's overlay (/dev/stream): a port of the approved design, qa-stream v3 "Side Stage"
+/* The QA stream (/dev/stream and its overlay, /dev/stream/overlay): a port of the approved design, qa-stream v3 "Side Stage"
    (v2.html). The stage is 1920×1080 and scales to fit; OBS captures it at 1:1. */
 .qs-shell { position: fixed; inset: 0; overflow: hidden; background: #2a1d14; }
 .qs-fit { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: center center; transform: translate(-50%,-50%); }
@@ -49,6 +49,9 @@
     linear-gradient(160deg, #78c6a3 0%, #4c9fb8 45%, #3b5f9a 100%);
   box-shadow: 0 0 0 6px var(--ball-ink), 0 0 0 12px var(--edge), 0 18px 0 12px var(--line), 0 30px 40px rgba(62,42,28,.2);
 }
+/* The host page (StreamHost): the overlay's frame fills the stage, the game's gap sits above it. */
+.qs > .qs-overlay { position: absolute; inset: 0; width: 1920px; height: 1080px; border: 0; display: block; z-index: 0; }
+.qs > .qs-overlay ~ [data-gap] { z-index: 1; }
 .qs .qs-game { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: transparent; }
 .qs .qs-gap-idle {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
