@@ -29,6 +29,18 @@ export const TOOLS = {
     description: "Tap the screen at (x, y) in screen pixels (528×1000, origin top left). Returns what's on screen afterwards.",
     shape: { x: z.number(), y: z.number(), what: z.string().describe('What you\'re tapping, e.g. "YES" or "the Pokédex".') },
   },
+  swipe: {
+    description:
+      "Drag one finger across the screen from (x1, y1) to (x2, y2), like a person swiping: to scroll a list, pan a map, or drag something. Coordinates are screen pixels (528×1000). For walking, use joystick instead. Returns what's on screen afterwards.",
+    shape: {
+      x1: z.number(),
+      y1: z.number(),
+      x2: z.number(),
+      y2: z.number(),
+      ms: z.number().min(50).max(2000).optional().describe("How long the drag takes, in milliseconds (default 300)."),
+      what: z.string().describe('What you\'re swiping, e.g. "pan the map left" or "scroll the item list".'),
+    },
+  },
   joystick: {
     description:
       "Walk with the on-screen joystick: one arrow per step, in order, e.g. \"↑↑↑→→\" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Stops early if something interrupts you (a wall, a door, someone talking, a battle). Usually stay within about one screen's worth of steps so you can see where you're going; longer routes are allowed when you're sure. Returns what's on screen afterwards.",
@@ -142,6 +154,11 @@ export class Toolbox {
           const y = Number(input["y"]);
           act("tap", `tap ${String(input["what"] ?? `${x},${y}`)}`);
           return text((await this.driver.tap(x, y)).text);
+        }
+        case "swipe": {
+          const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((k) => Number(input[k]));
+          act("tap", `swipe ${String(input["what"] ?? `${x1},${y1} → ${x2},${y2}`)}`);
+          return text((await this.driver.swipe(x1!, y1!, x2!, y2!, Number(input["ms"] ?? 300))).text);
         }
         case "joystick": {
           const moves = parseMoves(String(input["moves"] ?? ""));

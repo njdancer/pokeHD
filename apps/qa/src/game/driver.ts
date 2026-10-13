@@ -577,6 +577,22 @@ export function createDriver(opts: DriverOptions): GameDriver {
       });
     },
 
+    swipe(x1, y1, x2, y2, ms) {
+      return act(async () => {
+        const from = await toPage(x1, y1);
+        const to = await toPage(x2, y2);
+        const steps = Math.max(4, Math.round(ms / 16));
+        await touch("touchStart", from);
+        for (let i = 1; i <= steps; i++) {
+          const t = i / steps;
+          await touch("touchMove", { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+          await sleep(ms / steps);
+        }
+        await sleep(40);
+        await touch("touchEnd");
+      });
+    },
+
     async joystick(moves: Move[]) {
       const runs = moves.map((m) => ({ direction: m.direction, steps: Math.max(1, Math.min(20, Math.round(m.tiles))) })).filter((m) => m.direction in DIRS);
       const total = runs.reduce((n, r) => n + r.steps, 0);
