@@ -14,6 +14,7 @@ export * from "./state/decode.ts";
 export * from "./state/battle.ts";
 export * from "./state/battle-decode.ts";
 export * from "./state/battle-screen.ts";
+export * from "./state/evolution.ts";
 export * from "./state/text.ts";
 export * from "./state/text-decode.ts";
 export * from "./gifts/desk.ts";

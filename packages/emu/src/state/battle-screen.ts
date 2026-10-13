@@ -130,8 +130,8 @@ export interface BattleScreen {
 
 const byte = (bytes: Uint8Array, i: number) => bytes[i] ?? 0;
 
-/** Decodes one 2bpp 8×8 tile row into colour numbers. */
-function tileRow(tiles: Uint8Array, tile: number, row: number, out: Uint8Array, at: number, flip = false) {
+/** Decodes one 2bpp 8×8 tile row into colour numbers (row `row` of tile `tile` in `tiles`). */
+export function tileRow(tiles: Uint8Array, tile: number, row: number, out: Uint8Array, at: number, flip = false) {
   const lo = byte(tiles, tile * 16 + row * 2);
   const hi = byte(tiles, tile * 16 + row * 2 + 1);
   for (let x = 0; x < 8; x++) {
