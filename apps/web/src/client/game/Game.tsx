@@ -92,6 +92,8 @@ import { PerfSampler } from "../perf.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
+/** ?qa: the QA player's game (apps/qa). Stats stay readable to the harness but off screen, since they show coordinates. */
+const qaRun = new URLSearchParams(location.search).has("qa");
 /** Dev: ?render=0 skips the 3D renderer (the page and its UI without a GPU, e.g. headless checks). */
 const noRender = import.meta.env.DEV && new URLSearchParams(location.search).get("render") === "0";
 /** ?classic: the game's own title screen and naming screens, as on the Game Boy (scripted play-throughs use it). */
@@ -1280,6 +1282,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         <pre
           className="game-stats"
           data-testid="stats"
+          style={qaRun ? { display: "none" } : undefined}
           data-fps={stats.fps.toFixed(1)}
           data-map={s?.mapId}
           data-x={s?.player.x}

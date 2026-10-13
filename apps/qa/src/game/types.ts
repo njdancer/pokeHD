@@ -28,13 +28,21 @@ export interface GameStatus {
   fps: number | null;
 }
 
+export interface RestartOptions {
+  from?: "now" | "save";
+}
+
 export interface GameDriver {
   /** The game's on-screen size in CSS pixels: taps use this coordinate space, and screenshots match it. */
   readonly size: { width: number; height: number };
   /** Launches the browser on the stream page and waits for the game to be ready for a first touch. */
   start(): Promise<Outcome>;
-  /** Reloads the game (picking up new code); it resumes from its autosave. */
-  restart(): Promise<Outcome>;
+  /**
+   * Reloads the game (picking up new code). `from: "now"` (the default) comes back exactly where
+   * it was, through the game's own resume point, freshly taken first; `from: "save"` drops the
+   * resume point and goes back to the last in-game save (the menu's SAVE, or an autosave).
+   */
+  restart(opts?: RestartOptions): Promise<Outcome>;
   /** Marks the start of a player turn in the recording. */
   markTurn(turn: number): void;
   tap(x: number, y: number): Promise<Outcome>;
