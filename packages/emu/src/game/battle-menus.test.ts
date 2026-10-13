@@ -113,6 +113,45 @@ describe.skipIf(!existsSync(ROM_PATH))("the battle's menus (ROM)", () => {
     expect(asked.map((a) => a.kind)).toEqual(["menu", "menu"]);
   }, 30_000);
 
+  it("asks when resumed at the Game Boy's own battle menu (a point from a page without the HD menus)", async () => {
+    // Play to the battle menu with the Game Boy's menus, and wait there a while.
+    const gb = await GameBoy.create({ rom, wasmBinary: new Uint8Array(readFileSync(WASM_PATH)) });
+    gb.loadState(start);
+    setParty(gb, rom, [{ species: SQUIRTLE, level: 12 }]);
+    gb.write(addr("wCurOpponent"), RATTATA);
+    gb.write(addr("wCurEnemyLevel"), 2);
+    let waiting = 0;
+    const off = gb.addHook("HandleMenuInput_.getJoypadState", (g) => {
+      if (g.read(addr("wIsInBattle")) !== 0) waiting++;
+    });
+    for (let i = 0; i < 4000 && waiting < 30; i++) {
+      gb.setButtons(i % 16 < 2 ? Button.A : 0);
+      gb.runFrame();
+      // Stop pressing once the menu waits, so A doesn't pick FIGHT.
+      if (waiting > 0) gb.setButtons(0);
+    }
+    off();
+    expect(waiting).toBeGreaterThanOrEqual(30);
+    const point = gb.saveState();
+
+    // A page with the HD menus resumes there.
+    const resumed = await GameBoy.create({ rom, wasmBinary: new Uint8Array(readFileSync(WASM_PATH)) });
+    resumed.loadState(point);
+    const asked: BattleAsk[] = [];
+    const menus = new BattleMenus(resumed, { rom, onAsk: (_, ask) => asked.push(ask) });
+    for (let i = 0; i < 10 && !asked.length; i++) resumed.runFrame();
+    expect(asked.map((a) => a.kind)).toEqual(["menu"]);
+    // And the answer goes through: RUN, from the left column the cursor was in.
+    menus.answer(menus.asking!.id, { choice: "run" });
+    let left = false;
+    for (let i = 0; i < 1500 && !left; i++) {
+      resumed.setButtons(i % 16 < 2 ? Button.A : 0);
+      resumed.runFrame();
+      left = r(resumed, "wIsInBattle") === 0;
+    }
+    expect(left).toBe(true);
+  }, 30_000);
+
   it("runs away", async () => {
     const { gb, play } = await battle(() => ({ choice: "run" }));
     let started = false;
