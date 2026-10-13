@@ -58,7 +58,7 @@ try {
 
   for (const [dir, n] of [["down", 2], ["left", 3], ["up", 1], ["right", 4], ["up", 3]] as const) {
     driver.markTurn(turn + 1);
-    show(`joystick ${dir} ${n}`, await driver.joystick(dir, n));
+    show(`joystick ${dir} ${n}`, await driver.joystick([{ direction: dir, tiles: n }]));
   }
   const walkTurn = turn;
   // The bookshelf or whatever is ahead: press A on the pad.
@@ -72,7 +72,7 @@ try {
   console.log("evidence:", await driver.collectEvidence(join(out, "evidence"), turn));
 
   // Restart from now: the same spot. Then from the save: back to the last save (or its start screen).
-  show("joystick down 2 (before restarts)", await driver.joystick("down", 2));
+  show("joystick down 2 (before restarts)", await driver.joystick([{ direction: "down", tiles: 2 }]));
   show("restart (now)", await driver.restart());
   writeFileSync(join(out, "after-restart-now.png"), await driver.screenshot());
   show("restart (save)", await driver.restart({ from: "save" }));

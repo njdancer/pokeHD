@@ -16,7 +16,7 @@ import { describeLayouts, installLayoutLog, type LayoutEntry } from "./layout-lo
 import { composeSheet, MAX_SHEET_FRAMES, pickFrames, Recorder } from "./recorder.ts";
 import { readScreen, type ScreenRead } from "./screen-read.ts";
 import { buildTextMap } from "./textmap.ts";
-import type { Direction, GameDriver, GameStatus, Glitch, Outcome, RestartOptions } from "./types.ts";
+import type { Direction, GameDriver, GameStatus, Glitch, Move, Outcome, RestartOptions } from "./types.ts";
 
 export interface DriverOptions {
   /** The app's origin, e.g. http://localhost:5173. */
@@ -32,6 +32,7 @@ export interface DriverOptions {
   romPath?: string;
 }
 
+const DIRS: Record<Direction, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const GAME_SIZE = { width: 528, height: 1000 } as const;
 /**
  * The stream page's window: 1280×720 so it fits a laptop's screen, at 1.5× so the page (which
@@ -503,71 +504,94 @@ export function createDriver(opts: DriverOptions): GameDriver {
       });
     },
 
-    async joystick(direction: Direction, tiles: number) {
-      const steps = Math.max(1, Math.min(20, Math.round(tiles)));
+    async joystick(moves: Move[]) {
+      const runs = moves.map((m) => ({ direction: m.direction, steps: Math.max(1, Math.min(20, Math.round(m.tiles))) })).filter((m) => m.direction in DIRS);
+      const total = runs.reduce((n, r) => n + r.steps, 0);
       const before = await read();
       const stick = before.joystick;
-      if (!stick) {
+      if (!stick || !runs.length) {
         const o = await outcome(before, before);
-        return { text: `The joystick isn't on screen right now.\n${o.text}` };
+        return { text: `${stick ? "No moves given." : "The joystick isn't on screen right now."}\n${o.text}` };
       }
+      const layoutsFrom = Date.now();
       const centre = { x: stick.x + stick.w / 2, y: stick.y + stick.h / 2 };
-      const [dx, dy] = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[direction];
       const p0 = await toPage(centre.x, centre.y);
       await touch("touchStart", p0);
-      for (const f of [0.3, 0.6, 1]) {
-        await sleep(16);
-        await touch("touchMove", { x: p0.x + dx! * 55 * f, y: p0.y + dy! * 55 * f });
-      }
-      // Hold until the player is on their last step (the game reads the pad only between steps, so
-      // letting go mid-step finishes that step and no more), something else happens, or they stop.
-      // Reads can lag behind a busy page, so the clock lets go too: a step is 16 emulated frames
-      // (8 on the bike), timed from when the player first moves.
-      const start = Date.now();
+      let finger = { dx: 0, dy: 0 };
       const from = before.state;
       const stepFrames = from?.player && (from.player as { transport?: string }).transport === "bike" ? 8 : 16;
       let pos = from ? `${from.player.x},${from.player.y}` : "";
-      let moved = 0;
-      let lastMove = start;
-      let firstMove: number | null = null;
       let prevFrames = before.frames;
-      let prevAt = start;
-      for (;;) {
-        await sleep(15);
-        const r = await read();
-        const s = r.state;
-        const now = Date.now();
-        if (r.frames > prevFrames && now > prevAt) {
-          const fps = ((r.frames - prevFrames) * 1000) / (now - prevAt);
-          emuFps = emuFps * 0.7 + Math.min(70, Math.max(10, fps)) * 0.3;
+      let prevAt = Date.now();
+      let walked = 0;
+      let interrupted = false;
+      for (const run of runs) {
+        // The finger slides to the new direction without lifting, as a thumb does; the game picks
+        // the new direction up between steps.
+        const [dx, dy] = DIRS[run.direction];
+        for (const f of [0.3, 0.6, 1]) {
+          await sleep(16);
+          await touch("touchMove", { x: p0.x + (finger.dx + (dx - finger.dx) * f) * 55, y: p0.y + (finger.dy + (dy - finger.dy) * f) * 55 });
         }
-        prevFrames = r.frames;
-        prevAt = now;
-        const stepMs = (stepFrames * 1000) / emuFps;
-        if (s) {
-          const p = `${s.player.x},${s.player.y}`;
-          if (p !== pos) {
-            pos = p;
-            moved++;
-            lastMove = now;
+        finger = { dx, dy };
+        // Hold until the player is on this run's last step (the game reads the pad only between
+        // steps, so changing direction or letting go mid-step finishes that step and no more),
+        // something else happens, or they stop. Reads can lag behind a busy page, so the clock
+        // moves on too: a step is 16 emulated frames (8 on the bike), timed from the first move.
+        const start = Date.now();
+        let moved = 0;
+        let lastMove = start;
+        let firstMove: number | null = null;
+        for (;;) {
+          await sleep(15);
+          const r = await read();
+          const s = r.state;
+          const now = Date.now();
+          if (r.frames > prevFrames && now > prevAt) {
+            const fps = ((r.frames - prevFrames) * 1000) / (now - prevAt);
+            emuFps = emuFps * 0.7 + Math.min(70, Math.max(10, fps)) * 0.3;
           }
-          if (s.player.step) lastMove = now;
-          if ((s.player.step || moved) && firstMove === null) firstMove = now - (s.player.step ? ((s.player.step as { progress?: number }).progress ?? 0) * stepMs : 0);
-          if (s.mapId !== from?.mapId || s.mode !== "overworld") break;
-          if (s.player.step && moved >= steps - 1) break;
+          prevFrames = r.frames;
+          prevAt = now;
+          const stepMs = (stepFrames * 1000) / emuFps;
+          if (s) {
+            const p = `${s.player.x},${s.player.y}`;
+            if (p !== pos) {
+              pos = p;
+              moved++;
+              walked++;
+              lastMove = now;
+            }
+            if (s.player.step) lastMove = now;
+            if ((s.player.step || moved) && firstMove === null) firstMove = now - (s.player.step ? ((s.player.step as { progress?: number }).progress ?? 0) * stepMs : 0);
+            if (s.mapId !== from?.mapId || s.mode !== "overworld") {
+              interrupted = true;
+              break;
+            }
+            if (s.player.step && moved >= run.steps - 1) break;
+          }
+          if (moved >= run.steps) break;
+          if (firstMove !== null && now - firstMove > (run.steps - 0.5) * stepMs) break;
+          if (now - lastMove > Math.max(900, stepMs * 3)) {
+            interrupted = true; // blocked (or only turned)
+            break;
+          }
         }
-        if (moved >= steps) break;
-        if (firstMove !== null && now - firstMove > (steps - 0.5) * stepMs) break;
-        if (now - lastMove > Math.max(900, stepMs * 3)) break; // blocked (or only turned)
+        if (interrupted) break;
       }
       await touch("touchEnd");
       const after = await settle(150);
       const o = await outcome(before, after);
       const to = after.state;
-      const walked = from && to && to.mapId === from.mapId ? Math.abs(to.player.x - from.player.x) + Math.abs(to.player.y - from.player.y) : null;
-      const note = walked === 0 ? "You didn't move." : walked !== null && walked < steps ? `You moved ${walked} of ${steps} steps.` : "";
-      const debug = process.env["POKEHD_QA_DEBUG"] && from && to ? ` [debug: (${from.player.x},${from.player.y}) → (${to.player.x},${to.player.y}), ${moved} counted, ${Date.now() - start} ms]` : "";
-      return { text: note || debug ? `${note}${debug}\n${o.text}` : o.text };
+      // Steps from where they started, for a straight run; for a path, the steps taken.
+      const straight = runs.length === 1 && from && to && to.mapId === from.mapId ? Math.abs(to.player.x - from.player.x) + Math.abs(to.player.y - from.player.y) : null;
+      const done = straight ?? walked;
+      const sameMap = !!from && !!to && to.mapId === from.mapId && to.mode === "overworld";
+      const note = !sameMap ? "" : done === 0 ? "You didn't move." : done < total ? `You moved ${done} of ${total} steps${interrupted ? " before something stopped you" : ""}.` : "";
+      const debug = process.env["POKEHD_QA_DEBUG"] && from && to ? ` [debug: (${from.player.x},${from.player.y}) → (${to.player.x},${to.player.y}), ${walked} counted]` : "";
+      const log = await (await gameFrame()).evaluate(() => (window as unknown as { __qaLayouts?: LayoutEntry[] }).__qaLayouts ?? []).catch(() => []);
+      const screen = describeLayouts(log, layoutsFrom, Date.now());
+      return { text: [note || debug ? `${note}${debug}` : "", o.text, screen ?? ""].filter(Boolean).join("\n") };
     },
 
     wait(ms) {

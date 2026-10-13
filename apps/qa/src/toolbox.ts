@@ -5,7 +5,7 @@ import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs
 import { z } from "zod";
 import type { Bus } from "./bus.ts";
 import type { ActionEvent, ActionKind, ChatEvent, ChatTag, Severity } from "./events.ts";
-import type { Direction, GameDriver } from "./game/types.ts";
+import type { Direction, GameDriver, Move } from "./game/types.ts";
 
 /** How long the player waits for the developer before carrying on alone. */
 const REPLY_TIMEOUT_MS = 30 * 60_000;
@@ -33,14 +33,18 @@ You must not cheat: no guessing hidden information, no looking things up outside
 Viewers are watching. Before every tool call, write one short sentence (under 20 words) saying what you're doing and why, in a friendly voice. Don't write anything else outside tool calls. Never stop playing: always end with a tool call.`;
 
 /** Tool inputs, as zod shapes (the Claude Code side takes these; the API side converts them to JSON Schema). */
+/** The most steps one joystick turn may take: about four screens. */
+const MAX_STEPS = 40;
+
 export const TOOLS = {
   tap: {
     description: "Tap the screen at (x, y) in screen pixels (528×1000, origin top left). Returns what's on screen afterwards.",
     shape: { x: z.number(), y: z.number(), what: z.string().describe('What you\'re tapping, e.g. "YES" or "the Pokédex".') },
   },
   joystick: {
-    description: "Push the on-screen joystick in a direction for about `tiles` steps (1–8), then let go. Returns what's on screen afterwards.",
-    shape: { direction: z.enum(["up", "down", "left", "right"]), tiles: z.number().int().min(1).max(8) },
+    description:
+      "Walk with the on-screen joystick: one arrow per step, in order, e.g. \"↑↑↑→→\" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Stops early if something interrupts you (a wall, a door, someone talking, a battle). Usually stay within about one screen's worth of steps so you can see where you're going; longer routes are allowed when you're sure. Returns what's on screen afterwards.",
+    shape: { moves: z.string().describe(`Arrows in order, e.g. "↑↑→→→↓". At most ${MAX_STEPS} steps.`) },
   },
   wait: {
     description: "Do nothing for a few seconds (e.g. while text prints or an animation plays). Returns what's on screen afterwards.",
@@ -90,6 +94,24 @@ export interface ToolOutput {
 }
 
 const ARROWS: Record<Direction, string> = { up: "↑", down: "↓", left: "←", right: "→" };
+const STEP: Record<string, Direction> = { "↑": "up", u: "up", "↓": "down", d: "down", "←": "left", l: "left", "→": "right", r: "right" };
+
+/** "↑↑→→→" (or "UURRR", "up up right") into runs of steps, or an error to show the player. */
+export function parseMoves(raw: string): Move[] | string {
+  const cleaned = raw.toLowerCase().replace(/\b(up|down|left|right)\b/g, (w) => w[0]!).replace(/[\s,]+/g, "");
+  const moves: Move[] = [];
+  for (const ch of cleaned) {
+    const direction = STEP[ch];
+    if (!direction) return `moves must be arrows (↑↓←→) or U/D/L/R; "${ch}" isn't one.`;
+    const last = moves.at(-1);
+    if (last?.direction === direction) last.tiles++;
+    else moves.push({ direction, tiles: 1 });
+  }
+  const steps = moves.reduce((n, m) => n + m.tiles, 0);
+  if (!steps) return "moves needs at least one arrow.";
+  if (steps > MAX_STEPS) return `That's ${steps} steps; at most ${MAX_STEPS} at a time.`;
+  return moves;
+}
 
 export class Toolbox {
   readonly bus: Bus;
@@ -130,11 +152,10 @@ export class Toolbox {
           return text((await this.driver.tap(x, y)).text);
         }
         case "joystick": {
-          const direction = input["direction"] as Direction;
-          if (!(direction in ARROWS)) return text("direction must be up, down, left or right.", true);
-          const tiles = Math.max(1, Math.min(8, Math.round(Number(input["tiles"]) || 1)));
-          act("joystick", `joystick ${ARROWS[direction]} ${tiles} tile${tiles === 1 ? "" : "s"}`);
-          return text((await this.driver.joystick(direction, tiles)).text);
+          const moves = parseMoves(String(input["moves"] ?? ""));
+          if (typeof moves === "string") return text(moves, true);
+          act("joystick", `joystick ${moves.map((m) => ARROWS[m.direction].repeat(m.tiles)).join("")}`);
+          return text((await this.driver.joystick(moves)).text);
         }
         case "wait": {
           const seconds = Math.max(0.5, Math.min(10, Number(input["seconds"]) || 1));

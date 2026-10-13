@@ -4,6 +4,12 @@
 
 export type Direction = "up" | "down" | "left" | "right";
 
+/** One leg of a walk: hold the joystick toward `direction` for about `tiles` steps. */
+export interface Move {
+  direction: Direction;
+  tiles: number;
+}
+
 /** What happened after an action, for the player: written from what's on screen, never from hidden state. */
 export interface Outcome {
   /**
@@ -46,8 +52,11 @@ export interface GameDriver {
   /** Marks the start of a player turn in the recording. */
   markTurn(turn: number): void;
   tap(x: number, y: number): Promise<Outcome>;
-  /** Holds the on-screen joystick toward `direction` for about `tiles` steps. */
-  joystick(direction: Direction, tiles: number): Promise<Outcome>;
+  /**
+   * Walks a path with the on-screen joystick, one thumb held down and slid between directions.
+   * Stops early when something interrupts (a wall, a warp, a battle, someone talking).
+   */
+  joystick(moves: Move[]): Promise<Outcome>;
   wait(ms: number): Promise<Outcome>;
   /** The game as it looks now, PNG. */
   screenshot(): Promise<Buffer>;
