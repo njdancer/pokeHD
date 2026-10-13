@@ -362,6 +362,24 @@ export function createDriver(opts: DriverOptions): GameDriver {
         }),
     );
 
+  /**
+   * As when the player switches app: the game takes a fresh resume point, so a reload (or the next
+   * run) comes back exactly here. False if it didn't take one in time; true when not in the world.
+   */
+  async function takeResumePoint(): Promise<boolean> {
+    const frame = await gameFrame();
+    const r = await read().catch(() => null);
+    if (!r?.inWorld) return true;
+    const before = await resumePointTime(frame);
+    await frame.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    const start = Date.now();
+    while ((await resumePointTime(frame)) <= before && Date.now() - start < 10_000) await sleep(200);
+    return (await resumePointTime(frame)) > before;
+  }
+
   async function restart(o: RestartOptions = {}): Promise<Outcome> {
     const from = o.from ?? "now";
     busy++;
@@ -370,18 +388,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const frame = await gameFrame();
       const url = frame.url() && !frame.url().startsWith("about:") ? frame.url() : gameUrl;
       if (from === "now") {
-        // As when the player switches app: the game takes a fresh resume point.
-        const r = await read().catch(() => null);
-        if (r?.inWorld) {
-          const before = await resumePointTime(frame);
-          await frame.evaluate(() => {
-            Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
-            document.dispatchEvent(new Event("visibilitychange"));
-          });
-          const start = Date.now();
-          while ((await resumePointTime(frame)) <= before && Date.now() - start < 10_000) await sleep(200);
-          if ((await resumePointTime(frame)) <= before) notes.push("(The game didn't take a fresh resume point, so it may come back a little earlier.)");
-        }
+        if (!(await takeResumePoint())) notes.push("(The game didn't take a fresh resume point, so it may come back a little earlier.)");
         await navigate(url);
       } else {
         // Leave the game first (it may take a last point on its way out), then drop every point.
@@ -694,6 +701,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
     },
 
     async close() {
+      // Stopping the harness mustn't cost the game any progress: the next run resumes from here.
+      if (context && !(await takeResumePoint().catch(() => false))) console.warn("The game didn't take a resume point before closing; the next run may come back a little earlier.");
       if (poller) clearInterval(poller);
       poller = null;
       await recorder.stop();
