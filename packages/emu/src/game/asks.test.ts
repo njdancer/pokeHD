@@ -108,6 +108,9 @@ describe.skipIf(!existsSync(ROM_PATH))("the game's questions (ROM)", () => {
     expect(menus, "battle menu").toBeGreaterThan(0);
     // The player picks ITEM on the game's battle menu (the HD battle menu's tap does the same).
     frames(gb, 30);
+    // QA bug 34: hHalveItemPrices is left set by a sale at the Mart, and its byte is also
+    // hFourTileSpriteCount (Mt. Moon's item balls). The battle's bag is still not a sell list.
+    gb.write(addr("hHalveItemPrices"), 2);
     gb.setButtons(Button.Down);
     frames(gb, 3);
     gb.setButtons(0);
@@ -118,7 +121,7 @@ describe.skipIf(!existsSync(ROM_PATH))("the game's questions (ROM)", () => {
     play(2000, () => hp(gb, 1) > 4 && menus > 1);
     remove();
     expect(asked.map((a) => a.kind)).toEqual(["items", "party"]);
-    expect(asked[0]).toMatchObject({ kind: "items", list: "bag", inBattle: true, entries: [{ item: ANTIDOTE, quantity: 1 }, { item: POTION, quantity: 3 }] });
+    expect(asked[0]).toMatchObject({ kind: "items", list: "bag", inBattle: true, selling: false, entries: [{ item: ANTIDOTE, quantity: 1 }, { item: POTION, quantity: 3 }] });
     expect(asked[1]).toMatchObject({ kind: "party", purpose: "item", inBattle: true });
     expect(hp(gb, 1)).toBe(24);
     expect(r(gb, "wNumBagItems", 4)).toBe(2);
@@ -228,7 +231,7 @@ describe.skipIf(!existsSync(ROM_PATH))("the game's questions (ROM)", () => {
   }, 30_000);
 
   it("cancels a list with carry, as B does", async () => {
-    const { gb, play } = await game(() => null);
+    const { gb, asked, play } = await game(() => null);
     let carry: number | undefined;
     SafePoint.of(gb).enqueue({
       scratch: [],
@@ -239,6 +242,8 @@ describe.skipIf(!existsSync(ROM_PATH))("the game's questions (ROM)", () => {
             g.write(addr("wListMenuID"), ITEMLISTMENU);
             g.write(addr("wListPointer"), addr("wNumBagItems") & 0xff);
             g.write(addr("wListPointer") + 1, addr("wNumBagItems") >> 8);
+            // Left over from a sale: not a sell list for that (QA bug 34).
+            g.write(addr("hHalveItemPrices"), 2);
           },
           after: (_g, regs) => void (carry = regs.af & CARRY),
         },
@@ -246,5 +251,30 @@ describe.skipIf(!existsSync(ROM_PATH))("the game's questions (ROM)", () => {
     });
     play(300, () => carry !== undefined);
     expect(carry).toBe(CARRY);
+    expect(asked).toMatchObject([{ kind: "items", list: "bag", inBattle: false, selling: false }]);
   });
+
+  // QA bug 34: the sell list is told by who called the list (the Mart's sell loop), not by
+  // hHalveItemPrices, which the Mart sets only at the quantity after it.
+  it("knows the Poké Mart's sell list from its caller", async () => {
+    const { gb, asked, play } = await game(() => null);
+    gb.write(addr("hHalveItemPrices"), 0);
+    const mart = SYMBOLS.DisplayPokemartDialogue_;
+    SafePoint.of(gb).enqueue({
+      scratch: [],
+      steps: [{ routine: "Bankswitch", registers: () => ({ bc: mart.bank << 8, hl: mart.address }) }],
+    });
+    // BUY / SELL / QUIT is the game's own menu: down to SELL, then A through its words.
+    play(120);
+    gb.setButtons(Button.Down);
+    play(3);
+    gb.setButtons(0);
+    play(10);
+    for (let i = 0; i < 1500 && asked.length === 0; i++) {
+      gb.setButtons(i % 16 < 2 ? Button.A : 0);
+      play(1);
+    }
+    gb.setButtons(0);
+    expect(asked[0]).toMatchObject({ kind: "items", list: "bag", inBattle: false, selling: true });
+  }, 30_000);
 });
