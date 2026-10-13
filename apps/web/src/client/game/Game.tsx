@@ -78,7 +78,7 @@ import { IntroStage } from "./IntroStage.tsx";
 import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
 import { LockScreen } from "./LockScreen.tsx";
 import { Starter, type StartChoice } from "./onboarding.ts";
-import { newScriptView, scriptView, type ScriptView } from "./script-view.ts";
+import { newScriptView, scriptTap, scriptView, type ScriptView } from "./script-view.ts";
 import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
@@ -561,8 +561,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         },
         onEraseAnswered: () => setErasing(null),
         ...(custom ? { onNameAsk: (ask: NameAsk) => setNameAsk(ask) } : {}),
-        onScriptMessage: ({ id, message }) => {
-          scriptRef.current = newScriptView(id, message);
+        onScriptMessage: ({ id, message, letterFrames }) => {
+          scriptRef.current = newScriptView(id, message, letterFrames);
           // All of it fits in one box: the game can print the rest while the player reads.
           if (scriptRef.current.boxes.length <= 1) host?.readOnMessage(id);
         },
@@ -1102,20 +1102,17 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   /**
    * Reads on in a whole message from the script: its next box, or done with it. A message already
    * read stays up while the game finishes it (scriptView), and taps on it go nowhere meanwhile:
-   * one reaching the game as it closes the box would start the talk over.
+   * one reaching the game as it closes the box would start the talk over. Nor do taps on a box
+   * too new to have been read (scriptTap).
    */
   function readOnScript(): boolean {
     const script = scriptRef.current;
     const host = hostRef.current;
-    if (!script || script.ended || !host) return false;
-    if (script.closed) return true;
-    if (script.index < script.boxes.length - 1) {
-      if (++script.index === script.boxes.length - 1) host.readOnMessage(script.id);
-    } else {
-      script.closed = true;
-      host.closeMessage(script.id);
-    }
-    return true;
+    if (!script || !host) return false;
+    const tap = scriptTap(script);
+    if (tap === "next" && script.index === script.boxes.length - 1) host.readOnMessage(script.id);
+    if (tap === "close") host.closeMessage(script.id);
+    return tap !== "none";
   }
 
   /** The TextOverlay's buttons: a tapped choice, or a button pressed the game's own way. */
