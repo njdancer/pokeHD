@@ -1,11 +1,12 @@
 // Turns what the emulator reports during a battle into what the HD battle layer draws: the
 // battle screen's pictures and sprites, coloured with each side's SGB palette (p2-battles).
 import {
-  BATTLE_SCREEN_WATCHES, BattleDecoder, BattleScreenReader, CELL_UI, battleTransition,
-  type BattleScreen, type BattleScreenWatched, type BattleState, type BattleWatched, type ScreenText, type TextBox, type TextWatched, type Watch,
+  BATTLE_SCREEN_WATCHES, BattleDecoder, BattleScreenReader, CELL_SCENE, CELL_UI, EVOLUTION_WATCHES, EvolutionReader, battleTransition, evolutionShown,
+  type BattleScreen, type BattleScreenWatched, type BattleState, type BattleWatched, type EvolutionScreen, type EvolutionWatched, type ScreenText, type TextBox,
+  type TextWatched, type Watch,
 } from "@pokehd/emu";
 import type { BattleView, Side } from "@pokehd/engine/battle";
-import { battlePalette, pokedexNumber, readSgbPalettes, type SgbPalette } from "@pokehd/rom";
+import { battlePalette, pokedexNumber, readSgbPalettes, SGB_PAL, type SgbPalette } from "@pokehd/rom";
 import { fanFrame } from "../colour/fan-set.ts";
 import type { BattleScene } from "./screen.ts";
 
@@ -24,6 +25,24 @@ export class BattleColours {
   constructor(rom: Uint8Array) {
     this.#rom = rom;
     this.#palettes = readSgbPalettes(rom);
+  }
+
+  /**
+   * The evolution screen's view: the Pokémon alone, in its species' palette, or PAL_BLACK's
+   * while it swaps (EvolveMon), as the Super Game Boy shows it.
+   */
+  evolution(evo: EvolutionScreen, lcd: Uint8Array | undefined): BattleView {
+    const ramp = this.#palettes[evo.silhouette ? SGB_PAL.BLACK : battlePalette(this.#rom, evo.species)]!;
+    const art = evo.silhouette ? null : mirroredFan(pokedexNumber(this.#rom, evo.species));
+    return {
+      enemy: null,
+      player: null,
+      ramps: { player: ramp, enemy: ramp },
+      objects: [],
+      palettes: registers(lcd),
+      origin: { x: 0, y: 0 },
+      evolving: { pixels: evo.pixels, version: evo.version, ramp, art },
+    };
   }
 
   /** Call when a battle ends, so the next starts afresh. */
@@ -67,6 +86,43 @@ export class BattleColours {
   }
 }
 
+/** rBGP, rOBP0 and rOBP1 from the LCD registers (rLCDC on), or as they are outside fades and flashes. */
+function registers(lcd: Uint8Array | undefined): [number, number, number] {
+  return lcd ? [lcd[7] ?? NORMAL_BGP, lcd[8] ?? 0, lcd[9] ?? 0] : [NORMAL_BGP, 0, 0];
+}
+const NORMAL_BGP = 0b11100100;
+
+const mirrored = new Map<number, Uint8ClampedArray | null>();
+/** The hand-coloured picture mirrored, as EvolveMon draws its pictures (LoadFlippedFrontSpriteByMonIndex). */
+function mirroredFan(dex: number): Uint8ClampedArray | null {
+  const frame = fanFrame(dex);
+  if (!frame) return null;
+  let out = mirrored.get(dex);
+  if (out !== undefined) return out;
+  out = new Uint8ClampedArray(frame.length);
+  for (let y = 0; y < 56; y++) for (let x = 0; x < 56; x++) out.set(frame.subarray((y * 56 + x) * 4, (y * 56 + x) * 4 + 4), (y * 56 + 55 - x) * 4);
+  mirrored.set(dex, out);
+  return out;
+}
+
+/**
+ * The evolution screen as a battle screen, for the text decoder and the mask: the picture rows
+ * are the scene (staged in HD), the text box rows are text.
+ */
+const EVOLUTION_CELLS = new Uint8Array(20 * 18).fill(CELL_UI).fill(CELL_SCENE, 0, 12 * 20);
+function evolutionScreen(lcd: Uint8Array | undefined): BattleScreen {
+  return {
+    battle: true,
+    enemy: null,
+    player: null,
+    objects: [],
+    cells: EVOLUTION_CELLS,
+    huds: { player: false, enemy: false },
+    palettes: registers(lcd),
+    origin: { x: 0, y: 0 },
+  };
+}
+
 /** One emulator frame of a battle, or nulls outside one. */
 export interface BattleFrame {
   state: BattleState | null;
@@ -80,9 +136,12 @@ export interface BattleFrame {
   huds: BattleScreen["huds"] | null;
   /**
    * For the layout; undefined outside a battle. `transition` also covers the moments either side
-   * of one, while wIsInBattle is still 0 (see `battleTransition`).
+   * of one, while wIsInBattle is still 0 (see `battleTransition`). `evolution` is the evolution
+   * screen, after a battle or not (an evolution stone): `screen` and `view` stage it in HD.
    */
   scene: BattleScene | undefined;
+  /** What the evolution screen shows, once its watches are in. */
+  evolution?: EvolutionScreen;
 }
 
 /** Frames a HUD may be missing before its HD card goes. */
@@ -96,15 +155,19 @@ const HUD_HOLD_FRAMES = 2;
 export class BattleTracker {
   readonly #decoder = new BattleDecoder();
   readonly #reader = new BattleScreenReader();
+  readonly #evolution = new EvolutionReader();
   readonly #colours: BattleColours;
   readonly #watch: (watches: Record<string, Watch>) => void;
   readonly #base: Record<string, Watch>;
+  /** The battle screen's watches are on: in a battle, or on the evolution screen. */
   #watching = false;
+  #inBattle = false;
   /** The battle screen has shown since the battle began: anything else now is a menu. */
   #seen = false;
   /** Frames since each HUD was last on screen. */
   #hudGone: Record<Side, number> = { player: Infinity, enemy: Infinity };
 
+  /** `base` must include the tile map (TEXT_WATCHES): the evolution screen is spotted from it. */
   constructor(rom: Uint8Array, base: Record<string, Watch>, watch: (watches: Record<string, Watch>) => void) {
     this.#colours = new BattleColours(rom);
     this.#base = base;
@@ -112,23 +175,40 @@ export class BattleTracker {
     watch(base);
   }
 
+  #setWatching(on: boolean): void {
+    if (on === this.#watching) return;
+    this.#watching = on;
+    this.#watch(on ? { ...this.#base, ...BATTLE_SCREEN_WATCHES, ...EVOLUTION_WATCHES } : this.#base);
+  }
+
   frame(watched: Record<string, Uint8Array>): BattleFrame {
     const state = this.#decoder.decode(watched as BattleWatched);
+    const tileMap = watched["tileMap"];
+    const evolving = tileMap ? evolutionShown(tileMap) !== null : false;
+    this.#setWatching(!!state || evolving);
+    if (state) this.#inBattle = true;
+    else if (this.#inBattle) {
+      this.#inBattle = false;
+      this.#reader.reset();
+      this.#colours.reset();
+      this.#seen = false;
+      this.#hudGone = { player: Infinity, enemy: Infinity };
+    }
+
+    // The evolution screen: the Pokémon alone in HD, its text in HD boxes (QA bug 27).
+    if (evolving) {
+      const lcd = watched["lcd"];
+      const screen = evolutionScreen(lcd);
+      // The first frame out of a battle, until the extra watches arrive: the screen stays down.
+      if (!watched["picTiles"] || !watched["evoSpecies"]) return { state, screen, view: null, huds: null, scene: "evolution" };
+      const evo = this.#evolution.read(watched as unknown as EvolutionWatched)!;
+      return { state, screen, view: this.#colours.evolution(evo, lcd), huds: null, scene: "evolution", evolution: evo };
+    }
+    this.#evolution.reset();
+
     if (!state) {
-      if (this.#watching) {
-        this.#watching = false;
-        this.#watch(this.#base);
-        this.#reader.reset();
-        this.#colours.reset();
-        this.#seen = false;
-        this.#hudGone = { player: Infinity, enemy: Infinity };
-      }
       const between = battleTransition(watched as BattleWatched);
       return { state, screen: null, view: null, huds: null, scene: between ? "transition" : undefined };
-    }
-    if (!this.#watching) {
-      this.#watching = true;
-      this.#watch({ ...this.#base, ...BATTLE_SCREEN_WATCHES });
     }
     // The first frame or so, until the extra watches arrive.
     if (!watched["picTiles"]) return { state, screen: null, view: null, huds: null, scene: "transition" };
