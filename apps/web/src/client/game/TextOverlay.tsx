@@ -96,6 +96,11 @@ function Box({ box, text, actions, dialogLines: joined }: { box: TextBox; text: 
       <i className="hd-corner tr" />
       <i className="hd-corner bl" />
       <i className="hd-corner br" />
+      {box.title && (
+        <div className="hd-title" style={place(box, box.title.col, box.title.row, inner - box.title.col)}>
+          <span>{box.title.text}</span>
+        </div>
+      )}
       {lines.map((raw) => {
         const cursor = rows.get(raw.row);
         const line = cursor ? stripCursor(raw) : raw;

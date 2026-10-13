@@ -260,6 +260,7 @@ export const ALLOWLIST: readonly string[] = [
   "wNameBuffer",
   "DisplayPartyMenu",
   "DisplayTextBoxID",
+  "LoadFontTilePatterns",
   "DisplayTextIDInit",
   "SwitchPartyMon_InitVarOrSwapData",
   "UsableItems_PartyMenu",

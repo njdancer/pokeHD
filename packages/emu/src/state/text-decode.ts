@@ -111,8 +111,14 @@ function findBoxes(grid: Grid): Found[] {
           if (over) above.add(over.box);
           return over !== undefined;
         };
+        // The top border may carry a title over it: the money box prints "MONEY" there
+        // (MONEY_BOX_TEMPLATE, text at 13,0 on a box from 11,0).
+        const titled = (cx: number) => {
+          const c = own(cx, y);
+          return c !== null && !BORDER_CHARS.has(c) && cx > x + 1;
+        };
         let right = x + 1;
-        while (right < SCREEN_COLS && own(right, y) !== BOX.topRight && is(right, y, BOX.horizontal)) right++;
+        while (right < SCREEN_COLS && own(right, y) !== BOX.topRight && (is(right, y, BOX.horizontal) || titled(right))) right++;
         if (own(right, y) !== BOX.topRight) {
           // The top-right corner may be under another box: take the first column whose right
           // border shows further down.
@@ -311,6 +317,8 @@ export class ScreenTextDecoder {
       const view = unobscured(grid, above);
       pictures ||= hasPicture(grid, box, above);
       box.lines = boxLines(view, box);
+      const title = rowLine(view, box.y, box.x + 1, box.x + box.width - 1);
+      if (title) box.title = title;
       boxes.push(box);
       const menu = decodeMenu(view, box, watched);
       if (menu) menus.push(menu);
