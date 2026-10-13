@@ -37,7 +37,7 @@ export const MANSION: TilesetLabelTable = {
     0x1d: "stairs",
     0x1e: "wall-interior", // the partitions' dark faces
     0x1f: "fence",
-    0x20: "unused",
+    0x20: "void", // the roof's border block: the flat grey drop beyond the roof's edge
     0x21: "fence",
     0x22: "shelf", // cabinets
     0x23: "shelf",

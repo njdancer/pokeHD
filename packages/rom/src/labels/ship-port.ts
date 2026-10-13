@@ -98,7 +98,7 @@ export const SHIP_PORT: TilesetLabelTable = {
     0x59: "machine",
     0x5a: "wall",
     0x5b: "wall",
-    0x5c: "unused",
+    0x5c: "void", // Vermilion Dock's border block: the black past the pier
     0x5d: "wall",
     0x5e: "unused",
     0x5f: "unused",

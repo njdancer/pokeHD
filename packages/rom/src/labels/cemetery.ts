@@ -76,7 +76,7 @@ export const CEMETERY: TilesetLabelTable = {
     0x44: "unused",
     0x45: "unused",
     0x46: "unused",
-    0x47: "unused",
+    0x47: "void", // Agatha's room's border block: the black outside her walls
     0x48: "unused",
     0x49: "unused",
     0x4a: "unused",
