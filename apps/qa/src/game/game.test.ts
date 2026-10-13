@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { SPRITE_NAMES, type MapData, type Tileset, type WorldData } from "@pokehd/rom";
 import { GlitchWatcher, type GlitchSample } from "./glitches.ts";
 import { describeLayouts } from "./layout-log.ts";
-import { describeButtons, describeGameBoyText, mapName } from "./outcome.ts";
+import { continueButton, describeButtons, describeGameBoyText, mapName, startingUp } from "./outcome.ts";
 import { pickFrames } from "./recorder.ts";
-import type { StateLite } from "./screen-read.ts";
+import type { Panel, ScreenButton, StateLite } from "./screen-read.ts";
 import { buildTextMap } from "./textmap.ts";
 
 // A tiny world: blocks are one tile throughout (0 floor, 1 wall, 2 grass, 3 water).
@@ -217,5 +217,29 @@ describe("describeLayouts", () => {
   });
   it("says nothing when the Game Boy screen only went away", () => {
     expect(describeLayouts([{ t: 0, layout: "full" }, { t: 50, layout: "hidden" }], 10, 100)).toBeNull();
+  });
+});
+
+describe("start screen", () => {
+  const button = (label: string, pad = false): ScreenButton => ({ label, pad, x: 10, y: 10, w: 100, h: 40 });
+  const start: Panel = { kind: "start", text: "Welcome back, CLAUDE!\n0 badges\n1 caught\n1:16 played\nContinue\nNew game" };
+  const welcome = { panels: [start], buttons: [button("Continue"), button("New game"), button("A", true)] };
+
+  it("finds Continue beside New game only when asked to carry on regardless", () => {
+    expect(continueButton(welcome, true)).toBeNull();
+    expect(continueButton(welcome, false)?.label).toBe("Continue");
+  });
+
+  it("taps Continue when it's the only choice, and never anything else", () => {
+    expect(continueButton({ panels: [start], buttons: [button("Continue")] }, true)?.label).toBe("Continue");
+    expect(continueButton({ panels: [start], buttons: [button("New game")] }, false)).toBeNull();
+    expect(continueButton({ panels: [], buttons: [button("Continue")] }, false)).toBeNull();
+  });
+
+  it("reads \"Off we go…\" as the game still starting, not a screen to report", () => {
+    const going = { panels: [{ kind: "start", text: "Off we go…" }], buttons: [button("B", true), button("Menu")] };
+    expect(startingUp(going)).toBe(true);
+    expect(startingUp(welcome)).toBe(false);
+    expect(startingUp({ panels: [], buttons: [] })).toBe(false);
   });
 });
