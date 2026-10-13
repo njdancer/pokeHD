@@ -1,6 +1,8 @@
 /* The QA stream (/dev/stream and its overlay, /dev/stream/overlay): a port of the approved design, qa-stream v3 "Side Stage"
    (v2.html). The stage is 1920×1080 and scales to fit; OBS captures it at 1:1. */
-.qs-shell { position: fixed; inset: 0; overflow: hidden; background: #2a1d14; }
+/* touch-action: the harness taps the game with touch events, and Chromium took some taps as a
+   double-tap and zoomed the whole stream page in and out (a flicker on stream). */
+.qs-shell { position: fixed; inset: 0; overflow: hidden; background: #2a1d14; touch-action: manipulation; }
 .qs-fit { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: center center; transform: translate(-50%,-50%); }
 .qs {
   --paper:#fdf3df; --card:#fffaf0; --edge:#d6a866; --line:#ecd3a6; --ink:#3e2a1c; --muted:#9a6c45;
@@ -52,7 +54,7 @@
 /* The host page (StreamHost): the overlay's frame fills the stage, the game's gap sits above it. */
 .qs > .qs-overlay { position: absolute; inset: 0; width: 1920px; height: 1080px; border: 0; display: block; z-index: 0; }
 .qs > .qs-overlay ~ [data-gap] { z-index: 1; }
-.qs .qs-game { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: transparent; }
+.qs .qs-game { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: transparent; touch-action: manipulation; }
 .qs .qs-gap-idle {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
   font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 34px; color: rgba(255,255,255,.92);
