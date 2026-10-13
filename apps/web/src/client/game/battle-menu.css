@@ -46,6 +46,3 @@
 .bm-icon svg { width: 100%; height: 100%; }
 .bm-action.bm-small { min-height: 48px; font-size: .95em; gap: 6px; padding-inline: 6px; }
 .bm-small .bm-icon { width: 24px; height: 24px; font-size: 19px; }
-/* Classic: the four choices as big as the moves. */
-.battle-menu[data-layout="classic"] .bm-action:not(.bm-small) { min-height: 72px; font-size: 1.25em; }
-.bm-fight { background: linear-gradient(#fff3d6, #ffd98f); }
