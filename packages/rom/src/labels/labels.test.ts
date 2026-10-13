@@ -36,6 +36,25 @@ describe.skipIf(!existsSync(ROM_PATH))("labels", () => {
     expect(clashes).toEqual([0x58]); // the cave-mouth warp, a "door" to the ROM
   });
 
+  it("labels every tile the overworld maps draw as cliff solid, and as open ground walkable (QA #32)", () => {
+    // Route 3's mountain (tiles 0x01/0x11/0x24) is solid in Overworld_Coll; the HD view has to
+    // draw it as rock, so the label must never put a walkable tile there or a solid one on paths.
+    const walkable = new Set(overworld.semantics.walkable);
+    const blocks = blockLabels(overworld);
+    const byLabel = new Map<string, Set<number>>();
+    for (const m of world.maps) {
+      if (m?.tileset !== overworld.id) continue;
+      for (const b of m.blocks) {
+        blocks[b]!.forEach((l, i) => byLabel.set(l!, (byLabel.get(l!) ?? new Set()).add(overworld.blocks[b * 16 + i]!)));
+      }
+    }
+    expect([...byLabel.get("cliff")!].filter((t) => walkable.has(t))).toEqual([]);
+    expect([...byLabel.get("cliff")!]).toEqual(expect.arrayContaining([0x01, 0x11, 0x24]));
+    for (const open of ["ground", "lawn", "tall-grass"]) {
+      expect([...byLabel.get(open)!].filter((t) => !walkable.has(t)), open).toEqual([]);
+    }
+  });
+
   it("applies block overrides over tile labels", () => {
     const blocks = blockLabels(overworld);
     expect(overworld.blocks[0x06 * 16 + 14]).toBe(0x37);
