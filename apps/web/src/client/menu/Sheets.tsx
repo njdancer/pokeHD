@@ -8,6 +8,7 @@ import { isKeyItem, monName, type WorldData } from "@pokehd/rom";
 import type { Catalogue } from "../dex/catalogue.ts";
 import { niceName } from "../dex/catalogue.ts";
 import { Menu, type MenuContext } from "./context.ts";
+import { useFreshTapGuard } from "./fresh-tap.ts";
 import { itemPrice, money, niceItem, shelf } from "./items.ts";
 import { BallPic, MonPic, ShelfIcon, TeamRowBody } from "./parts.tsx";
 
@@ -31,6 +32,8 @@ const TITLES: Record<"switch" | "item" | "next" | "other", string> = {
 export function AskSheet({ rom, world, catalogue, ask, game, answer }: AskSheetProps) {
   const cancellable = !(ask.kind === "party" && ask.purpose === "next");
   const cancel = () => cancellable && answer(ask.kind === "yes-no" ? { yes: false } : null);
+  // The tap on A that made the game ask doesn't answer (or cancel) it as the finger lifts.
+  const guard = useFreshTapGuard();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && cancel();
     addEventListener("keydown", onKey);
@@ -40,7 +43,7 @@ export function AskSheet({ rom, world, catalogue, ask, game, answer }: AskSheetP
   const ctx = { rom, world, catalogue, game } as MenuContext;
   return (
     <Menu.Provider value={ctx}>
-      <div className="dm-sheet-shade" onClick={(e) => e.target === e.currentTarget && cancel()}>
+      <div className="dm-sheet-shade" {...guard} onClick={(e) => e.target === e.currentTarget && cancel()}>
         <section className="dm-sheet" role="dialog" aria-modal aria-label={titleOf(ask)}>
           {cancellable && ask.kind !== "yes-no" && (
             <button type="button" className="dm-sheet-close" aria-label="Cancel" onClick={cancel}>
