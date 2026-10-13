@@ -6,6 +6,7 @@
 import type { ActionResult, AskAnswer, GameAction, GameAsk, GameSnapshot, MonStatus } from "@pokehd/emu";
 import { itemUse } from "@pokehd/emu";
 import {
+  type Message,
   growth,
   isKeyItem,
   itemName,
@@ -384,6 +385,12 @@ export interface LiveHost {
 /** "PIKACHU\nrecovered by 20!" reads as one line. */
 const said = (r: ActionResult) => (r.ok ? r.messages.map((m) => m.replace(/\n/g, " ")).join(" ") : r.reason === "cancelled" ? "" : (r.messages.at(-1)?.replace(/\n/g, " ") ?? `Not now: ${r.reason}.`));
 
+/** A purchase's (or sale's) answers after the item: how many, then yes to "OK?". */
+const buying = (count: number): { kind: GameAsk["kind"]; answer: AskAnswer }[] => [
+  { kind: "quantity", answer: { quantity: count } },
+  { kind: "yes-no", answer: { yes: true } },
+];
+
 /**
  * The menu's actions on the real game. A question the game is asking right now is answered
  * (with the answers it will ask next queued: a battle item's Pokémon, a purchase's quantity
@@ -397,6 +404,16 @@ export class LiveActions implements MenuActions {
   #asking: { id: number; ask: GameAsk } | null = null;
   /** Answers for the questions that follow the one just answered, in order. */
   #next: { kind: GameAsk["kind"]; answer: AskAnswer }[] = [];
+  /** The answers in `#next` end a purchase: the game's next message is its reply ("Here you are!"). */
+  #purchase = false;
+  /** The game's reply to a purchase is due: the menu shows it as a notice and reads past it. */
+  #replying = false;
+  /**
+   * The Poké Mart's sheet is up, though the game may be busy with the last purchase: taps on it
+   * meanwhile (another purchase, or closing it) wait here for the game's next list.
+   */
+  #shop = false;
+  #shopQueue: { item: number; count: number }[] | "cancel" = [];
 
   constructor(rom: Uint8Array, host: { readonly current: LiveHost }) {
     this.#rom = rom;
@@ -415,22 +432,67 @@ export class LiveActions implements MenuActions {
 
   /** The game asks: true if a queued answer took it (no sheet needed). */
   asked(id: number, ask: GameAsk): boolean {
+    this.#replying = false;
     const next = this.#next[0];
     if (next && next.kind === ask.kind) {
       this.#next.shift();
       this.#host.answer(id, next.answer);
+      if (this.#next.length === 0 && this.#purchase) this.#replying = true;
       return true;
     }
     this.#next = [];
+    this.#purchase = false;
+    if (ask.kind === "mart" && this.#shop) {
+      // The shop's list again: what the player tapped while the game was busy goes in now.
+      const queued = this.#shopQueue;
+      this.#shopQueue = [];
+      if (queued === "cancel") {
+        this.#shop = false;
+        this.#host.answer(id, null);
+        return true;
+      }
+      const buy = queued.shift();
+      const index = buy ? ask.entries.indexOf(buy.item) : -1;
+      if (buy && index >= 0) {
+        this.#shopQueue = queued;
+        this.#purchase = true;
+        this.#next = buying(buy.count);
+        this.#host.answer(id, { index });
+        return true;
+      }
+    }
+    this.#shop = ask.kind === "mart";
     this.#asking = { id, ask };
     return false;
   }
 
-  #answer(answer: AskAnswer, then: { kind: GameAsk["kind"]; answer: AskAnswer }[] = []): boolean {
+  /**
+   * The game printed a message. `reply`: its answer to a purchase ("Here you are! Thank you!",
+   * or why not), which the shop's sheet would hide: the menu shows it as a notice and the page
+   * reads past it, so the game comes back to its list (QA bug 25). `away`: the game has moved on
+   * from the question a sheet was showing (it isn't waiting on it, nor on answers queued), so a
+   * sheet still up has gone stale and goes, leaving the game's own words in view. Null: a
+   * message between queued answers (a purchase's "That will be ₽300. OK?").
+   */
+  heard(message: Message): "reply" | "away" | null {
+    if (this.#replying) {
+      this.#replying = false;
+      const text = message.pages.flatMap((p) => p.lines).map((l) => l.trim()).filter(Boolean).join(" ");
+      if (text) this.#host.notice(text);
+      return "reply";
+    }
+    if (this.#next.length > 0 || this.#asking) return null;
+    this.#shop = false;
+    this.#shopQueue = [];
+    return "away";
+  }
+
+  #answer(answer: AskAnswer, then: { kind: GameAsk["kind"]; answer: AskAnswer }[] = [], purchase = false): boolean {
     const asking = this.#asking;
     if (!asking) return false;
     this.#asking = null;
     this.#next = then;
+    this.#purchase = purchase;
     this.#host.answer(asking.id, answer);
     return true;
   }
@@ -496,17 +558,14 @@ export class LiveActions implements MenuActions {
     return "";
   }
   buy(item: number, count: number): string {
-    this.#answer({ index: this.#listIndex(item) }, [
-      { kind: "quantity", answer: { quantity: count } },
-      { kind: "yes-no", answer: { yes: true } },
-    ]);
+    if (this.#asking?.ask.kind === "mart") this.#answer({ index: this.#listIndex(item) }, buying(count), true);
+    // The game is still on the last purchase: this one waits for its list.
+    else if (this.#shop && this.#shopQueue !== "cancel") this.#shopQueue.push({ item, count });
     return "";
   }
   sell(item: number, count: number): string {
-    this.#answer({ index: this.#listIndex(item) }, [
-      { kind: "quantity", answer: { quantity: count } },
-      { kind: "yes-no", answer: { yes: true } },
-    ]);
+    // A sale goes straight back to the bag's list, with no words in between.
+    this.#answer({ index: this.#listIndex(item) }, buying(count));
     return "";
   }
   gift(friend: string, what: { item: number } | { mon: number }): string {
@@ -537,6 +596,8 @@ export class LiveActions implements MenuActions {
     return "Going back to a checkpoint comes soon.";
   }
   cancel(): void {
+    // Closing the shop while the game finishes a purchase: its list, when it comes, is closed.
+    if (!this.#asking && this.#shop) this.#shopQueue = "cancel";
     this.#answer(null);
   }
   /** The bag index of an item (for the fallback sheet). */

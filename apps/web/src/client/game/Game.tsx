@@ -30,6 +30,8 @@ import {
   fromBcd,
   SNAPSHOT_RANGES,
   type AskAnswer,
+  type BattleAnswer,
+  type BattleAsk,
   type GameAsk,
   type GameSnapshot,
 } from "@pokehd/emu";
@@ -67,8 +69,10 @@ import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
 import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
-import { BattleTracker, battleText, maskBattleScreen } from "./battle.ts";
+import { BattleTracker, battleMenuShown, battleText, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
+import { BattleMenu, type BattleKey } from "./BattleMenu.tsx";
+import { battleMenuLayout } from "./battle-menu-flag.ts";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
 import { TextOverlay, type TextActions } from "./TextOverlay.tsx";
 import { battleTextFits, hdTextFits, introTextFits, textKey } from "./hd-text.ts";
@@ -101,6 +105,10 @@ const showStats = new URLSearchParams(location.search).has("stats");
 const noRender = import.meta.env.DEV && new URLSearchParams(location.search).get("render") === "0";
 /** ?classic: the game's own title screen and naming screens, as on the Game Boy (scripted play-throughs use it). */
 const classic = new URLSearchParams(location.search).has("classic");
+/** HD battle menus, a trial for now: their layout on this device, or null while off (battle-menu-flag.ts). */
+const BATTLE_MENUS = battleMenuLayout();
+/** The joypad's buttons as the HD battle menu's keys. */
+const BATTLE_KEYS: [number, BattleKey][] = [[Button.Up, "up"], [Button.Down, "down"], [Button.Left, "left"], [Button.Right, "right"], [Button.A, "a"], [Button.B, "b"]];
 
 declare global {
   interface Window {
@@ -352,6 +360,15 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const catalogue = useMemo(() => world && buildCatalogue(rom, world), [rom, world]);
   /** The battle's HD cards: the state they show and which the game draws now. */
   const [battleHud, setBattleHud] = useState<{ state: BattleState; huds: BattleScreen["huds"] } | null>(null);
+  /** The battle waits for the player's choice (HD battle menus): the HD menu answers. */
+  const [battleAsk, setBattleAskState] = useState<{ id: number; ask: BattleAsk } | null>(null);
+  const battleAskRef = useRef<{ id: number; ask: BattleAsk } | null>(null);
+  const setBattleAsk = (next: { id: number; ask: BattleAsk } | null) => {
+    battleAskRef.current = next;
+    setBattleAskState(next);
+  };
+  /** The HD battle menu's key handler while it's up. */
+  const battleKeysRef = useRef<((key: BattleKey) => void) | null>(null);
 
   const enableSound = async () => {
     await hostRef.current?.enableAudio().catch(() => {}); // not a gesture the browser accepts
@@ -436,8 +453,14 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         // The Pokédex menu: Start and Select are gone, and while it's up nothing reaches the game.
         if (menuRef.current) mask = menuUpRef.current ? 0 : mask & ~(Button.Start | Button.Select);
         // B closes the HD Pokédex (the game's is held while it's up).
-        if (mask & ~lastMask & Button.B) dexBRef.current();
+        const pressed = mask & ~lastMask;
+        if (pressed & Button.B) dexBRef.current();
         lastMask = mask;
+        // The HD battle menu takes the buttons while the battle waits on it.
+        if (battleAskRef.current) {
+          for (const [button, key] of BATTLE_KEYS) if (pressed & button) battleKeysRef.current?.(key);
+          mask = 0;
+        }
         hostRef.current?.setButtons(mask);
         // Keyboard and touch changes come from user gestures, which may start audio; gamepad polls don't.
         if (mask && source !== "gamepad") void enableSound();
@@ -563,6 +586,17 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         ...(custom ? { onNameAsk: (ask: NameAsk) => setNameAsk(ask) } : {}),
         onScriptMessage: ({ id, message }) => {
           scriptRef.current = newScriptView(id, message);
+          // The menu's sheet stays up over the game while the game answers it, so its words would
+          // sit unseen under the sheet: a purchase's "Here you are! Thank you!" is the menu's to
+          // show (a notice) and read past, and a sheet the game has moved on from goes (QA bug 25).
+          const heard = liveActionsRef.current?.heard(message) ?? null;
+          if (heard === "reply") {
+            scriptRef.current.closed = true;
+            host?.readOnMessage(id);
+            host?.closeMessage(id);
+            return;
+          }
+          if (heard === "away" && menuStateRef.current.ask) setAsk(null);
           // All of it fits in one box: the game can print the rest while the player reads.
           if (scriptRef.current.boxes.length <= 1) host?.readOnMessage(id);
         },
@@ -635,12 +669,15 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
             liftPictures(new Uint8ClampedArray(pixels), introImage);
             introCanvas.current.getContext("2d")!.putImageData(introImage, 0, 0);
           }
-          const fits = intro ? introTextFits(text) : battleScreen ? battleTextFits(text) : hdTextFits(text, state.mode, inWorld);
-          if (battleScreen) maskBattleScreen(image.data, battleScreen, fits ? text.boxes : []);
+          // The HD battle menu stands in for the battle's menus: the Game Boy's are masked out
+          // while the game asks, and while it draws them either side of asking.
+          const choosing = !!BATTLE_MENUS && !!battleScreen && fight?.state?.type !== "link" && (!!battleAskRef.current || battleMenuShown(text));
+          const fits = choosing ? false : intro ? introTextFits(text) : battleScreen ? battleTextFits(text) : hdTextFits(text, state.mode, inWorld);
+          if (battleScreen) maskBattleScreen(image.data, battleScreen, fits || choosing ? text.boxes : []);
           ctx.putImageData(image, 0, 0);
           // Nothing on the Game Boy screen the HD view doesn't show: keep it down.
           const mapOnly = trackMapOnly((bytes as unknown as TextWatched).tileMap, state.mode, inWorld);
-          const quiet = fits || mapOnly;
+          const quiet = fits || mapOnly || choosing;
           // Whole messages from the script: the page shows the message the game is printing.
           const script = scriptView(scriptRef, text, fits, (id) => host?.releaseMessage(id));
           // Otherwise whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
@@ -718,6 +755,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
               onJournal: (event: Parameters<PlayJournal["record"]>[0]) => playJournalRef.current?.record(event),
             }
           : {}),
+        ...(BATTLE_MENUS ? { onBattleAsk: (id: number, question: BattleAsk) => setBattleAsk({ id, ask: question }) } : {}),
       });
       const watching = host;
       battles = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...TEXT_WATCHES, ...BATTLE_WATCHES }, (w) => watching.watch(w));
@@ -1015,6 +1053,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       setHdText(null);
       setDialogLines(null);
       setBattleHud(null);
+      setBattleAsk(null);
       setLayout("full");
       setNoHd(false);
       setStartup({ emu: false, world: false });
@@ -1336,10 +1375,24 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         />
       )}
       {gifts && <GiftNotices rom={rom} courier={gifts} />}
-      {battleHud && !noHd && layout === "battle" && <BattleHud state={battleHud.state} huds={battleHud.huds} />}
+      {battleHud && !noHd && layout === "battle" && <BattleHud state={battleHud.state} huds={battleHud.huds} menuUp={!!battleAsk} />}
+      {battleAsk && BATTLE_MENUS && (
+        <BattleMenu
+          key={battleAsk.id}
+          ask={battleAsk.ask}
+          rom={rom}
+          layout={BATTLE_MENUS}
+          who={battleHud?.state.player.mon?.name ?? null}
+          bindKeys={(handler) => (battleKeysRef.current = handler)}
+          onAnswer={(answer: BattleAnswer) => {
+            hostRef.current?.answerBattle(battleAsk.id, answer);
+            setBattleAsk(null);
+          }}
+        />
+      )}
       {/* The pad hides while Settings is open so it can't cover the panel's forms (and unmounting releases any held button). */}
       {/* The pad is for the world: anything with buttons of its own (HD menus, messages, the start and names) hides it. */}
-      {input && touch && !settings && !(hdText && !noHd) && !nameAsk && !onboarding && !dex && !menuOpen && !ask && <TouchPad onChange={onTouch} menuButtons={!menu} />}
+      {input && touch && !settings && !(hdText && !noHd) && !nameAsk && !onboarding && !dex && !menuOpen && !ask && !battleAsk && <TouchPad onChange={onTouch} menuButtons={!menu} />}
       {lockUi && !held && (
         <LockScreen
           {...lockUi}

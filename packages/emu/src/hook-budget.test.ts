@@ -9,6 +9,7 @@ import { DexGuard } from "./dex-guard.ts";
 import { EraseGuard } from "./erase-guard.ts";
 import { GameActions } from "./game/actions.ts";
 import { GameAsks } from "./game/asks.ts";
+import { BattleMenus } from "./game/battle-menus.ts";
 import { GiftDesk } from "./gifts/desk.ts";
 import { JournalHooks } from "./journal-hooks.ts";
 
@@ -29,6 +30,7 @@ describe.skipIf(!existsSync(ROM_PATH))("the hook budget (ROM)", () => {
     controls.setScriptText(rom);
     const actions = new GameActions(gb, { rom });
     new GameAsks(gb, { rom, busy: () => actions.pending > 0, onAsk: none });
+    new BattleMenus(gb, { rom, onAsk: none });
     // 48 when written; hooks added lazily (while a message or a call is under way) need room too.
     expect(gb.hookCount, "native hooks in use").toBeLessThanOrEqual(56);
   });
