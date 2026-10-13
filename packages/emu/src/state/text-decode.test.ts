@@ -318,7 +318,7 @@ describe.skipIf(!hasRom)("decoding the game's text", () => {
   it("reads the money box the game draws with MONEY over its border", () => {
     for (let i = 0; i < 10 && frame().shown; i++) press(Button.B);
     expect(frame().shown).toBe(false);
-    // ¥1807, then the box as the museum's clerk, a Poké Mart or the Magikarp salesman put it up.
+    // ₽1807, then the box as the museum's clerk, a Poké Mart or the Magikarp salesman put it up.
     gb.write(SYMBOLS.wPlayerMoney.address, 0x00);
     gb.write(SYMBOLS.wPlayerMoney.address + 1, 0x18);
     gb.write(SYMBOLS.wPlayerMoney.address + 2, 0x07);
@@ -346,7 +346,7 @@ describe.skipIf(!hasRom)("decoding the game's text", () => {
     expect(drawn.loose).toEqual([]);
     expect(drawn.pictures).toBe(false);
     expect(drawn.boxes).toEqual([
-      { x: 11, y: 0, width: 9, height: 3, title: { row: 0, col: 13, text: "MONEY" }, lines: [{ row: 1, col: 14, text: "¥1807" }] },
+      { x: 11, y: 0, width: 9, height: 3, title: { row: 0, col: 13, text: "MONEY" }, lines: [{ row: 1, col: 14, text: "₽1807" }] },
     ]);
   }, 30_000);
 });

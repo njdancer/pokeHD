@@ -301,7 +301,7 @@ describe.skipIf(!existsSync(ROM_PATH))("gifts through the overworld idle point (
       "bag full",
       "bag full",
       "party and box full",
-      "money would pass ¥999,999",
+      "money would pass ₽999,999",
     ]);
 
     // Room appears (an item used, a mon withdrawn, money spent): all four land.

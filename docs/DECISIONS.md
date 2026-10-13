@@ -215,7 +215,7 @@ and `AddEnemyMonToPlayerParty` for a Pokémon (the Trade Center's routine, so th
 44-byte struct, OT and nickname land byte for byte). With a full party the Pokémon goes to the
 current box: there the game has no routine for a ready-made mon, so we append it in the PC's
 layout and set the Pokédex flags with the game's `FlagActionPredef`. A gift that doesn't fit
-(full bag, full party and box, money over ¥999,999) waits in the queue untouched.
+(full bag, full party and box, money over ₽999,999) waits in the queue untouched.
 
 Why: the spike's ROM test gave money, items and Pokémon (party and box), saved with the game's
 own `SaveGameData`, rebooted from the battery save and found them all, and held gifts that
