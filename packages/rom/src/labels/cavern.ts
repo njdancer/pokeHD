@@ -3,18 +3,21 @@ import type { TilesetLabelTable } from "./types.ts";
 /**
  * CAVERN (tileset 17): Mt Moon, Rock Tunnel, Diglett's Cave, Victory Road, Seafoam Islands and
  * Cerulean Cave. Two floor shades (light 0x05, dark 0x20) are two heights: the ROM's pair
- * collisions stop you stepping between them, so both are ground and the cliff faces mark the drop.
+ * collisions stop you stepping between them, so both are ground and the cliff faces mark the drop,
+ * including the raised floor's shadowed top edge (0x29) where the GB draws no face.
  * 0x14 animates as water.
  */
 export const CAVERN: TilesetLabelTable = {
   tiles: {
     0x00: "unused", // no map draws 0x00, 0x23, 0x30 or 0x32–0x5f (most are past the graphics)
-    0x01: "ground", // pale flagstones (Mt Moon B2F paths, Victory Road), with 0x06, 0x24 and 0x27
+    // Pale flagstones, with 0x06, 0x24 and 0x27: solid (not in Cavern_Coll), the raised rock that
+    // walls Mt Moon B2F and Victory Road, so stone, not floor (QA #35).
+    0x01: "cliff",
     0x02: "rock", // grey boulders, with 0x03, 0x12 and 0x13: solid, the walls of Victory Road and Cerulean Cave
     0x03: "rock",
     0x04: "cliff", // corners of the raised floor's rock face
     0x05: "ground", // light (raised) floor
-    0x06: "ground",
+    0x06: "cliff",
     0x07: "cliff",
     0x08: "stairs", // ladder down, with 0x09, 0x18 and 0x19
     0x09: "stairs",
@@ -44,12 +47,14 @@ export const CAVERN: TilesetLabelTable = {
     0x21: "ground", // checked floor (Diglett's Cave, Victory Road)
     0x22: "stairs", // holes down (Seafoam, Victory Road 3F): a warp, like a ladder
     0x23: "unused",
-    0x24: "ground",
+    0x24: "cliff",
     0x25: "cliff", // diagonal corners of the rock face
     0x26: "cliff",
-    0x27: "ground",
+    0x27: "cliff",
     0x28: "cliff",
-    0x29: "ground", // the raised floor's top edge, shadowed
+    // The raised floor's top edge, shadowed: solid, and the step between low floor and raised floor
+    // that the ROM's pair collisions block (QA #35: Mt Moon 1F's south strip read as open floor).
+    0x29: "cliff",
     0x2a: "ground", // the darkest floor: the walkable but walled-off mass behind Victory Road's boulder walls
     0x2b: "ground", // Victory Road's boulder switch, with 0x2c, 0x2d and 0x2e: a floor plate
     0x2c: "ground",
