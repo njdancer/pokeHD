@@ -593,7 +593,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           if (scriptRef.current?.id === id) scriptRef.current.ended = true;
         },
         onScriptPress: () => readOnScript(),
-        onFrame: ({ pixels, watched, count }) => {
+        onFrame: ({ pixels, watched, count, acting }) => {
           if (disposed) return; // the game is going: only its save is still wanted
           image.data.set(new Uint8Array(pixels));
           if (++emuFrames === 1) {
@@ -661,12 +661,16 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           // The HD battle menu stands in for the battle's menus: the Game Boy's are masked out
           // while the game asks, and while it draws them either side of asking.
           const choosing = !!BATTLE_MENUS && !!battleScreen && fight?.state?.type !== "link" && (!!battleAskRef.current || battleMenuShown(text));
-          const fits = choosing ? false : intro ? introTextFits(text) : battleScreen ? battleTextFits(text) : hdTextFits(text, state.mode, inWorld);
+          // A Pokédex menu action running the game's routine (a POTION from the Inventory tab): what
+          // it draws (the party menu ItemUseMedicine redraws, "recovered by 20!") is the menu's to
+          // report, in its own words once the action is done, so neither the HD text layer nor the
+          // Game Boy screen shows it.
+          const fits = acting || choosing ? false : intro ? introTextFits(text) : battleScreen ? battleTextFits(text) : hdTextFits(text, state.mode, inWorld);
           if (battleScreen) maskBattleScreen(image.data, battleScreen, fits || choosing ? text.boxes : []);
           ctx.putImageData(image, 0, 0);
           // Nothing on the Game Boy screen the HD view doesn't show: keep it down.
           const mapOnly = trackMapOnly((bytes as unknown as TextWatched).tileMap, state.mode, inWorld);
-          const quiet = fits || mapOnly || choosing;
+          const quiet = fits || mapOnly || choosing || !!acting;
           // Whole messages from the script: the page shows the message the game is printing.
           const script = scriptView(scriptRef, text, fits, (id) => host?.releaseMessage(id));
           // Otherwise whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).

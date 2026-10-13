@@ -77,7 +77,7 @@ function runOneFrame() {
   const watched: Record<string, Uint8Array> = {};
   for (const [name, [address, length]] of Object.entries(watches)) watched[name] = gb.readBytes(address, length);
   const pixels = gb.frame.slice().buffer;
-  post({ type: "frame", pixels, count: frames, watched }, [pixels]);
+  post({ type: "frame", pixels, count: frames, watched, ...(actions?.running ? { acting: true } : {}) }, [pixels]);
 
   if (gb.sramDirty && performance.now() - lastSramFlush > SRAM_FLUSH_MS) flushSram();
 }

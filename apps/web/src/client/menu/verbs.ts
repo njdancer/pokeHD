@@ -23,12 +23,14 @@ export function monVerbs(env: MenuEnv, nav: Nav, i: number, purpose?: Purpose): 
   const { model, moment, actions } = env;
   const m = model.team[i]!;
   const battle = inBattle(moment);
+  // Used or taught from the bag: as in the game, back to the item list (the bag's root), not the
+  // team still asking "on which Pokémon?" for an item that may be gone.
   if (purpose && "use" in purpose) {
     const it = model.bag.find((b) => b.id === purpose.use)!;
-    return [{ label: `Use ${niceItem(it.name)} on ${niceMon(m.name)}`, note: battle ? "Uses your turn" : undefined, run: () => (done(env, nav, actions.useItem(it.id, i), battle), battle || nav.back()) }];
+    return [{ label: `Use ${niceItem(it.name)} on ${niceMon(m.name)}`, note: battle ? "Uses your turn" : undefined, run: () => (done(env, nav, actions.useItem(it.id, i), battle), battle || nav.reset()) }];
   }
   if (purpose && "teach" in purpose)
-    return [{ label: `Teach it to ${niceMon(m.name)}`, off: canLearn(env, m, purpose.teach) ? undefined : `${niceMon(m.name)} can't learn it`, run: () => (done(env, nav, actions.teach(purpose.teach, i)), nav.replace({ k: "mon", i })) }];
+    return [{ label: `Teach it to ${niceMon(m.name)}`, off: canLearn(env, m, purpose.teach) ? undefined : `${niceMon(m.name)} can't learn it`, run: () => (done(env, nav, actions.teach(purpose.teach, i)), nav.reset()) }];
   if (purpose && "giftTo" in purpose) {
     const f = model.friends.find((x) => x.id === purpose.giftTo)!;
     return [{ label: `Send ${niceMon(m.name)} to ${f.name}`, off: model.team.length < 2 ? "Keep one with you" : undefined, run: () => (done(env, nav, actions.gift(f.id, { mon: i })), nav.reset({ k: "friend", id: f.id })) }];
