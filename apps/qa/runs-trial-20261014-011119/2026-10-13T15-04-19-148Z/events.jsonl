@@ -1,0 +1,136 @@
+{"t":"status","mode":"play","turn":0,"map":"","playTime":"0:00","fps":null}
+{"id":508,"at":1791903867859,"t":"thought","turn":1,"text":"Let me look at the battle screen first."}
+{"id":509,"at":1791903867867,"t":"action","turn":1,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":1,"map":"Route 1","playTime":"0:18","fps":118.6}
+{"id":510,"at":1791903870130,"t":"thought","turn":2,"text":"The battle menu is up. I'll pick FIGHT to attack the wild Rattata."}
+{"id":511,"at":1791903870342,"t":"action","turn":2,"kind":"tap","label":"tap FIGHT"}
+{"t":"status","mode":"play","turn":2,"map":"Route 1","playTime":"0:18","fps":120}
+{"id":512,"at":1791903872667,"t":"action","turn":3,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":3,"map":"Route 1","playTime":"0:18","fps":120}
+{"id":513,"at":1791903874018,"t":"thought","turn":4,"text":"The menu didn't change after my tap, so I'll press A to confirm FIGHT."}
+{"id":514,"at":1791903874224,"t":"action","turn":4,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":4,"map":"Route 1","playTime":"0:18","fps":120}
+{"id":515,"at":1791903876234,"t":"action","turn":5,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":5,"map":"Route 1","playTime":"0:18","fps":120}
+{"id":516,"at":1791903878851,"t":"thought","turn":6,"text":"The move list is open. I'll tap SCRATCH."}
+{"id":517,"at":1791903879052,"t":"action","turn":6,"kind":"tap","label":"tap SCRATCH"}
+{"t":"status","mode":"play","turn":6,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":518,"at":1791903881066,"t":"action","turn":7,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":7,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":519,"at":1791903883211,"t":"action","turn":8,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":8,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":520,"at":1791903885434,"t":"action","turn":9,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":9,"map":"Route 1","playTime":"0:19","fps":119.5}
+{"id":521,"at":1791903886749,"t":"thought","turn":10,"text":"The battle text is now in the HD box. I'll advance it."}
+{"id":522,"at":1791903886956,"t":"action","turn":10,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":10,"map":"Route 1","playTime":"0:19","fps":116.7}
+{"id":523,"at":1791903888851,"t":"action","turn":11,"kind":"tap","label":"tap FIGHT"}
+{"t":"status","mode":"play","turn":11,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":524,"at":1791903890912,"t":"action","turn":12,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":12,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":525,"at":1791903893204,"t":"action","turn":13,"kind":"tap","label":"tap SCRATCH"}
+{"t":"status","mode":"play","turn":13,"map":"Route 1","playTime":"0:19","fps":119.9}
+{"id":526,"at":1791903895361,"t":"action","turn":14,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":14,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":527,"at":1791903897727,"t":"action","turn":15,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":15,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":528,"at":1791903900734,"t":"thought","turn":16,"text":"The Rattata fainted. I'll keep advancing the battle text."}
+{"id":529,"at":1791903900948,"t":"action","turn":16,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":16,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":530,"at":1791903903711,"t":"action","turn":17,"kind":"tap","label":"tap A button"}
+{"t":"status","mode":"play","turn":17,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":531,"at":1791903907008,"t":"thought","turn":18,"text":"The battle ended and the Game Boy screen flashed for a moment again, which is already reported as #10. I'll check the screen now."}
+{"id":532,"at":1791903907039,"t":"action","turn":18,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":18,"map":"Route 1","playTime":"0:19","fps":120.1}
+{"id":533,"at":1791903908734,"t":"thought","turn":19,"text":"The overworld looks heavily blurred right now. I'll take another look to see if that's a transition or permanent."}
+{"id":534,"at":1791903908735,"t":"action","turn":19,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":19,"map":"Route 1","playTime":"0:19","fps":116.6}
+{"id":535,"at":1791903912096,"t":"thought","turn":20,"text":"The blur persists, so I'll note it and keep walking north toward Viridian City."}
+{"id":536,"at":1791903912216,"t":"action","turn":20,"kind":"joystick","label":"joystick ↑↑↑↑"}
+{"t":"status","mode":"play","turn":20,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":537,"at":1791903914903,"t":"action","turn":21,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":21,"map":"Route 1","playTime":"0:19","fps":118.5}
+{"id":538,"at":1791903917547,"t":"thought","turn":22,"text":"The overworld stays blurry after the battle. I'll check the frames around the battle end to see what happened."}
+{"id":539,"at":1791903917799,"t":"action","turn":22,"kind":"contact_sheet","label":"contact sheet turn 16 −1s…+4s"}
+{"t":"status","mode":"play","turn":22,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":540,"at":1791903922576,"t":"thought","turn":23,"text":"The contact sheet shows the full-screen Game Boy-style frame (white box with CHARMANDER Lv7 24/24) appearing about 3 seconds after the EXP message. That's the flash already filed as #10, so I'll add these details to that bug rather than file a duplicate."}
+{"id":541,"at":1791903923843,"t":"action","turn":23,"kind":"message","label":"message the developer"}
+{"id":542,"at":1791903923843,"t":"chat","from":"player","tag":"note","text":"Extra detail for #10 (GB flash after wild battle). Sequence in the contact sheet from the Rattata win: 'CHARMANDER gained 24 EXP. Points!' box stays about 2 s, then at about +3.0 s a full-screen grey/white GB-style frame shows, and at about +3.25 s it shows the GB Charmander stat box in the old GB font ('CHARMANDER Lv7 24/24'), before the overworld fades in at about +3.5 s. Also, the overworld stays heavily blurred/washed out for several seconds after the battle (screenshots at turns 18-21), so it may be a leftover transition overlay.","bug":10}
+{"t":"status","mode":"play","turn":23,"map":"Route 1","playTime":"0:19","fps":120}
+{"id":543,"at":1791903926833,"t":"thought","turn":24,"text":"I'll head around the tree line on the left and continue north."}
+{"id":544,"at":1791903926942,"t":"action","turn":24,"kind":"joystick","label":"joystick ←←←↑↑↑↑"}
+{"t":"status","mode":"play","turn":24,"map":"Viridian City","playTime":"0:19","fps":120}
+{"id":545,"at":1791903930374,"t":"action","turn":25,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":25,"map":"Viridian City","playTime":"0:19","fps":120}
+{"id":546,"at":1791903933054,"t":"thought","turn":26,"text":"I'm in Viridian City now. I'll open the menu from the red button to save the game."}
+{"id":547,"at":1791903933277,"t":"action","turn":26,"kind":"tap","label":"tap Pokédex / menu button"}
+{"t":"status","mode":"play","turn":26,"map":"Viridian City","playTime":"0:19","fps":119}
+{"id":548,"at":1791903936006,"t":"thought","turn":27,"text":"The Pokédex shows 1 caught, so #5 may have changed. I'll open the Me tab to find the save option."}
+{"id":549,"at":1791903936135,"t":"action","turn":27,"kind":"tap","label":"tap Me tab"}
+{"t":"status","mode":"play","turn":27,"map":"Viridian City","playTime":"0:20","fps":119.9}
+{"id":550,"at":1791903940576,"t":"thought","turn":28,"text":"The Me tab shows the Saves entry. I'll tap it to save."}
+{"id":551,"at":1791903940758,"t":"action","turn":28,"kind":"tap","label":"tap Saves"}
+{"t":"status","mode":"play","turn":28,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":552,"at":1791903942815,"t":"action","turn":29,"kind":"tap","label":"tap Save now"}
+{"t":"status","mode":"play","turn":29,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":553,"at":1791903945256,"t":"thought","turn":30,"text":"This time the save gave a \"Saved!\" toast, so #7 may be fixed. I'll go back out of the menu."}
+{"id":554,"at":1791903945434,"t":"action","turn":30,"kind":"tap","label":"tap Back"}
+{"t":"status","mode":"play","turn":30,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":555,"at":1791903947943,"t":"action","turn":31,"kind":"tap","label":"tap red close button"}
+{"t":"status","mode":"play","turn":31,"map":"Viridian City","playTime":"0:20","fps":119.9}
+{"id":556,"at":1791903950508,"t":"action","turn":32,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":32,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":557,"at":1791903954339,"t":"thought","turn":33,"text":"The blur is still there. I'll ask the developer whether that's intended, then keep heading north."}
+{"id":558,"at":1791903955045,"t":"action","turn":33,"kind":"message","label":"message the developer"}
+{"id":559,"at":1791903955045,"t":"chat","from":"player","tag":"question","text":"Is the heavy blur on the Viridian City overworld intended? Everything except the player sprite looks strongly blurred (like a depth-of-field effect), and it stays on after the Route 1 battle. Also: Me tab 'Played' says 0:20 after a long session, so I want to know whether that's the save time reset or a bug. Also #7 looks fixed: 'Save now' shows a 'Saved!' toast now."}
+{"t":"status","mode":"play","turn":33,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":560,"at":1791903956334,"t":"action","turn":34,"kind":"joystick","label":"joystick ↑↑↑↑↑↑"}
+{"t":"status","mode":"play","turn":34,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":561,"at":1791903960978,"t":"thought","turn":35,"text":"A sign is directly north, and there's a gap in the ledges to the left. I'll go around the sign through that gap."}
+{"id":562,"at":1791903961160,"t":"action","turn":35,"kind":"joystick","label":"joystick ←←↑↑↑↑"}
+{"t":"status","mode":"play","turn":35,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":563,"at":1791903965203,"t":"action","turn":36,"kind":"joystick","label":"joystick ↑↑↑"}
+{"t":"status","mode":"play","turn":36,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":564,"at":1791903967866,"t":"action","turn":37,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":37,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":565,"at":1791903970081,"t":"thought","turn":38,"text":"The view is sharper here. I'll keep heading north toward Route 2."}
+{"id":566,"at":1791903970190,"t":"action","turn":38,"kind":"joystick","label":"joystick ↑↑↑↑↑↑"}
+{"t":"status","mode":"play","turn":38,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":567,"at":1791903973751,"t":"action","turn":39,"kind":"joystick","label":"joystick →↑↑↑↑"}
+{"t":"status","mode":"play","turn":39,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":568,"at":1791903977443,"t":"action","turn":40,"kind":"joystick","label":"joystick ←↑↑↑↑"}
+{"t":"status","mode":"play","turn":40,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":569,"at":1791903980186,"t":"action","turn":41,"kind":"joystick","label":"joystick ↑↑↑↑↑↑"}
+{"t":"status","mode":"play","turn":41,"map":"Viridian City","playTime":"0:20","fps":120.1}
+{"id":570,"at":1791903983970,"t":"action","turn":42,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":42,"map":"Viridian City","playTime":"0:20","fps":120}
+{"id":571,"at":1791903993665,"t":"thought","turn":43,"text":"I've hit a block: \"You can't go through here!\" Before deciding what to do, I'll dismiss the box and check the map."}
+{"id":572,"at":1791903993770,"t":"action","turn":43,"kind":"tap","label":"tap message box"}
+{"t":"status","mode":"play","turn":43,"map":"Viridian City","playTime":"0:20","fps":120.1}
+{"id":573,"at":1791903996989,"t":"action","turn":44,"kind":"tap","label":"tap message box"}
+{"t":"status","mode":"play","turn":44,"map":"Viridian City","playTime":"0:21","fps":120}
+{"id":574,"at":1791904000482,"t":"action","turn":45,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":45,"map":"Viridian City","playTime":"0:21","fps":120}
+{"id":575,"at":1791904004148,"t":"thought","turn":46,"text":"There are NPCs and two houses here. I'll open the Pokédex Map tab to figure out the route north."}
+{"id":576,"at":1791904004156,"t":"action","turn":46,"kind":"tap","label":"tap Pokédex / menu button"}
+{"t":"status","mode":"play","turn":46,"map":"Viridian City","playTime":"0:21","fps":120}
+{"id":577,"at":1791904006389,"t":"action","turn":47,"kind":"tap","label":"tap Map tab"}
+{"t":"status","mode":"play","turn":47,"map":"Viridian City","playTime":"0:21","fps":102.5}
+{"id":578,"at":1791904008653,"t":"action","turn":48,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":48,"map":"Viridian City","playTime":"0:21","fps":102.5}
+{"id":579,"at":1791904013066,"t":"thought","turn":49,"text":"The map shows no route north yet. I'll close the menu with the red button at bottom left and look for the opening on foot."}
+{"id":580,"at":1791904013280,"t":"action","turn":49,"kind":"tap","label":"tap red close button"}
+{"t":"status","mode":"play","turn":49,"map":"Viridian City","playTime":"0:21","fps":120}
+{"id":581,"at":1791904016932,"t":"action","turn":50,"kind":"joystick","label":"joystick ↑↑↑↑↑↑"}
+{"t":"status","mode":"play","turn":50,"map":"Viridian City","playTime":"0:21","fps":120}
+{"id":582,"at":1791904019941,"t":"action","turn":51,"kind":"tap","label":"tap message box"}
+{"t":"status","mode":"play","turn":51,"map":"Viridian City","playTime":"0:21","fps":120}
+{"id":583,"at":1791904022877,"t":"action","turn":52,"kind":"tap","label":"tap message box"}
+{"t":"status","mode":"play","turn":52,"map":"Viridian City","playTime":"0:21","fps":120}
+{"id":584,"at":1791904026546,"t":"thought","turn":53,"text":"Going up keeps getting blocked with \"private property\". I'll take a screenshot to see what's in the way."}
+{"id":585,"at":1791904026580,"t":"action","turn":53,"kind":"screenshot","label":"screenshot"}
+{"t":"status","mode":"play","turn":53,"map":"Viridian City","playTime":"0:21","fps":120}
+{"id":586,"at":1791904034239,"t":"thought","turn":54,"text":"I'm blocked by a message I can't explain, and the path straight north looks open. I'll ask the developer whether this block is intended before I go further."}
+{"id":587,"at":1791904035216,"t":"action","turn":54,"kind":"message","label":"message the developer"}
+{"id":588,"at":1791904035216,"t":"chat","from":"player","tag":"question","text":"In Viridian City, walking north between the two green-roofed houses (just south of the big dark-tree block up north), I get blocked with 'You can't go through here!' then 'This is private property!'. Two NPCs stand just to the upper-left. Is this an intended block (e.g. the Oak's aide Pokédex check, which needs more Pokémon caught), or a bug? And if it's intended, is there another way north to Route 2? I have 1 caught, 4 seen."}
+{"t":"status","mode":"talk","turn":53,"map":"Viridian City","playTime":"0:21","fps":120}
