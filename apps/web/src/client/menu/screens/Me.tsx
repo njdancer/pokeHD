@@ -7,6 +7,7 @@ import { RowIcon } from "../icons.tsx";
 import { useNav } from "../nav.tsx";
 import { inBattle, type GameOptions } from "../model.ts";
 import { Page, Pixel, Row, Section, Seg, Switch, Verbs } from "../ui.tsx";
+import { QA_RUN } from "../../qa.ts";
 
 export function MeScreen() {
   const env = useEnv();
@@ -140,7 +141,7 @@ export function SettingsScreen() {
       <div className="m-card m-toggles">
         <Switch on={a.sound} onChange={(v) => env.actions.setApp("sound", v)} label="Sound" />
         <Switch on={a.readAloud} onChange={(v) => env.actions.setApp("readAloud", v)} label="“Read it to me” buttons" />
-        <Switch on={a.gameBoyScreen} onChange={(v) => env.actions.setApp("gameBoyScreen", v)} label="Game Boy screen in the corner" />
+        {!QA_RUN && <Switch on={a.gameBoyScreen} onChange={(v) => env.actions.setApp("gameBoyScreen", v)} label="Game Boy screen in the corner" />}
       </div>
       <div className="m-list">
         <Row media={<RowIcon kind="lock" />} title="Grown-ups" sub="Saves, backups, friends, this device" onClick={() => nav.go({ k: "grownups" })} />

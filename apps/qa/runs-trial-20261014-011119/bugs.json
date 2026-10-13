@@ -1,0 +1,218 @@
+[
+  {
+    "turn": 32,
+    "title": "Rival sprite appears standing on top of player's house roof",
+    "severity": "med",
+    "steps": "New game. Tap through Oak's intro, confirm name (That's me!), pick rival name RED, read the final 'A world of dreams... Let's go!' box. Watch the house scene that follows.",
+    "expected": "Rival appears on the ground in front of the player's house (on the path), not on the roof.",
+    "actual": "After the last text box, the rival sprite fades in standing on top of the red roof of the player's house, above the building.",
+    "id": 1,
+    "at": 1791902317792,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 74,
+    "title": "Player sprite vanishes in Pallet Town near Oak's lab",
+    "severity": "high",
+    "steps": "Start the game, finish the intro, leave Red's house via the front door into Pallet Town. Joystick right 5 tiles, then screenshot. Joystick down 1 tile, screenshot again.",
+    "expected": "Red stays visible on screen at the centre of the camera wherever he walks.",
+    "actual": "After moving right toward the big red-roofed building (Oak's lab), Red disappears from the HD view. The camera stays on empty sand and no player sprite is drawn. The minimap in the top-right still shows the player icon, and the text map confirms movement.",
+    "id": 2,
+    "at": 1791902447207,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 93,
+    "title": "Original Game Boy screen flashes full-screen when rival talks in Oak's lab",
+    "severity": "med",
+    "steps": "Walk into Oak's Lab (via Pallet Town front door of the lab). Walk up to the rival Red (blue-haired NPC near the bookshelves) and press A.",
+    "expected": "The HD scene stays on screen and the HD text box 'RED: Yo Claude! Gramps isn't around!' appears.",
+    "actual": "For about a quarter to half a second the full original Game Boy screen (grey lab with the Game Boy sprites) takes over the whole display, then the HD view returns with the HD text box.",
+    "id": 3,
+    "at": 1791902511219,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 94,
+    "title": "Game Boy screen inset in top-right corner shows the original text box while HD dialogue plays",
+    "severity": "med",
+    "steps": "In Oak's Lab, press A on the rival Red. Watch the small inset in the top-right corner (next to the red Pokédex button) for about 2 seconds after the text starts.",
+    "expected": "The top-right corner is a clean minimap or stays empty, and the only dialogue box is the HD one.",
+    "actual": "The corner inset is a live Game Boy-style screen. It shows the original GB text box 'RED: Yo / Claude! Gramps / isn't around!' while the HD text box is also on screen. It also shows the lab in GB style all the time, not just the map.",
+    "id": 4,
+    "at": 1791902513527,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 137,
+    "title": "Pokédex shows 4 caught before any starter is taken (includes #002)",
+    "severity": "med",
+    "steps": "Start a new game, finish the intro. In Oak's lab, Oak offers 3 starter balls. Before taking one, open the Pokédex (top-right red button) and look at the Pokémon tab, then tap Caught.",
+    "expected": "0 caught, 0 seen of 151 (player has no Pokémon yet). Caught list empty.",
+    "actual": "Header reads '4 caught · 0 seen of 151'. Caught tab lists 001, 002, 004, 007. Two of those are not starters (#002 is Ivysaur, not on offer), and no Pokémon is owned.",
+    "id": 5,
+    "at": 1791902641828,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 138,
+    "title": "A on a starter Poké Ball opens Pokédex entry instead of take prompt",
+    "severity": "med",
+    "steps": "In Oak's lab with the 3 starter balls on the table, stand next to a ball and press A on it (the middle one was Charmander).",
+    "expected": "Original behaviour: Oak's choice prompt, e.g. 'Do you want Charmander?' with YES/NO, and the Pokémon is given after confirming.",
+    "actual": "The full-screen Pokédex entry for Charmander (No.004, About/Moves/Where/Grows) opens immediately. No choice is offered. The original Game Boy screen also flashed for 0.3 s during the transition.",
+    "id": 6,
+    "at": 1791902644074,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 151,
+    "title": "Saves screen: 'Save now' gives no feedback and still says 'saved 1 minute ago'",
+    "severity": "low",
+    "steps": "Open the Pokédex (top-right button). Tap the Me tab, then Saves. Tap the orange 'Save now' button.",
+    "expected": "A confirmation (toast or 'Saved just now') and the timestamp updates to just now.",
+    "actual": "Nothing visible happens. The card still reads 'saved 1 minute ago' even though the Me tab a moment earlier said 'Saved just now'.",
+    "id": 7,
+    "at": 1791902687122,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 193,
+    "title": "Battle: player's CHARMANDER sprite not drawn; foe SQUIRTLE is a blurred oversize shape",
+    "severity": "med",
+    "steps": "Leave Oak's lab after getting Charmander. The rival Red challenges you inside the lab. Let the GB battle intro play ('RED wants to fight!', 'Go! CHARMANDER!'), then look at the battle screen during the move menu.",
+    "expected": "Both Pokémon are visible in the HD battle scene: the player's Charmander at the bottom and the foe Squirtle at the top, sharp and recognisable.",
+    "actual": "No Charmander sprite is drawn anywhere on the battle screen. The foe Squirtle is a large blurred pale-blue blob in the top middle, and the lab background sits behind the GB menu boxes. The Game Boy text and menu boxes sit on top of that HD background.",
+    "id": 8,
+    "at": 1791902790492,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 219,
+    "title": "Currency symbol mismatch: Game Boy text says ¥, HD Trainer card says ₽",
+    "severity": "low",
+    "steps": "Win the rival battle in Oak's lab. Read 'Claude got ¥175 for winning!'. Then open Pokédex > Me tab and read Money.",
+    "expected": "One currency symbol used throughout the game.",
+    "actual": "The GB text box shows '¥175' while the HD Me/Trainer card shows 'Money ₽3,000' and the 'Earned ₽0 / spent ₽0' lines use ₽.",
+    "id": 9,
+    "at": 1791902839265,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 290,
+    "title": "Full-screen Game Boy screen flashes for a moment after wild battles end",
+    "severity": "med",
+    "steps": "1. On Route 1 north of Pallet Town, walk into tall grass to start a wild battle (Pidgey, turns 264-288). 2. Win the battle with Scratch. 3. Advance the 'gained EXP' and 'grew to level 7' text with A.",
+    "expected": "The HD scene returns cleanly after the battle with no full-screen Game Boy image.",
+    "actual": "The original Game Boy screen shows full-screen for about 0.3-0.4 s on the bottom edge after the level-up text, then the HD view resumes. Same kind of flash seen earlier in Oak's lab. Also, a toast '✓ Saved' appeared at the same time (auto-save), and the corner Game Boy inset is showing a live Game Boy view.",
+    "id": 10,
+    "at": 1791903048004,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 291,
+    "title": "Rival intro 'RED wants to fight!' Game Boy box ignores taps; only the A button advances it",
+    "severity": "med",
+    "steps": "1. Start a new game and go through Oak's lab until Red challenges you ('RED wants to fight!' text box). 2. Tap the text box in the middle of the screen several times. 3. Tap the on-screen A button once.",
+    "expected": "Tapping the text box advances the text, like the HD dialogue boxes do elsewhere.",
+    "actual": "Tapping the Game Boy text box does nothing. Only the A button (477,890) advances it. This is inconsistent with the HD text boxes, which take taps.",
+    "id": 11,
+    "at": 1791903050415,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  },
+  {
+    "turn": 292,
+    "title": "Red's house 1F view is off-centre with a black void to the right",
+    "severity": "low",
+    "steps": "1. Start a new game and walk into Red's house (the player's mother's house) in Pallet Town. 2. Look at the 3D view while walking around the room.",
+    "expected": "The room fills the view with the camera centred on the player, like the other interiors.",
+    "actual": "The camera is cropped and off-centre, with a black void on the right side of the screen beyond the room's walls.",
+    "id": 12,
+    "at": 1791903052817,
+    "status": "open",
+    "attachments": [
+      "screenshot.png",
+      "contact.png",
+      "state.json",
+      "console.log",
+      "save.sav"
+    ]
+  }
+]

@@ -93,6 +93,7 @@ import { PlayJournal } from "../menu/journal.ts";
 import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
 import { noteRenderer, reportError } from "../errors.ts";
 import { PerfSampler } from "../perf.ts";
+import { QA_RUN } from "../qa.ts";
 import "./game.css";
 
 const showStats = new URLSearchParams(location.search).has("stats");
@@ -104,7 +105,16 @@ const classic = new URLSearchParams(location.search).has("classic");
 declare global {
   interface Window {
     /** Set with ?stats, for scripted play-throughs. */
-    __pokehd?: { readonly state: OverworldState | null; readonly inWorld: boolean; readonly frames: number; read(address: number, length: number): Promise<number[]>; readonly page: object; readonly slow: SlowFrame[] };
+    __pokehd?: {
+      readonly state: OverworldState | null;
+      readonly inWorld: boolean;
+      readonly frames: number;
+      read(address: number, length: number): Promise<number[]>;
+      /** The team, badges, play time and the rest, as the Pokédex menu reads them (the stream page's party). */
+      snapshot(): Promise<GameSnapshot>;
+      readonly page: object;
+      readonly slow: SlowFrame[];
+    };
   }
 }
 /** A display frame over 50 ms, with what the page was doing (for ?stats perf checks). */
@@ -167,6 +177,7 @@ const PIP_KEY = "pokehd.screen.pip.v1";
 const PIP_TOGGLE_CODE = "KeyP";
 
 function loadPip(): boolean {
+  if (QA_RUN) return false;
   try {
     return localStorage.getItem(PIP_KEY) !== "off";
   } catch {
@@ -385,7 +396,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Bound keys and rebinding prompts call preventDefault first (JoypadInput listens earlier).
-      if (e.code !== PIP_TOGGLE_CODE || e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (QA_RUN || e.code !== PIP_TOGGLE_CODE || e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       togglePip();
     };
     window.addEventListener("keydown", onKey);
@@ -873,6 +884,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           },
           /** For a stuck test's report: game memory, and what the page holds back. */
           read: (address: number, length: number) => h.read([[address, length]]).then(([bytes]) => Array.from(bytes!)),
+          snapshot: async () => decodeSnapshot(await h.read(SNAPSHOT_RANGES)),
           get page() {
             return { held: heldRef.current, onboarding: onboardingRef.current?.phase ?? null, starter: !!starterRef.current, script: scriptRef.current?.id ?? null };
           },
@@ -1211,7 +1223,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const setApp = <K extends keyof AppOptions>(key: K, value: AppOptions[K]) => {
     if (key === "sound" && value) void enableSound();
     if (key === "readAloud") setReadAloud(!!value);
-    if (key === "gameBoyScreen" && value !== pipRef.current) togglePip();
+    if (key === "gameBoyScreen" && value !== pipRef.current && !QA_RUN) togglePip();
   };
   const closeMenu = () => {
     setMenuOpen(null);
@@ -1269,7 +1281,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           )}
           <div className="game-menu-tiles">
             <button type="button" onClick={enableSound} disabled={sound}>{sound ? "Sound on" : "Turn sound on"}</button>
-            <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Game Boy screen</button>
+            {!QA_RUN && <button type="button" onClick={togglePip} aria-pressed={pip} title="Game Boy screen in the corner (P)">Game Boy screen</button>}
             {room && <RoomBadge status={room.status} friends={room.friends.length} />}
             {gifts && room?.status === "open" && (
               <button type="button" onClick={() => { setGiftOpen((v) => !v); setSettings(false); }} aria-expanded={giftOpen}>Gift</button>
@@ -1296,6 +1308,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         <pre
           className="game-stats"
           data-testid="stats"
+          style={QA_RUN ? { display: "none" } : undefined}
           data-fps={stats.fps.toFixed(1)}
           data-map={s?.mapId}
           data-x={s?.player.x}
