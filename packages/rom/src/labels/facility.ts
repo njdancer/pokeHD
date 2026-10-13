@@ -3,7 +3,7 @@ import type { TilesetLabelTable } from "./types.ts";
 /**
  * FACILITY (tileset 22): the Power Plant, Pokémon Mansion, Cinnabar and Saffron gyms, Silph Co. 1F–10F
  * and the Rocket Hideout. Doors 0x1b, 0x43 and 0x58 come from the ROM; counter 0x12 is the ROM's own
- * list. The ROM animates 0x14 as water, but the only map drawing it is the lobby rug.
+ * list. The ROM animates 0x14 as water; the only map drawing it is Silph Co.'s lobby, where it's solid.
  */
 export const FACILITY: TilesetLabelTable = {
   tiles: {
@@ -27,7 +27,7 @@ export const FACILITY: TilesetLabelTable = {
     0x11: "void", // the dark beyond the Pokémon Mansion's broken outer wall
     0x12: "counter",
     0x13: "stairs",
-    0x14: "floor", // the patterned rug in Silph Co.'s lobby
+    0x14: "water", // the pool in Silph Co.'s lobby, ringed by seats: solid, and animated as water
     0x15: "plant",
     0x16: "plant",
     0x17: "plant",

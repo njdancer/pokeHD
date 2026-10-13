@@ -65,8 +65,8 @@ export const PLATEAU: TilesetLabelTable = {
     0x39: "unused",
     0x3a: "unused",
     0x3c: "unused",
-    0x3d: "ground", // the paved square on Route 23, and its top edge
-    0x3e: "ground",
+    0x3d: "roof", // the Route 22 gate's roof, seen from Route 23 (solid), and its top edge
+    0x3e: "roof",
     0x3f: "unused",
     0x40: "cliff", // the paved square's side edges
     0x41: "cliff",

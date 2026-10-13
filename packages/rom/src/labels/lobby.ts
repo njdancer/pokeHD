@@ -107,6 +107,10 @@ export const LOBBY: TilesetLabelTable = {
     0x1d: { 1: "table", 2: "table", 4: "table", 5: "table", 6: "table", 7: "table", 9: "table", 10: "table" },
     0x2d: { 9: "table", 10: "table", 12: "table", 13: "table", 14: "table", 15: "table" },
     0x31: { 1: "table", 2: "table" },
+    // 3F's consoles: the counter between each pair reuses the big checks (solid).
+    0x05: { 4: "counter", 5: "counter" },
+    // The roof's strip beside the vending machines: plain 0x37 like the wall beside it, and solid.
+    0x3b: { 2: "wall-interior", 3: "wall-interior", 6: "wall-interior", 7: "wall-interior", 10: "wall-interior", 11: "wall-interior" },
     // The prize room's back wall is plain 0x37.
     0x3f: { 0: "wall-interior", 1: "wall-interior", 2: "wall-interior", 3: "wall-interior", 4: "wall-interior", 5: "wall-interior", 6: "wall-interior", 7: "wall-interior", 8: "wall-interior", 9: "wall-interior", 10: "wall-interior", 11: "wall-interior" },
     0x40: { 0: "wall-interior", 1: "wall-interior", 2: "wall-interior", 3: "wall-interior", 4: "wall-interior", 5: "wall-interior", 6: "wall-interior", 7: "wall-interior", 8: "wall-interior", 9: "wall-interior", 10: "wall-interior", 11: "wall-interior" },
