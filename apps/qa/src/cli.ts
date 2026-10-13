@@ -8,9 +8,10 @@
 //                         instead of the stream page. --lan serves the bus, and a live view of
 //                         the window at /watch, to other devices on the network.
 //   inbox [--wait]        The chat. --wait blocks until the player's next message, then prints it.
-//   say TEXT [--bug N] [--tag fixed|harness|question|note]
+//   say TEXT [--bug N] [--tag fixed|harness|question|note|prompt]
 //                         Message the player (unpauses it if it's waiting). --tag fixed --bug N
-//                         also marks the bug fixed.
+//                         also marks the bug fixed. --tag prompt (after editing apps/qa/prompt.md)
+//                         has the player write its handoff and start a new chapter on the new prompt.
 //   bugs [--all]          Open bugs by priority (--all includes fixed ones).
 //   bug N [STATUS]        A bug's report and attachment folder; with STATUS (open, fixing, fixed,
 //                         wontfix) sets it.

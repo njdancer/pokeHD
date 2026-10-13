@@ -14,7 +14,7 @@ type Draft<E> = E extends { id: number; at: number } ? Omit<E, "id" | "at"> : E;
 const FEED_LENGTH = 40;
 const CHAT_LENGTH = 60;
 const BUG_STATUSES: BugStatus[] = ["open", "fixing", "fixed", "wontfix"];
-const CHAT_TAGS: ChatTag[] = ["bug", "fixed", "harness", "question", "note"];
+const CHAT_TAGS: ChatTag[] = ["bug", "fixed", "harness", "question", "note", "prompt"];
 
 export class Bus {
   readonly root: string;

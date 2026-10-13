@@ -1,0 +1,467 @@
+{
+  "turn": 94,
+  "at": "2026-10-13T14:41:55.727Z",
+  "url": "http://localhost:5180/?stats&qa",
+  "emuFps": 54.78734946183269,
+  "page": {
+    "state": {
+      "mode": "dialog",
+      "mapId": 40,
+      "lastMap": 0,
+      "player": {
+        "x": 4,
+        "y": 4,
+        "facing": "up",
+        "step": null,
+        "animFrame": 0,
+        "transport": "walk"
+      },
+      "npcs": [
+        {
+          "slot": 1,
+          "pictureId": 2,
+          "visible": true,
+          "x": 4,
+          "y": 3,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 2,
+          "pictureId": 61,
+          "visible": true,
+          "x": 6,
+          "y": 3,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 3,
+          "pictureId": 61,
+          "visible": true,
+          "x": 7,
+          "y": 3,
+          "facing": "left",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 4,
+          "pictureId": 61,
+          "visible": true,
+          "x": 8,
+          "y": 3,
+          "facing": "right",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 5,
+          "pictureId": 3,
+          "visible": false,
+          "x": 5,
+          "y": 2,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 6,
+          "pictureId": 65,
+          "visible": true,
+          "x": 2,
+          "y": 1,
+          "facing": "left",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 7,
+          "pictureId": 65,
+          "visible": true,
+          "x": 3,
+          "y": 1,
+          "facing": "right",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 8,
+          "pictureId": 3,
+          "visible": false,
+          "x": 5,
+          "y": 10,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 9,
+          "pictureId": 13,
+          "visible": true,
+          "x": 1,
+          "y": 8,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 10,
+          "pictureId": 32,
+          "visible": true,
+          "x": 2,
+          "y": 10,
+          "facing": "up",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 11,
+          "pictureId": 32,
+          "visible": true,
+          "x": 8,
+          "y": 10,
+          "facing": "up",
+          "step": null,
+          "animFrame": 0
+        }
+      ],
+      "fade": 0,
+      "palettes": {
+        "bgp": 228,
+        "obp0": 208,
+        "obp1": 224
+      }
+    },
+    "page": {
+      "held": false,
+      "onboarding": null,
+      "starter": false,
+      "script": 10
+    },
+    "inWorld": true,
+    "frames": 17024,
+    "slow": [
+      {
+        "at": 1134,
+        "ms": 67.8,
+        "updateMs": 1,
+        "renderMs": 43.3,
+        "build": "0 2.9 ms",
+        "map": 201,
+        "mode": "battle",
+        "fade": -0.6666666666666666,
+        "layout": "hidden"
+      },
+      {
+        "at": 1382,
+        "ms": 72.5,
+        "updateMs": 0.2,
+        "renderMs": 57.1,
+        "build": "39 0.4 ms",
+        "map": 201,
+        "mode": "battle",
+        "fade": 0,
+        "layout": "hidden"
+      },
+      {
+        "at": 1447,
+        "ms": 65.5,
+        "updateMs": 0.1,
+        "renderMs": 55.9,
+        "build": "40 0.4 ms",
+        "map": 201,
+        "mode": "battle",
+        "fade": 0,
+        "layout": "hidden"
+      },
+      {
+        "at": 9792,
+        "ms": 251.3,
+        "updateMs": 0,
+        "renderMs": 2.3,
+        "build": null,
+        "map": 0,
+        "mode": "dialog",
+        "fade": 0,
+        "layout": "hidden"
+      },
+      {
+        "at": 12828,
+        "ms": 75.1,
+        "updateMs": 0,
+        "renderMs": 2,
+        "build": null,
+        "map": 0,
+        "mode": "overworld",
+        "fade": 0,
+        "layout": "hidden"
+      },
+      {
+        "at": 17595,
+        "ms": 75.2,
+        "updateMs": 0,
+        "renderMs": 2.4,
+        "build": null,
+        "map": 38,
+        "mode": "dialog",
+        "fade": 0,
+        "layout": "hidden"
+      },
+      {
+        "at": 38694,
+        "ms": 91.4,
+        "updateMs": 0.1,
+        "renderMs": 2.2,
+        "build": null,
+        "map": 38,
+        "mode": "dialog",
+        "fade": 0,
+        "layout": "hidden"
+      },
+      {
+        "at": 56370,
+        "ms": 75,
+        "updateMs": 0.1,
+        "renderMs": 2.2,
+        "build": null,
+        "map": 38,
+        "mode": "dialog",
+        "fade": 0,
+        "layout": "hidden"
+      },
+      {
+        "at": 66762,
+        "ms": 92.3,
+        "updateMs": 0,
+        "renderMs": 2.2,
+        "build": null,
+        "map": 38,
+        "mode": "dialog",
+        "fade": 0,
+        "layout": "hidden"
+      },
+      {
+        "at": 202224,
+        "ms": 50.1,
+        "updateMs": 0.1,
+        "renderMs": 1.5,
+        "build": null,
+        "map": 0,
+        "mode": "overworld",
+        "fade": 0,
+        "layout": "corner"
+      },
+      {
+        "at": 217594,
+        "ms": 50.8,
+        "updateMs": 0,
+        "renderMs": 2.2,
+        "build": null,
+        "map": 0,
+        "mode": "overworld",
+        "fade": 0,
+        "layout": "corner"
+      },
+      {
+        "at": 232535,
+        "ms": 58.1,
+        "updateMs": 0,
+        "renderMs": 2.2,
+        "build": null,
+        "map": 0,
+        "mode": "overworld",
+        "fade": 0,
+        "layout": "corner"
+      }
+    ]
+  },
+  "screen": {
+    "hooked": true,
+    "state": {
+      "mode": "dialog",
+      "mapId": 40,
+      "lastMap": 0,
+      "player": {
+        "x": 4,
+        "y": 4,
+        "facing": "up",
+        "step": null,
+        "animFrame": 0,
+        "transport": "walk"
+      },
+      "npcs": [
+        {
+          "slot": 1,
+          "pictureId": 2,
+          "visible": true,
+          "x": 4,
+          "y": 3,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 2,
+          "pictureId": 61,
+          "visible": true,
+          "x": 6,
+          "y": 3,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 3,
+          "pictureId": 61,
+          "visible": true,
+          "x": 7,
+          "y": 3,
+          "facing": "left",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 4,
+          "pictureId": 61,
+          "visible": true,
+          "x": 8,
+          "y": 3,
+          "facing": "right",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 5,
+          "pictureId": 3,
+          "visible": false,
+          "x": 5,
+          "y": 2,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 6,
+          "pictureId": 65,
+          "visible": true,
+          "x": 2,
+          "y": 1,
+          "facing": "left",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 7,
+          "pictureId": 65,
+          "visible": true,
+          "x": 3,
+          "y": 1,
+          "facing": "right",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 8,
+          "pictureId": 3,
+          "visible": false,
+          "x": 5,
+          "y": 10,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 9,
+          "pictureId": 13,
+          "visible": true,
+          "x": 1,
+          "y": 8,
+          "facing": "down",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 10,
+          "pictureId": 32,
+          "visible": true,
+          "x": 2,
+          "y": 10,
+          "facing": "up",
+          "step": null,
+          "animFrame": 0
+        },
+        {
+          "slot": 11,
+          "pictureId": 32,
+          "visible": true,
+          "x": 8,
+          "y": 10,
+          "facing": "up",
+          "step": null,
+          "animFrame": 0
+        }
+      ],
+      "fade": 0,
+      "palettes": {
+        "bgp": 228,
+        "obp0": 208,
+        "obp1": 224
+      }
+    },
+    "inWorld": true,
+    "frames": 17024,
+    "layout": "corner",
+    "loading": false,
+    "held": false,
+    "visible": true,
+    "fps": 119.4,
+    "slow": [],
+    "panels": [
+      {
+        "kind": "message",
+        "text": "RED: Yo\nClaude! Gramps\nisn't around!"
+      }
+    ],
+    "buttons": [
+      {
+        "label": "message box (tap to read on)",
+        "pad": false,
+        "x": 5,
+        "y": 327,
+        "w": 517,
+        "h": 207
+      },
+      {
+        "label": "Pokédex",
+        "pad": false,
+        "x": 487,
+        "y": 12,
+        "w": 29,
+        "h": 56
+      }
+    ],
+    "joystick": null,
+    "printing": true,
+    "now": 286003.5
+  },
+  "glitches": [
+    {
+      "at": 1791902230896,
+      "kind": "console-error",
+      "text": "The page logged an error: THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshBasicNodeMaterial_133): [Invalid TextureView] is invalid due to a previous error."
+    },
+    {
+      "at": 1791902230911,
+      "kind": "console-error",
+      "text": "The page logged an error: THREE.WebGPURenderer: Async render pipeline creation failed (renderPipeline_MeshStandardNodeMaterial_169): The dimension (TextureViewDimension::e3D) of the texture view is not compatible with the dimension (TextureDimension::e2D) of [Texture (unlabeled 1x1 px, TextureFormat::RGBA8Unorm)]."
+    },
+    {
+      "at": 1791902239547,
+      "kind": "long-frame",
+      "text": "The picture stuck for 251 ms."
+    }
+  ]
+}

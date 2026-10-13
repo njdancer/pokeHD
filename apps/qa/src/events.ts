@@ -37,7 +37,8 @@ export interface ActionEvent {
   label: string;
 }
 
-export type ChatTag = "bug" | "fixed" | "harness" | "question" | "note";
+/** "prompt": the developer changed the player's instructions, so the player starts a new chapter to load them. */
+export type ChatTag = "bug" | "fixed" | "harness" | "question" | "note" | "prompt";
 
 export interface ChatEvent {
   t: "chat";

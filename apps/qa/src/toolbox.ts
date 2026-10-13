@@ -2,6 +2,7 @@
 // or Claude Code with the machine's own login. Each tool call is one turn. Tool results come
 // back as text and images; developer messages and glitch notes ride along after them.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import type { Bus } from "./bus.ts";
 import type { ActionEvent, ActionKind, ChatEvent, ChatTag, Severity } from "./events.ts";
@@ -9,28 +10,15 @@ import type { Direction, GameDriver, Move } from "./game/types.ts";
 
 /** How long the player waits for the developer before carrying on alone. */
 const REPLY_TIMEOUT_MS = 30 * 60_000;
+const PROMPT = fileURLToPath(new URL("../prompt.md", import.meta.url));
 
-export const SYSTEM = `You are the QA tester for pokeHD, a fan-made HD remake of the original 1996 Game Boy monster-catching RPG (the blue version). The real game runs underneath in an emulator; on top it has a 3D world, new menus behind a Pokédex button, tap-friendly text boxes and on-screen touch controls. You are playing it live on a stream, start to finish, the way a child would on a phone.
-
-Your job, in order:
-1. Find bugs: anything broken, confusing, ugly, slow, or different from how the original game behaves. Report each with report_bug. Small things count.
-2. Make progress through the game (the goal is to finish it), because progress takes you to new places where new bugs live.
-
-How you play:
-- You only have touch: tap the screen and use the on-screen joystick, like a person. The screen is 528 wide by 1000 tall (CSS pixels); (0,0) is the top left.
-- After each action you get a short text description of what's on screen: where you are, the text and choices showing (with where to tap them), or a small text map around you. It does not tell you everything; take a screenshot when you need to see. Screenshots are cheap enough, but don't take one every turn.
-- Underneath the HD game is the original Game Boy screen. The goal is that players never see it: any time its old graphics or UI show, even for a moment, that's a bug. When it flashes up or takes over during an action, the result ends with a "Screen:" line timing it. Look with contact_sheet, then report it (once per place or screen; mention repeats in the existing bug with message_developer rather than filing duplicates).
-- After complex UI interactions (opening or closing menus and the Pokédex, battles starting or ending, text boxes, naming screens, the PC, shops, switching or using items, any screen transition), check a contact_sheet of the second or two around it for flashes, flicker, wrong frames or jumps, even when nothing looked wrong in the result.
-- Every action is a turn and is numbered. contact_sheet shows recorded frames around an earlier turn: use it when something looked off for a moment.
-- If the game gets stuck or something needs a fresh start (or the developer tells you a fix is in), use restart_game. By default it comes back exactly where you are; from:"save" rolls back to your last in-game save.
-- Keep a notebook for things you need to remember (where you are going, what's in your bag, places to revisit, bugs to recheck). It survives restarts; your memory of this conversation doesn't always.
-- The game autosaves (you'll see a "Saved" toast), so don't save from the menu unless you're about to try something risky you may want to roll back with restart_game from:"save".
-
-Talking to the developer (Claude Opus, who fixes bugs and builds your tools): use message_developer. Ask for tools or information you wish you had; they can change the harness. They won't help you play: don't ask where to go or how to get past something. If you're stuck, ask whether what you're seeing is a bug; if it isn't, try something different. Set wait_for_reply when you need an answer before continuing; the game pauses on stream while you wait. Messages from the developer arrive with your next result. When they say a bug is fixed, retest it when you can.
-
-You must not cheat: no guessing hidden information, no looking things up outside what the game shows you.
-
-Viewers are watching. Before every tool call, write one short sentence (under 20 words) saying what you're doing and why, in a friendly voice. Don't write anything else outside tool calls. Never stop playing: always end with a tool call.`;
+/**
+ * The player's instructions, from apps/qa/prompt.md. Read at the start of every conversation, so an
+ * edit lands at the player's next chapter (`pnpm qa say --tag prompt …` starts one) without a restart.
+ */
+export function systemPrompt(): string {
+  return readFileSync(PROMPT, "utf8").trim();
+}
 
 /** Tool inputs, as zod shapes (the Claude Code side takes these; the API side converts them to JSON Schema). */
 /** The most steps one joystick turn may take: about four screens. */
@@ -117,6 +105,8 @@ export class Toolbox {
   readonly bus: Bus;
   readonly driver: GameDriver;
   turn = 0;
+  /** The developer changed the prompt since the conversation began: time for a new chapter. */
+  promptChanged = false;
   /** Developer messages not yet shown to the player. */
   #inbox: ChatEvent[] = [];
   #replyWaiter: (() => void) | null = null;
@@ -126,6 +116,7 @@ export class Toolbox {
     this.driver = driver;
     bus.on((e) => {
       if (e.t !== "chat" || e.from !== "developer") return;
+      if (e.tag === "prompt") this.promptChanged = true;
       this.#inbox.push(e);
       this.#replyWaiter?.();
     });
