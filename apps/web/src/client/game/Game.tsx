@@ -630,7 +630,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           const fight = battles?.frame(watched);
           const battle = hd && inWorld ? fight?.scene : undefined;
           live!.setBattle(battle ? (fight?.view ?? null) : null);
-          const battleScreen = battle === "scene" ? (fight?.screen ?? null) : null;
+          const battleScreen = battle === "scene" || battle === "evolution" ? (fight?.screen ?? null) : null;
           const huds = battle === "scene" && fight?.state && fight.huds ? { state: fight.state, huds: fight.huds } : null;
           const hudKey = huds ? JSON.stringify([huds.huds, huds.state.player.mon, huds.state.enemy.mon]) : "";
           if (hudKey !== shownHud) {
