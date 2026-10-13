@@ -731,7 +731,8 @@ this code.
 ## D44. HD battle menus answer the battle's own menu and move list, with the moves up front (trial)
 
 **Status:** made by Claude 2026-10-13 under Nick's rules (D40, "any Game Boy UI showing is a
-bug"); layout pending Nick's pick. Off unless a device opens the game once with `?battlemenus`.
+bug"). Nick picked the moves-up-front layout (2026-10-13 21:19Z), so it's on by default;
+`?battlemenus=0` turns it off on a device.
 
 - **Hook.** `BattleMenus` stands in for `HandleMenuInput` when it's called from the battle menu's
   two columns (`DisplayBattleMenu`) or the move list (`SelectMenuItem`), told apart by the return
@@ -743,10 +744,9 @@ bug"); layout pending Nick's pick. Off unless a device opens the game once with 
 - **One tap a turn.** The menu question carries the moves, so a move can be picked straight away:
   the menu gets FIGHT and the move list that follows gets the move without asking again. A move
   list the game shows on its own (after "No PP left!", MIMIC, an ETHER in battle) is asked as such.
-- **Layouts** for Nick to compare: `moves` (2×2 moves with type and PP, then Pokémon, Bag, Run) and
-  `classic` (Fight, Pokémon, Bag, Run; Fight opens the moves). `?battlemenus=classic` picks it,
-  `=0` turns them off; the choice sticks on the device. /dev/battle?battlemenus=moves shows it on a
-  recorded battle.
+- **Layout:** 2×2 moves with type and PP, then Pokémon, Bag and Run. A classic layout (Fight,
+  Pokémon, Bag, Run first) was compared and dropped. /dev/battle?fixture=wild&battlemenus shows it
+  on a recorded battle.
 
 Why: the kid on an iPhone gets big buttons where his thumbs are, and most turns are one tap. A
 stand-in at the input routine keeps every rule and message the original's, with no battle logic
