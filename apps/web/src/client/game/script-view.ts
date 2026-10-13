@@ -8,7 +8,7 @@ export interface ScriptView {
   boxes: string[][];
   /** The box showing. */
   index: number;
-  /** The player has read it: the game is finishing it. */
+  /** The player has read it: the game is finishing it (its last box stays up meanwhile). */
   closed: boolean;
   /** The game is done with it (a menu took over, the box closed, or another message began). */
   ended: boolean;
@@ -38,9 +38,13 @@ function isOurs(script: ScriptView, line: string): boolean {
 }
 
 /**
- * This frame's message box from a whole message: the box the player is on (`lines`), or hidden
- * while the game finishes a message already read. Null when no message applies, so the game's
- * own pages show (read through by the DialogJoiner).
+ * This frame's message box from a whole message: the box the player is on (`lines`). Null when
+ * no message applies, so the game's own pages show (read through by the DialogJoiner).
+ *
+ * A message the player has read stays up on its last box for as long as the game's box shows it.
+ * The game finishes it at once when a person was talking, but some scripts keep their message on
+ * screen while they go on: the nurse's "OK. We'll need your POKéMON." stays up through the whole
+ * healing machine (QA bug 19). With the box hidden, the room showed with no words for seconds.
  *
  * The page answers the game's waits for a message it shows, so a message the game's box doesn't
  * match for long (a line read wrong, a name filled in differently) goes back to the game: its
@@ -51,7 +55,7 @@ export function scriptView(
   text: ScreenText,
   fits: boolean,
   release: (id: number) => void,
-): { lines: string[] | null; hidden: boolean } | null {
+): { lines: string[] | null } | null {
   const script = ref.current;
   if (!script) return null;
   const dialog = text.dialog;
@@ -71,6 +75,5 @@ export function scriptView(
     return null;
   }
   script.unfit = 0;
-  if (script.closed) return { lines: null, hidden: true };
-  return { lines: script.boxes[script.index] ?? null, hidden: false };
+  return { lines: script.boxes[script.index] ?? null };
 }
