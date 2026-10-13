@@ -289,6 +289,7 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
     past,
     seen: game.seen,
     owned: game.owned,
+    onShow: game.onShow,
     people,
     friends: friends.map((fr, i) => ({
       id: fr.id,
