@@ -72,7 +72,8 @@ export function EntryScreen({ dex }: { dex: number }) {
   const env = useEnv();
   const nav = useNav();
   const e = env.catalogue.entries[dex - 1]!;
-  const caught = env.model.owned.has(dex);
+  // In full when caught, or while the game shows it in full (a starter in Oak's lab).
+  const caught = env.model.owned.has(dex) || !!env.model.onShow?.has(dex);
   const homes = env.catalogue.homes.get(dex) ?? [];
   const [tab, setTab] = useState<EntryTab>("about");
   const [art, setArt] = useState(true);
