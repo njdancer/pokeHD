@@ -4,7 +4,7 @@
 // and notes carry over from one run to the next.
 import type { AddressInfo } from "node:net";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { byPriority, type Bug, type BugStatus, type ChatEvent, type ChatTag, type GlitchEvent, type QaEvent, type Snapshot, type StatusEvent } from "./events.ts";
 
@@ -19,6 +19,8 @@ const CHAT_TAGS: ChatTag[] = ["bug", "fixed", "harness", "question", "note", "pr
 export class Bus {
   readonly root: string;
   readonly dir: string;
+  /** The last turn of the previous run, so turn numbers carry on across restarts. */
+  readonly lastTurn: number = 0;
   #nextId = 1;
   #status: StatusEvent | null = null;
   #feed: Snapshot["feed"] = [];
@@ -43,6 +45,20 @@ export class Bus {
     if (existsSync(this.#chatPath)) {
       this.#chat = readFileSync(this.#chatPath, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as ChatEvent).slice(-CHAT_LENGTH);
       this.#nextId = Math.max(0, ...this.#chat.map((c) => c.id)) + 1;
+    }
+    // And the end of the previous run's feed and its turn count, so a harness restart doesn't
+    // blank the player's thoughts on stream or start the turns again from 1.
+    const previous = readdirSync(root, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && /^\d{4}-/.test(d.name) && join(root, d.name) !== this.dir && existsSync(join(root, d.name, "events.jsonl")))
+      .map((d) => d.name)
+      .sort()
+      .at(-1);
+    if (previous) {
+      const events = readFileSync(join(root, previous, "events.jsonl"), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l) as QaEvent);
+      const feed = events.filter((e): e is Snapshot["feed"][number] => e.t === "thought" || e.t === "action");
+      this.#feed = feed.slice(-FEED_LENGTH);
+      this.lastTurn = Math.max(0, ...feed.map((e) => e.turn));
+      this.#nextId = Math.max(this.#nextId, ...events.map((e) => ("id" in e ? e.id : 0))) + 1;
     }
   }
 

@@ -114,6 +114,7 @@ export class Toolbox {
   constructor(bus: Bus, driver: GameDriver) {
     this.bus = bus;
     this.driver = driver;
+    this.turn = bus.lastTurn;
     bus.on((e) => {
       if (e.t !== "chat" || e.from !== "developer") return;
       if (e.tag === "prompt") this.promptChanged = true;
