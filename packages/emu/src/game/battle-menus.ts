@@ -15,6 +15,12 @@
 // The page can choose a move straight from the battle menu (`{ fight: n }`): the menu gets FIGHT
 // and the move list that follows gets the move, without asking again. A move list the game shows
 // without that choice (after "No PP left!") is asked as its own question.
+//
+// A game resumed from a point taken while the Game Boy's own menu was up (a point from a page
+// without the HD menus, e.g. one loaded before they were on) is already inside HandleMenuInput's
+// loop, past the stand-in. At the loop's .getJoypadState a battle menu's wait is unwound (as
+// .giveUpWaiting does) and HandleMenuInput entered again from the same caller, so the stand-in
+// asks the page.
 import { moveName, romOffset, SYMBOLS, type SymbolName } from "@pokehd/rom";
 import type { GameBoy } from "../core.ts";
 import { readWord, StandIn, type Answer } from "../ffi.ts";
@@ -93,6 +99,7 @@ export class BattleMenus {
   readonly #rom: Uint8Array;
   readonly #onAsk: (id: number, ask: BattleAsk) => void;
   readonly #standIn: StandIn;
+  readonly #removeRejoin: () => void;
   #ids = 0;
   #asked: { id: number; ask: BattleAsk } | null = null;
   #answer: { id: number; answer: BattleAnswer } | null = null;
@@ -105,6 +112,7 @@ export class BattleMenus {
     this.#rom = options.rom;
     this.#onAsk = options.onAsk;
     this.#standIn = new StandIn(gb, "HandleMenuInput", (g) => this.#site(g) !== null, (g) => this.#stand(g));
+    this.#removeRejoin = gb.addHook("HandleMenuInput_.getJoypadState", (g) => this.#rejoin(g));
   }
 
   /** The question the game is waiting on, if any. */
@@ -118,10 +126,29 @@ export class BattleMenus {
 
   dispose(): void {
     this.#standIn.dispose();
+    this.#removeRejoin();
   }
 
-  /** Which of the battle's menus called HandleMenuInput, or null for any other menu. */
-  #site(g: GameBoy): number | null {
+  /**
+   * In HandleMenuInput's loop, waiting for the Game Boy's keys: a battle menu's wait goes back to
+   * HandleMenuInput's entry, for the stand-in. The stack holds the loop's hl, the two
+   * hDownArrowBlinkCount values HandleMenuInput_ saved (a in each push's high byte), then the
+   * caller's return address.
+   */
+  #rejoin(g: GameBoy): void {
+    if (this.#standIn.waiting) return;
+    const sp = g.registers.sp;
+    if (this.#site(g, (sp + 6) & 0xffff) === null) return;
+    g.write(addr("hDownArrowBlinkCount2"), g.read((sp + 3) & 0xffff));
+    g.write(addr("hDownArrowBlinkCount1"), g.read((sp + 5) & 0xffff));
+    g.setRegisters({ sp: (sp + 6) & 0xffff, pc: addr("HandleMenuInput") });
+  }
+
+  /**
+   * Which of the battle's menus called HandleMenuInput (its return address at `sp`), or null for
+   * any other menu.
+   */
+  #site(g: GameBoy, sp = g.registers.sp): number | null {
     if (g.read(addr("wIsInBattle")) === 0) {
       this.#target = this.#move = null;
       return null;
@@ -129,7 +156,7 @@ export class BattleMenus {
     // Link battles keep the Game Boy's menus: both games must read the same keys.
     if (g.read(addr("wLinkState")) === LINK_STATE_BATTLING) return null;
     if (g.read(addr("hLoadedROMBank")) !== SYMBOLS["DisplayBattleMenu.AButtonPressed"].bank) return null;
-    const back = readWord(g, g.registers.sp);
+    const back = readWord(g, sp);
     const within = (from: SymbolName, to: SymbolName) => back > addr(from) && back <= addr(to);
     if (within("DisplayBattleMenu.leftColumn_WaitForInput", "DisplayBattleMenu.rightColumn")) return LEFT;
     if (within("DisplayBattleMenu.rightColumn_WaitForInput", "DisplayBattleMenu.AButtonPressed")) return RIGHT;
