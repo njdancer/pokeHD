@@ -1,7 +1,9 @@
 // The QA stream's page (/dev/stream), as OBS and the harness see it: the game the player drives,
 // in the design's gap, over the overlay (/dev/stream/overlay) in its own frame. The overlay can
 // be edited and reloaded while the stream runs without touching the game; this page stays small
-// and is meant to change rarely. It draws only the PAUSED veil over the game itself.
+// and is meant to change rarely. It draws only the PAUSED veil over the game itself, and with
+// ?broadcast sends the whole page, sound included, to viewers (broadcast.ts).
+import { useBroadcast } from "./broadcast.ts";
 import { useBus } from "./bus.ts";
 import { BUS, GAME, useFit, useFonts } from "./stage.ts";
 import "./stream.css";
@@ -10,6 +12,7 @@ export function StreamHost() {
   useFonts();
   const scale = useFit();
   const mode = useBus(BUS).status?.mode === "talk" ? "talk" : "play";
+  useBroadcast(BUS, new URLSearchParams(location.search).has("broadcast"));
   return (
     <div className="qs-shell">
       <div className="qs-fit" style={{ transform: `translate(-50%,-50%) scale(${scale})` }}>

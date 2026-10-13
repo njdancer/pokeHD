@@ -28,6 +28,10 @@ export class Bus {
   #listeners = new Set<(e: QaEvent) => void>();
   #server: Server | null = null;
   #live: ((listener: (jpeg: Buffer) => void) => () => void) | null = null;
+  /** The stream page sending the window as video (WebRTC), and viewers' offers waiting on its answers. */
+  #broadcaster: ServerResponse | null = null;
+  #offers = new Map<number, (answer: string | null) => void>();
+  #nextOffer = 1;
 
   /** `root` holds every run (runs/), the shared bugs.json and notebook.md; this run gets its own folder. */
   constructor(root: string) {
@@ -164,6 +168,44 @@ export class Bus {
     const bugMatch = /^\/bugs\/(\d+)$/.exec(url.pathname);
     if (req.method === "GET" && url.pathname === "/snapshot") return send(res, 200, this.snapshot());
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/watch")) return void res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(WATCH_PAGE);
+    // WebRTC signalling, WHEP-like and without trickle ICE: a viewer posts its whole offer and
+    // gets the whole answer back; the stream page (?broadcast) hears offers on /rtc/broadcaster
+    // and posts answers to /rtc/answer.
+    if (req.method === "GET" && url.pathname === "/rtc/broadcaster") {
+      res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+      res.write(": hello\n\n");
+      this.#broadcaster?.end();
+      this.#broadcaster = res;
+      const ping = setInterval(() => res.write(": ping\n\n"), 15_000);
+      req.on("close", () => {
+        clearInterval(ping);
+        if (this.#broadcaster === res) this.#broadcaster = null;
+      });
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/rtc/offer") {
+      const { sdp } = (await readJson(req)) as { sdp?: unknown };
+      if (typeof sdp !== "string") return send(res, 400, { error: "sdp required" });
+      if (!this.#broadcaster) return send(res, 503, { error: "the stream page isn't broadcasting" });
+      const id = this.#nextOffer++;
+      const answer = await new Promise<string | null>((resolve) => {
+        const timer = setTimeout(() => resolve(null), 15_000);
+        this.#offers.set(id, (a) => {
+          clearTimeout(timer);
+          resolve(a);
+        });
+        this.#broadcaster!.write(`data: ${JSON.stringify({ id, sdp })}\n\n`);
+      });
+      this.#offers.delete(id);
+      return answer ? send(res, 200, { sdp: answer }) : send(res, 504, { error: "no answer from the stream page" });
+    }
+    if (req.method === "POST" && url.pathname === "/rtc/answer") {
+      const { id, sdp } = (await readJson(req)) as { id?: unknown; sdp?: unknown };
+      const pending = typeof id === "number" ? this.#offers.get(id) : undefined;
+      if (!pending || typeof sdp !== "string") return send(res, 404, { error: "no such offer" });
+      pending(sdp);
+      return send(res, 200, {});
+    }
     if (req.method === "GET" && url.pathname === "/live.mjpeg") {
       if (!this.#live) return send(res, 503, { error: "the game isn't running yet" });
       // Motion JPEG: every frame replaces the last; <img> plays it in any browser, Safari included.
@@ -218,8 +260,42 @@ export class Bus {
 const WATCH_PAGE = `<!doctype html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Claude QA live</title>
-<style>html,body{margin:0;height:100%;background:#111}img{display:block;width:100%;height:100%;object-fit:contain}</style>
-</head><body><img src="/live.mjpeg" alt="The QA stream, live"></body></html>`;
+<style>
+html,body{margin:0;height:100%;background:#111;color:#fff;font:600 18px system-ui,sans-serif}
+video,img{display:block;width:100%;height:100%;object-fit:contain}
+#sound{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:12px 22px;border-radius:999px;border:0;background:#e0702a;color:#fff;font:inherit}
+</style>
+</head><body>
+<video id="v" playsinline autoplay muted></video>
+<button id="sound" hidden>Tap for sound</button>
+<script>
+// Video and sound over WebRTC from the stream page; the silent picture feed if that isn't up.
+const video = document.getElementById("v");
+const sound = document.getElementById("sound");
+function fallback() {
+  const img = document.createElement("img");
+  img.src = "/live.mjpeg";
+  video.replaceWith(img);
+  sound.hidden = true;
+}
+async function connect() {
+  const pc = new RTCPeerConnection();
+  pc.addTransceiver("video", { direction: "recvonly" });
+  pc.addTransceiver("audio", { direction: "recvonly" });
+  const stream = new MediaStream();
+  pc.ontrack = (e) => { stream.addTrack(e.track); video.srcObject = stream; video.play().catch(() => {}); };
+  await pc.setLocalDescription(await pc.createOffer());
+  await new Promise((r) => { if (pc.iceGatheringState === "complete") r(); else { pc.onicegatheringstatechange = () => pc.iceGatheringState === "complete" && r(); setTimeout(r, 3000); } });
+  const res = await fetch("/rtc/offer", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sdp: pc.localDescription.sdp }) });
+  if (!res.ok) throw new Error(await res.text());
+  await pc.setRemoteDescription({ type: "answer", sdp: (await res.json()).sdp });
+  sound.hidden = false;
+  pc.onconnectionstatechange = () => { if (pc.connectionState === "failed") location.reload(); };
+}
+sound.onclick = () => { video.muted = false; video.play(); sound.hidden = true; };
+connect().catch(fallback);
+</script>
+</body></html>`;
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));

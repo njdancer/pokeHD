@@ -71,7 +71,8 @@ switch (command) {
     const streamUrl = `${values.app}/dev/stream?bus=${encodeURIComponent(bus)}`;
     console.log(`Run folder ${run.dir}\nBus ${bus}\nStream ${streamUrl}`);
     if (values.lan) for (const address of lanAddresses()) console.log(`Watch live at http://${address}:${values.port}/watch`);
-    const driver = createDriver({ appUrl: values.app, runDir: run.dir, headless: values.headless, ...(values.game && { streamPath: "game" }) });
+    const streamPath = values.game ? "game" : `/dev/stream?bus=${encodeURIComponent(bus)}&broadcast`;
+    const driver = createDriver({ appUrl: values.app, runDir: run.dir, headless: values.headless, streamPath });
     run.setLive((listener) => driver.onFrame(listener));
     const player = new Player({ toolbox: new Toolbox(run, driver), backend, model: values.model, ...(values.turns && { maxTurns: Number(values.turns) }) });
     const stop = () => player.stop();

@@ -29,6 +29,7 @@ const DialogDev = lazy(() => import("./dev/DialogDev.tsx").then((m) => ({ defaul
 const ReliefEditor = lazy(() => import("./tools/relief/ReliefEditor.tsx").then((m) => ({ default: m.ReliefEditor })));
 // The QA stream's broadcast overlay (Haiku plays, Opus fixes), captured by OBS at 1920×1080.
 const StreamHost = lazy(() => import("./dev/stream/StreamHost.tsx").then((m) => ({ default: m.StreamHost })));
+const WatchPage = lazy(() => import("./dev/stream/WatchPage.tsx").then((m) => ({ default: m.WatchPage })));
 const StreamPage = lazy(() => import("./dev/stream/StreamPage.tsx").then((m) => ({ default: m.StreamPage })));
 const StyleCompare = lazy(() => import("./dev/StyleCompare.tsx").then((m) => ({ default: m.StyleCompare })));
 // Dev-only tools, left out of production builds.
@@ -66,6 +67,7 @@ export function Root() {
   if (path === "/tools/relief") return <Suspense><ReliefEditor /></Suspense>;
   if (path === "/dev/stream") return <Suspense><StreamHost /></Suspense>;
   if (path === "/dev/stream/overlay") return <Suspense><StreamPage /></Suspense>;
+  if (path === "/dev/watch") return <Suspense><WatchPage /></Suspense>;
   if (path === "/dev/styles") return <Suspense><StyleCompare /></Suspense>;
   if (Shots && path === "/dev/shots") return <Suspense><Shots /></Suspense>;
   if (MapViewer && location.hash === "#maps") return <Suspense><MapViewer /></Suspense>;

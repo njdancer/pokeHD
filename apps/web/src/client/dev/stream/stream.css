@@ -271,3 +271,23 @@
 @keyframes qs-blink { 50% { opacity: .2; } }
 @keyframes qs-bob { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }
 @keyframes qs-pop { from { transform: scale(.6); opacity: 0; } }
+
+/* ---------- watch page (/dev/watch): the live video, or "be right back" ---------- */
+.qs-watch-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.qs.qs-brb { display: grid; place-content: center; justify-items: center; gap: 28px; }
+.qs .qs-brb-ball {
+  width: 220px; height: 220px; border-radius: 50%; border: 14px solid var(--ball-ink); position: relative;
+  background: linear-gradient(to bottom, var(--red) 0 44%, var(--ball-ink) 44% 56%, #fff 56% 100%);
+  animation: qs-brb-bob 2.4s var(--ease) infinite;
+}
+.qs .qs-brb-ball::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; transform: translate(-50%,-50%);
+  border-radius: 50%; background: #fff; border: 12px solid var(--ball-ink);
+}
+.qs .qs-brb-title { font-size: 96px; font-weight: 700; color: var(--ink); }
+.qs .qs-brb-title b { color: var(--accent); }
+.qs .qs-brb-sub { font-size: 44px; color: var(--muted); font-weight: 800; }
+@keyframes qs-brb-bob {
+  0%, 100% { transform: translateY(0) rotate(-8deg); }
+  50% { transform: translateY(-36px) rotate(8deg); }
+}

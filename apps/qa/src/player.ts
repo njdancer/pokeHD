@@ -8,7 +8,8 @@
 // its "thoughts" on the stream.
 import Anthropic from "@anthropic-ai/sdk";
 import { createSdkMcpServer, query, tool, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import type { Outcome } from "./game/types.ts";
@@ -75,14 +76,18 @@ export class Player {
 
   async #runClaude(opening: string): Promise<void> {
     const box = this.#box;
+    let session: ReturnType<typeof query> | null = null;
     const handler = (name: ToolName) => async (args: Record<string, unknown>) => {
+      // Past the turn limit (or after stop) nothing runs. A note in a tool result is only data to
+      // the player, which keeps chaining calls inside one turn, so the session is interrupted.
+      if (this.#done) {
+        void session?.interrupt().catch(() => {});
+        return { content: [{ type: "text" as const, text: "The session has ended." }], isError: true };
+      }
       const out = await box.run(name, args);
       // Developer mail and glitch notes ride on the result, since Claude Code has no system turns.
       const extra = [box.mail(), box.glitchNote()].filter((s): s is string => !!s).map((text): Part => ({ type: "text", text }));
-      if (this.#done) {
-        extra.push({ type: "text", text: "The session is ending now; stop here." });
-        this.#onStop?.();
-      }
+      if (this.#done) this.#onStop?.();
       return {
         content: [...out.parts, ...extra].map((p) => (p.type === "text" ? { type: "text" as const, text: p.text } : { type: "image" as const, data: p.png.toString("base64"), mimeType: "image/png" })),
         ...(out.isError && { isError: true }),
@@ -108,7 +113,10 @@ export class Player {
         while (inbox.length) yield inbox.shift()!;
       }
     };
-    this.#onStop = () => wake?.();
+    this.#onStop = () => {
+      wake?.();
+      void session?.interrupt().catch(() => {});
+    };
     say(opening);
 
     // The player's own login, not a key: drop ANTHROPIC_API_KEY so Claude Code uses the subscription,
@@ -116,7 +124,7 @@ export class Player {
     // (its proxy, its host-managed auth), which the player can't use.
     // CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) is the machine's subscription too, so it stays.
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k === "CLAUDE_CODE_OAUTH_TOKEN" || !/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDECODE$)/.test(k)));
-    const session = query({
+    session = query({
       prompt: prompt(this),
       options: {
         model: this.#model,
@@ -125,16 +133,21 @@ export class Player {
         mcpServers: { game: server },
         allowedTools: Object.keys(TOOLS).map((name) => `mcp__game__${name}`),
         permissionMode: "dontAsk",
-        // Nothing from this repository or the machine's settings: the player sees only the game.
+        // Nothing from this repository or the machine's own Claude setup, some of it personal: no
+        // settings or CLAUDE.md, no claude.ai connectors or other MCP servers, no auto-memory. It
+        // runs in an empty folder outside any git repository, so Claude Code ties it to no project.
         settingSources: [],
-        cwd: box.bus.dir,
-        env: { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: "pokehd-qa/1" },
+        strictMcpConfig: true,
+        settings: { disableClaudeAiConnectors: true, autoMemoryEnabled: false },
+        cwd: mkdtempSync(join(tmpdir(), "pokehd-qa-player-")),
+        env: { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: "pokehd-qa/1", ENABLE_CLAUDEAI_MCP_SERVERS: "false", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" },
       },
     });
     let failure: string | null = null;
     let retries = 0;
     try {
       for await (const message of session) {
+        if (this.#done && message.type === "result") break;
         if (message.type === "assistant" && !message.parent_tool_use_id) {
           this.#log({ role: "assistant", content: message.message.content, usage: message.message.usage, ...(message.error && { error: message.error }) });
           if (message.error) {

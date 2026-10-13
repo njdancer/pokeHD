@@ -33,7 +33,12 @@ export interface DriverOptions {
 }
 
 const GAME_SIZE = { width: 528, height: 1000 } as const;
-const STREAM_VIEWPORT = { width: 1920, height: 1080 } as const;
+/**
+ * The stream page's window: 1280×720 so it fits a laptop's screen, at 1.5× so the page (which
+ * scales its 1920×1080 stage to fit) still renders, records and broadcasts at 1920×1080.
+ */
+const STREAM_VIEWPORT = { width: 1280, height: 720 } as const;
+const STREAM_SCALE = 1.5;
 const READY_TIMEOUT_MS = 120_000;
 const SETTLE_MAX_MS = 4000;
 const SETTLE_CALM_MS = 500;
@@ -427,10 +432,20 @@ export function createDriver(opts: DriverOptions): GameDriver {
         ...(!existsSync(chromium.executablePath()) && { channel: "chrome" }),
         headless: opts.headless ?? true,
         viewport: direct ? GAME_SIZE : STREAM_VIEWPORT,
+        ...(!direct && { deviceScaleFactor: STREAM_SCALE }),
         hasTouch: true,
         isMobile: false,
         // The stream must keep playing whatever else the browser shows.
-        args: ["--disable-background-timer-throttling", "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows"],
+        args: [
+          "--disable-background-timer-throttling",
+          "--disable-renderer-backgrounding",
+          "--disable-backgrounding-occluded-windows",
+          // The stream page broadcasts itself (?broadcast): tab capture without a prompt, sound
+          // without a tap, and plain LAN addresses in its WebRTC offers so phones can connect.
+          "--auto-accept-this-tab-capture",
+          "--autoplay-policy=no-user-gesture-required",
+          "--disable-features=WebRtcHideLocalIpsWithMdns",
+        ],
       });
       // Signed in as far as the page can tell, without a room (as the e2e checks do).
       await context.route("**/api/me", (r) =>

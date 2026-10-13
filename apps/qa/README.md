@@ -13,10 +13,14 @@ talk.
    The player runs through Claude Code (the Agent SDK) signed in with the Mac's own Claude login,
    so it counts against that subscription; `--via api` uses `ANTHROPIC_API_KEY` instead.
    `--turns 20` for a trial, `--game` for the bare game page, `--model` to try another player.
-   `--lan` also serves a live view of the window to the network: it prints
-   `http://<mac's address>:4545/watch`, which plays in any browser (a phone included).
-3. In OBS, capture the Chromium window (or add a Browser source on the printed stream URL with the
-   same `?bus=` and a separate game; the window capture is what the player actually drives).
+   `--lan` also serves the live view to the network: it prints `http://<mac's address>:4545/watch`,
+   video with sound in any browser (a phone included; tap for sound).
+3. In OBS, add a Browser source (1920×1080, "Control audio via OBS") on
+   `http://localhost:5173/dev/watch?bus=http://127.0.0.1:4545`. That page shows the stream page's
+   live picture and sound (the stream page broadcasts itself over WebRTC) and a "be right back"
+   screen whenever the harness, its browser or the player is restarting, then reconnects on its
+   own, so the broadcast never drops. Don't point OBS at /dev/stream itself: that would be a
+   second copy of the game.
 
 Everything a run produces stays in `apps/qa/runs/` (gitignored: it holds screenshots of the game):
 one folder per run with `events.jsonl` and `transcript.jsonl`, plus `bugs.json`, `bugs/<id>/`
