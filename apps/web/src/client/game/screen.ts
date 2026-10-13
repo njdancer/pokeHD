@@ -14,9 +14,10 @@ export type ScreenLayout = "full" | "battle" | "dialog" | "corner" | "hidden";
  * What a battle shows, for the layout: `scene`, the battle screen (drawn in HD, with text and
  * menus over it); `transition`, the way into a battle before the battle screen appears, and the
  * way out until the map is back (the HD view plays both); `menu`, a full-screen menu (party,
- * Pokédex, evolution).
+ * Pokédex); `evolution`, the evolution screen, after a battle or from an evolution stone (drawn in
+ * HD like the battle screen, its text in HD boxes; QA bug 27).
  */
-export type BattleScene = "scene" | "transition" | "menu";
+export type BattleScene = "scene" | "transition" | "menu" | "evolution";
 
 /**
  * Tracks whether the game is in the overworld, from each frame's watched bytes.
@@ -77,6 +78,8 @@ export function mapOnlyTracker() {
 export function screenLayout(mode: OverworldMode, inWorld: boolean, pip: boolean, hdText = false, battle?: BattleScene, onboarding = false): ScreenLayout {
   // The page's own start screen and HD introduction stand in for the screen until the world loads.
   if (!inWorld && onboarding) return "hidden";
+  // The evolution screen is staged in HD, battle or not: the screen keeps only text the HD layer can't draw.
+  if (inWorld && battle === "evolution") return "battle";
   if (inWorld && mode === "battle" && battle) return battle === "scene" ? "battle" : battle === "transition" ? "hidden" : "full";
   // Either side of a battle the game puts the window up over its transition (a trainer's spiral,
   // the faded-out last frame) before wIsInBattle says so: nothing there the HD view doesn't play.
