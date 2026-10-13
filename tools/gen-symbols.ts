@@ -306,6 +306,8 @@ export const ALLOWLIST: readonly string[] = [
   "DisplayBattleMenu.leftColumn_WaitForInput",
   "DisplayBattleMenu.rightColumn",
   "DisplayBattleMenu.rightColumn_WaitForInput",
+  "HandleMenuInput_.getJoypadState",
+  "hDownArrowBlinkCount2",
   "SelectMenuItem.notB",
   "SelectMenuItem.select",
   "hUILayoutFlags",
