@@ -1,0 +1,37 @@
+// A sheet the game opens under the player's finger mustn't take that finger's tap. Pressing A on
+// the touch pad makes the game ask (the battle bag, the Mart, the PC), its sheet slides up over
+// the pad, and when the finger lifts the browser's click lands on whatever is under it now: a
+// row of the new list (QA bug 34 went straight to the fifth item's page that way). Only a click
+// whose press started inside the sheet counts; a keyboard click (detail 0) has no press and counts.
+import { useState } from "react";
+
+interface Press {
+  readonly detail: number;
+  preventDefault(): void;
+  stopPropagation(): void;
+}
+
+/** Capture-phase handlers for a sheet's outermost element. */
+export interface FreshTapGuard {
+  onPointerDownCapture(): void;
+  onClickCapture(e: Press): void;
+}
+
+export function freshTapGuard(): FreshTapGuard {
+  let pressed = false;
+  return {
+    onPointerDownCapture: () => {
+      pressed = true;
+    },
+    onClickCapture: (e) => {
+      if (pressed || e.detail === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+  };
+}
+
+/** One guard for the life of the sheet: a sheet the game opens again gets a new one. */
+export function useFreshTapGuard(): FreshTapGuard {
+  return useState(freshTapGuard)[0];
+}
