@@ -114,7 +114,8 @@ export class Player {
     // The player's own login, not a key: drop ANTHROPIC_API_KEY so Claude Code uses the subscription,
     // and anything a parent Claude Code session (one running this command) would otherwise pass down
     // (its proxy, its host-managed auth), which the player can't use.
-    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDECODE$)/.test(k)));
+    // CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) is the machine's subscription too, so it stays.
+    const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k === "CLAUDE_CODE_OAUTH_TOKEN" || !/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDECODE$)/.test(k)));
     const session = query({
       prompt: prompt(this),
       options: {
@@ -140,7 +141,7 @@ export class Player {
             // Claude Code reports a failed request as an assistant message: not the player's words.
             const text = message.message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join(" ");
             if (!TRANSIENT.has(message.error) || retries >= MAX_RETRIES) {
-              failure = `${message.error}: ${text}${message.error === "authentication_failed" ? " (sign this machine in with `claude auth login`, or use --via api)" : ""}`;
+              failure = `${message.error}: ${text}${message.error === "authentication_failed" ? " (sign this machine in with `claude auth login`, or set CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`, or use --via api)" : ""}`;
               break;
             }
             retries++;
