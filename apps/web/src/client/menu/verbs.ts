@@ -71,8 +71,13 @@ export function itemVerbs(env: MenuEnv, nav: Nav, it: Item, purpose?: Purpose, c
   if (it.kind === "Balls")
     return battle ? [{ label: "Throw it", note: moment === "trainer" ? "The trainer will block it" : "Uses your turn", run: () => done(env, nav, actions.throwBall(it.id), true) }] : [{ label: "Throw it", off: "In a wild battle" }];
   if (it.id === ID.REPEL) return battle ? [{ label: "Use it", off: "Not in battle" }] : [{ label: model.repel ? `Use it (${model.repel} steps left)` : "Use it", run: () => done(env, nav, actions.useItem(it.id), true) }];
-  if (it.id === ID.ESCAPE_ROPE) return [{ label: "Use it", off: battle ? "Not in battle" : "Inside caves" }];
-  if (it.id === ID.BICYCLE) return battle ? [{ label: "Ride it", off: "Not in battle" }] : [{ label: model.biking ? "Get off" : "Ride it", run: () => done(env, nav, actions.useItem(it.id), true) }];
+  // ItemUseEscapeRope: only where the map's tileset is in EscapeRopeTilesets (caves, forests,
+  // buildings like Silph Co.), never in a battle or Agatha's room.
+  if (it.id === ID.ESCAPE_ROPE)
+    return battle ? [{ label: "Use it", off: "Not in battle" }] : model.field.escapeRope ? [{ label: "Use it", note: "Back to the last Pokémon Center", run: () => done(env, nav, actions.useItem(it.id), true) }] : [{ label: "Use it", off: "Only in caves and dungeons" }];
+  // ItemUseBicycle: getting off works anywhere; getting on only where IsBikeRidingAllowed says, not surfing.
+  if (it.id === ID.BICYCLE)
+    return battle ? [{ label: "Ride it", off: "Not in battle" }] : model.biking ? [{ label: "Get off", run: () => done(env, nav, actions.useItem(it.id), true) }] : [{ label: "Ride it", off: model.field.bike ? undefined : "No cycling here", run: () => done(env, nav, actions.useItem(it.id), true) }];
   if (isMachine(it)) return battle ? [{ label: "Teach it to…", off: "Not in battle" }] : [{ label: "Teach it to…", run: () => nav.go({ k: "team", for: { teach: it.id } }) }];
   if (it.id === ID.TOWN_MAP) return [{ label: "Open the map", run: () => nav.tab("map") }];
   return [];
