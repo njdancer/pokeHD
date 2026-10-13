@@ -12,6 +12,8 @@ talk.
 2. `pnpm qa run`. It opens Chromium on the stream page, starts the bus on :4545 and the player.
    The player runs through Claude Code (the Agent SDK) signed in with the Mac's own Claude login,
    so it counts against that subscription; `--via api` uses `ANTHROPIC_API_KEY` instead.
+   Better: run `claude setup-token` once and export `CLAUDE_CODE_OAUTH_TOKEN`. Then the player gets
+   an empty Claude config, so it never sees the account's email (Claude Code adds it otherwise).
    `--turns 20` for a trial, `--game` for the bare game page, `--model` to try another player.
    `--lan` also serves the live view to the network: it prints `http://<mac's address>:4545/watch`,
    video with sound in any browser (a phone included; tap for sound).

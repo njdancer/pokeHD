@@ -124,6 +124,11 @@ export class Player {
     // (its proxy, its host-managed auth), which the player can't use.
     // CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) is the machine's subscription too, so it stays.
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k === "CLAUDE_CODE_OAUTH_TOKEN" || !/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDECODE$)/.test(k)));
+    // Claude Code tells the model the signed-in account's email, read from its own config. With a
+    // token from `claude setup-token` the player doesn't need that config, so it gets an empty one
+    // and never learns who is signed in. Without a token it borrows the machine's login, email included.
+    const isolated = env["CLAUDE_CODE_OAUTH_TOKEN"] ? { CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "pokehd-qa-config-")) } : {};
+    if (!env["CLAUDE_CODE_OAUTH_TOKEN"]) console.warn("No CLAUDE_CODE_OAUTH_TOKEN: the player borrows this machine's Claude login, and Claude Code shows it the account's email. Run `claude setup-token` and set CLAUDE_CODE_OAUTH_TOKEN to keep it out.");
     session = query({
       prompt: prompt(this),
       options: {
@@ -140,7 +145,7 @@ export class Player {
         strictMcpConfig: true,
         settings: { disableClaudeAiConnectors: true, autoMemoryEnabled: false },
         cwd: mkdtempSync(join(tmpdir(), "pokehd-qa-player-")),
-        env: { ...env, CLAUDE_AGENT_SDK_CLIENT_APP: "pokehd-qa/1", ENABLE_CLAUDEAI_MCP_SERVERS: "false", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" },
+        env: { ...env, ...isolated, CLAUDE_AGENT_SDK_CLIENT_APP: "pokehd-qa/1", ENABLE_CLAUDEAI_MCP_SERVERS: "false", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1", CLAUDE_CODE_DISABLE_CLAUDE_MDS: "1" },
       },
     });
     let failure: string | null = null;
