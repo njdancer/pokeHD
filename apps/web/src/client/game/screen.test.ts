@@ -13,6 +13,13 @@ describe("screenLayout", () => {
     expect(screenLayout("dialog", true, true)).toBe("dialog");
   });
 
+  it("keeps the screen down either side of a battle, while the game plays its transition", () => {
+    expect(screenLayout("dialog", true, false, false, "transition")).toBe("hidden");
+    expect(screenLayout("dialog", true, true, false, "transition")).toBe("corner");
+    expect(screenLayout("overworld", true, true, false, "transition")).toBe("corner");
+    expect(screenLayout("dialog", false, false, false, "transition")).toBe("full");
+  });
+
   it("stays out of the way while the HD text layer shows the text", () => {
     expect(screenLayout("dialog", true, false, true)).toBe("hidden");
     expect(screenLayout("dialog", true, true, true)).toBe("corner");
