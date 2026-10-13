@@ -26,6 +26,7 @@ import {
   type ScreenText,
   type TextWatched,
   decodeSnapshot,
+  dexProgress,
   fromBcd,
   SNAPSHOT_RANGES,
   type AskAnswer,
@@ -80,7 +81,7 @@ import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
 import { LoadingScreen, LOADING_FADE_MS } from "../LoadingScreen.tsx";
-import { buildCatalogue, dexFlags, type DexProgress } from "../dex/catalogue.ts";
+import { buildCatalogue, type DexProgress } from "../dex/catalogue.ts";
 import { DexJournal } from "../dex/journal.ts";
 import type { DexMenuProps } from "../menu/DexMenu.tsx";
 import type { LiveActions } from "../menu/live.ts";
@@ -668,7 +669,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
               }
               if (disposed) return;
               const dexNo = opened.kind === "data" ? pokedexNumber(rom, opened.species) : 0;
-              setDex({ progress: journal.progress(dexFlags(seen!), dexFlags(owned!), decodeText(rival!)), openOn: dexNo || undefined });
+              const flags = dexProgress(owned!, seen!);
+              setDex({ progress: { ...journal.progress(flags.seen, flags.owned, decodeText(rival!)), onShow: flags.onShow }, openOn: dexNo || undefined });
             });
         },
         onTalk: (map, npc) => {
