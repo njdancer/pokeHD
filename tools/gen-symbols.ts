@@ -245,6 +245,9 @@ export const ALLOWLIST: readonly string[] = [
   "GoBackToPartyMenu",
   "ItemPrices",
   "hHalveItemPrices",
+  // The Poké Mart's sell list: the only bag list whose caller is between these two
+  "DisplayPokemartDialogue_.sellMenuLoop",
+  "DisplayPokemartDialogue_.unsellableItem",
   // Where the field items work: the game's own tileset lists (ItemUseEscapeRope, IsBikeRidingAllowed)
   "BikeRidingTilesets",
   "EscapeRopeTilesets",
