@@ -64,6 +64,7 @@ export const SYMBOLS = {
   LedgeTiles: { bank: 0x06, address: 0x66cf },
   "LinkBattleExchangeData.syncLoop1": { bank: 0x0f, address: 0x563b },
   LoadEnemyMonData: { bank: 0x0f, address: 0x6b01 },
+  LoadFontTilePatterns: { bank: 0x00, address: 0x3680 },
   LoadMainData: { bank: 0x1c, address: 0x7623 },
   ManualTextScroll: { bank: 0x00, address: 0x3898 },
   MapHeaderBanks: { bank: 0x03, address: 0x423d },
