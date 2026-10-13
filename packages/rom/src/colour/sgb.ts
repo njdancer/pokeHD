@@ -27,6 +27,8 @@ export const SGB_PAL = {
   MEWMON: 0x10,
   REDMON: 0x12,
   GRAYMON: 0x19,
+  /** What the Super Game Boy shows a Pokémon evolving in, while it swaps (EvolveMon). */
+  BLACK: 0x1e,
   CAVE: 0x23,
 } as const;
 

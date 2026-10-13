@@ -49,6 +49,23 @@ export interface BattleView {
    * flashes and fades still show.
    */
   art?: Partial<Record<Side, Uint8ClampedArray | null>>;
+  /**
+   * The evolution screen (QA bug 27): one Pokémon centre stage, alone, in its own colours. Set,
+   * it stands in for both sides' pictures and the move sprites.
+   */
+  evolving?: EvolvingView | null;
+}
+
+/** The Pokémon evolving, as the game draws it; `EvolutionScreen` in packages/emu fits. */
+export interface EvolvingView {
+  /** 56×56 colour numbers (0–3, before rBGP), rows top-down; 255 where nothing is drawn. */
+  pixels: Uint8Array;
+  /** Changes whenever `pixels` do. */
+  version: number;
+  /** Its colours, lightest first: the species' SGB palette, or PAL_BLACK's while it swaps. */
+  ramp: Ramp;
+  /** A hand-coloured version of the picture as drawn (see `BattleView.art`). */
+  art?: Uint8ClampedArray | null;
 }
 
 /** rBGP outside flashes and fades: shades 0, 1, 2, 3 in order. */
@@ -77,6 +94,10 @@ export const PICTURE_SCALE = 1 / 22;
  * the player's side, as they do on the Game Boy.
  */
 const ENEMY_SCALE = 1.3;
+/** The Pokémon evolving stands centre stage, a little bigger again. */
+const EVOLVING_SCALE = 1.45;
+/** How far the camera moves toward its evolving focus each frame. */
+const FOCUS_RATE = 0.08;
 /** The camera turns this far off the battle line, so the line runs into the screen diagonally. */
 const CAMERA_TURN = 28;
 /** Picture centres on the Game Boy screen (home cells + half a picture), in pixels. */
@@ -145,8 +166,12 @@ export function createBattleLayer(initial: ArenaStyle = "field"): BattleLayer {
   const centre = new THREE.Vector3();
 
   const pictures: Record<Side, Picture> = { player: createPicture(), enemy: createPicture() };
-  root.add(pictures.player.mesh, pictures.enemy.mesh);
+  const evolving = createPicture();
+  root.add(pictures.player.mesh, pictures.enemy.mesh, evolving.mesh);
   pictures.enemy.mesh.scale.setScalar(ENEMY_SCALE);
+  evolving.mesh.scale.setScalar(EVOLVING_SCALE);
+  /** 0 looking at the battle … 1 at the Pokémon evolving. */
+  let focus = 0;
 
   // Bases and the stage.
   const baseMaterial = new THREE.MeshStandardNodeMaterial({ roughness: 0.95 });
@@ -214,25 +239,35 @@ export function createBattleLayer(initial: ArenaStyle = "field"): BattleLayer {
     return out;
   };
 
+  /** Paints a picture's texture when what it shows has changed. */
+  const repaint = (pic: Picture, pixels: Uint8Array, version: number, register: number, ramp: Ramp, art: Uint8ClampedArray | null) => {
+    const p = pic.painted;
+    if (p && p.version === version && p.register === register && p.ramp === ramp && p.art === art) return;
+    if (!p || p.version !== version) pic.mask = backgroundMask(pixels, PIC, PIC);
+    const mask = pic.mask;
+    paint(pic.texture, pixels, register, ramp, (i) => mask[i] === 1, art);
+    pic.painted = { version, register, ramp, art };
+  };
+
   const showPicture = (side: Side, view: BattlePictureView | null, all: BattleView) => {
     const pic = pictures[side];
     pic.mesh.visible = !!view;
     if (!view) return;
     const register = all.palettes[0];
-    const ramp = all.ramps[side];
-    const art = register === NORMAL_BGP ? (all.art?.[side] ?? null) : null;
-    const p = pic.painted;
-    if (!p || p.version !== view.version || p.register !== register || p.ramp !== ramp || p.art !== art) {
-      if (!p || p.version !== view.version) pic.mask = backgroundMask(view.pixels, PIC, PIC);
-      const mask = pic.mask;
-      paint(pic.texture, view.pixels, register, ramp, (i) => mask[i] === 1, art);
-      pic.painted = { version: view.version, register, ramp, art };
-    }
+    repaint(pic, view.pixels, view.version, register, all.ramps[side], register === NORMAL_BGP ? (all.art?.[side] ?? null) : null);
     // A slide across the screen moves the picture along the battle line; down sinks it.
     const s = SCREEN_CENTRE[side];
     const at = fromScreen(s.x + view.dx * 8, s.y + view.dy * 8, new THREE.Vector3());
     at.y -= (PIC / 2) * PICTURE_SCALE;
     pic.mesh.position.copy(at);
+  };
+
+  const showEvolving = (view: EvolvingView | null, all: BattleView) => {
+    evolving.mesh.visible = !!view;
+    if (!view) return;
+    const register = all.palettes[0];
+    repaint(evolving, view.pixels, view.version, register, view.ramp, register === NORMAL_BGP ? (view.art ?? null) : null);
+    evolving.mesh.position.copy(centre);
   };
 
   let objectsShown = 0;
@@ -305,9 +340,12 @@ export function createBattleLayer(initial: ArenaStyle = "field"): BattleLayer {
     update(camera) {
       const all = latest;
       if (all) {
-        showPicture("player", all.player, all);
-        showPicture("enemy", all.enemy, all);
-        showObjects(all);
+        const evolvingView = all.evolving ?? null;
+        showPicture("player", evolvingView ? null : all.player, all);
+        showPicture("enemy", evolvingView ? null : all.enemy, all);
+        showEvolving(evolvingView, all);
+        showObjects(evolvingView ? { ...all, objects: [] } : all);
+        focus += ((evolvingView ? 1 : 0) - focus) * FOCUS_RATE;
         // Fades and flashes: how far rBGP has moved the shades, toward black or white.
         const register = all.palettes[0];
         let moved = 0;
@@ -336,20 +374,22 @@ export function createBattleLayer(initial: ArenaStyle = "field"): BattleLayer {
       const length = Math.hypot(dx, dz) || 1;
       // Across the line and up, a Game Boy pixel of shake per world pixel.
       target.copy(centre);
-      target.y = 0.9;
+      // Up to the middle of the Pokémon evolving, while it's on.
+      target.y = 0.9 + ((PIC / 2) * PICTURE_SCALE * EVOLVING_SCALE - 0.9) * focus;
       target.x += (-dz / length) * shake.x * PICTURE_SCALE * 3;
       target.z += (dx / length) * shake.x * PICTURE_SCALE * 3;
       target.y += shake.y * PICTURE_SCALE * 3;
 
       faceCamera(pictures.player.mesh, camera);
       faceCamera(pictures.enemy.mesh, camera);
+      faceCamera(evolving.mesh, camera);
       for (const { mesh } of objects) if (mesh.visible) mesh.quaternion.copy(camera.quaternion);
       camera.getWorldDirection(flash.position);
       flash.position.multiplyScalar(0.6).add(camera.position);
       flash.quaternion.copy(camera.quaternion);
     },
     dispose() {
-      for (const p of Object.values(pictures)) {
+      for (const p of [...Object.values(pictures), evolving]) {
         p.mesh.geometry.dispose();
         p.material.dispose();
         p.texture.dispose();

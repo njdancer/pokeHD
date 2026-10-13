@@ -33,6 +33,12 @@ describe("screenLayout", () => {
     expect(screenLayout("battle", false, false, false, "scene")).toBe("full");
   });
 
+  it("stages the evolution screen in HD, after a battle or from an evolution stone (QA bug 27)", () => {
+    expect(screenLayout("battle", true, false, true, "evolution")).toBe("battle");
+    expect(screenLayout("battle", true, true, false, "evolution")).toBe("battle");
+    expect(screenLayout("dialog", true, false, false, "evolution")).toBe("battle");
+  });
+
   it("follows the player's choice on the overworld", () => {
     expect(screenLayout("overworld", true, true)).toBe("corner");
     expect(screenLayout("overworld", true, false)).toBe("hidden");
