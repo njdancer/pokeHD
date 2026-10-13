@@ -5,19 +5,22 @@
 // ?frame=N plays N Game Boy frames (mashing A) at once and holds there; ?phase=0.5 holds the
 // time of day; ?size=1440 pins the drawing buffer to 2560×1440. Without ?frame it plays on in
 // real time. Once it holds, window.__battle.ready is true; ?shot=name also posts a render to
-// /__dev/shot (shots/name.png).
+// /__dev/shot (shots/name.png). ?battlemenus=moves|classic answers the battle's menus with the
+// HD battle menu (BattleMenus); with ?frame it holds at the first question instead.
 import { useEffect, useRef, useState } from "react";
 import {
-  BATTLE_WATCHES, Button, GameBoy, OVERWORLD_WATCHES, OverworldDecoder, SCREEN_HEIGHT, SCREEN_WIDTH,
-  type BattleScreen, type BattleState, type OverworldWatched, type Watch,
+  BATTLE_WATCHES, BattleMenus, Button, GameBoy, OVERWORLD_WATCHES, OverworldDecoder, SCREEN_HEIGHT, SCREEN_WIDTH, ScreenTextDecoder, TEXT_WATCHES,
+  type BattleAnswer, type BattleAsk, type BattleScreen, type BattleState, type OverworldWatched, type TextWatched, type Watch,
 } from "@pokehd/emu";
 import { createEngine, type Engine } from "@pokehd/engine";
 import { ARENA_STYLES, type ArenaStyle } from "@pokehd/engine/battle";
 import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
-import { parseWorld } from "@pokehd/rom";
+import { parseWorld, readGlyphs } from "@pokehd/rom";
 import { fetchDevRom } from "../dev-rom.ts";
-import { BattleTracker, maskBattleScreen } from "../game/battle.ts";
+import { BattleTracker, battleMenuShown, battleText, maskBattleScreen } from "../game/battle.ts";
 import { BattleHud } from "../game/BattleHud.tsx";
+import { BattleMenu } from "../game/BattleMenu.tsx";
+import { BATTLE_MENU_LAYOUTS } from "../game/battle-menu-flag.ts";
 import { screenLayout, type ScreenLayout } from "../game/screen.ts";
 import "../game/game.css";
 
@@ -27,6 +30,9 @@ const arena = (ARENA_STYLES as readonly string[]).includes(query.get("arena") ??
 const holdAt = query.has("frame") ? Number(query.get("frame")) : null;
 const phase = query.has("phase") ? Number(query.get("phase")) : null;
 const shot = query.get("shot");
+const menuLayout = BATTLE_MENU_LAYOUTS.find((l) => l === query.get("battlemenus")) ?? null;
+/** The whole screen, as a box for the mask to clear. */
+const WHOLE_SCREEN = [{ x: 0, y: 0, width: 20, height: 18, lines: [] }];
 
 declare global {
   interface Window {
@@ -46,6 +52,7 @@ export function BattleDev() {
   const [status, setStatus] = useState("Loading…");
   const [layout, setLayout] = useState<ScreenLayout>("hidden");
   const [hud, setHud] = useState<{ state: BattleState; huds: BattleScreen["huds"] } | null>(null);
+  const [ask, setAsk] = useState<{ id: number; ask: BattleAsk; rom: Uint8Array; answer(a: BattleAnswer): void } | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -75,13 +82,27 @@ export function BattleDev() {
       const image = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
       const overworld = new OverworldDecoder();
       let watches: Record<string, Watch> = {};
-      const tracker = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...BATTLE_WATCHES }, (next) => (watches = next));
+      const tracker = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...BATTLE_WATCHES, ...TEXT_WATCHES }, (next) => (watches = next));
+      const text = new ScreenTextDecoder(readGlyphs(rom));
+      let resume = () => {};
+      const menus: BattleMenus | null = menuLayout
+        ? new BattleMenus(gb, {
+            rom,
+            onAsk: (id, a) =>
+              setAsk({ id, ask: a, rom, answer: (answer) => {
+                menus!.answer(id, answer);
+                setAsk(null);
+                resume();
+              } }),
+          })
+        : null;
       // The recording starts as the battle does; show the tracker the overworld before it.
       tracker.frame(Object.fromEntries(Object.entries(BATTLE_WATCHES).map(([k, [, n]]) => [k, new Uint8Array(n)])));
       let frame = 0;
       let masked: BattleScreen | null = null;
+      let choosing = false;
       const step = () => {
-        gb.setButtons(frame % 16 < 2 ? Button.A : 0);
+        gb.setButtons(!menus?.asking && frame % 16 < 2 ? Button.A : 0);
         gb.runFrame();
         frame++;
         const watched = readAll(gb, watches);
@@ -89,18 +110,19 @@ export function BattleDev() {
         const fight = tracker.frame(watched);
         live!.setBattle(fight.scene ? fight.view : null);
         masked = fight.scene === "scene" ? fight.screen : null;
+        choosing = !!menus && !!masked && (!!menus.asking || battleMenuShown(text.decode(battleText(watched as TextWatched, masked))));
         setLayout(screenLayout("battle", true, false, false, fight.scene));
         setHud(masked && fight.state ? { state: fight.state, huds: masked.huds } : null);
         setStatus(fight.state ? `frame ${frame} · ${fight.state.phase}${fight.state.animation ? ` · animation ${fight.state.animation.id}` : ""}` : `frame ${frame}`);
       };
       const draw = () => {
         image.data.set(gb.frame);
-        if (masked) maskBattleScreen(image.data, masked);
+        if (masked) maskBattleScreen(image.data, masked, choosing ? WHOLE_SCREEN : []);
         ctx.putImageData(image, 0, 0);
       };
 
       if (holdAt !== null) {
-        while (frame < holdAt) step();
+        while (frame < holdAt && !menus?.asking) step();
         draw();
         // Let the camera finish its swing and the map chunks build before calling it ready.
         setTimeout(async () => {
@@ -108,10 +130,12 @@ export function BattleDev() {
           if (shot) await fetch(`/__dev/shot?name=${shot}`, { method: "POST", body: await engine!.capture() });
           window.__battle = { ready: true, frame };
         }, 3000);
-        return;
+        if (!menus) return;
       }
       let start = performance.now();
+      let ticking = false;
       const tick = () => {
+        ticking = true;
         raf = requestAnimationFrame(tick);
         const due = Math.floor(((performance.now() - start) / 1000) * 59.7275);
         for (let n = 0; frame < due && n < 4; n++) step();
@@ -119,7 +143,12 @@ export function BattleDev() {
         draw();
         window.__battle!.frame = frame;
       };
-      tick();
+      resume = () => {
+        if (ticking) return;
+        start = performance.now() - (frame / 59.7275) * 1000;
+        tick();
+      };
+      if (holdAt === null) tick();
     })().catch((e: unknown) => setStatus(String(e)));
     return () => {
       disposed = true;
@@ -133,7 +162,10 @@ export function BattleDev() {
   return (
     <div className="game" ref={holder}>
       <canvas ref={screenRef} className={`gb-screen ${layout}`} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
-      {hud && layout === "battle" && <BattleHud state={hud.state} huds={hud.huds} />}
+      {hud && layout === "battle" && <BattleHud state={hud.state} huds={hud.huds} menuUp={!!ask} />}
+      {ask && menuLayout && (
+        <BattleMenu key={ask.id} ask={ask.ask} rom={ask.rom} layout={menuLayout} who={hud?.state.player.mon?.name ?? null} bindKeys={() => {}} onAnswer={ask.answer} />
+      )}
       <div className="game-hud">
         <span role="status">{status}</span>
       </div>

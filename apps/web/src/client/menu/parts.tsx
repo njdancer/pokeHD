@@ -98,7 +98,8 @@ export function TeamRowBody({ mon, lead }: { mon: TeamMon; lead?: boolean }) {
 
 const monNameOf = (rom: Uint8Array, mon: { species: number }) => monName(rom, mon.species);
 
-const TYPE_COLOURS: Record<string, string> = {
+/** Each type's colour, by the game's type name. */
+export const TYPE_COLOURS: Record<string, string> = {
   NORMAL: "#9a9a7a", FIRE: "#e0702a", WATER: "#3d8be0", GRASS: "#5aa93c", ELECTRIC: "#d1a91f", ICE: "#5fb8c8",
   FIGHTING: "#b23a2c", POISON: "#9b59b6", GROUND: "#c49a4a", FLYING: "#8a8ae0", PSYCHIC: "#e0507a", BUG: "#8fa31f",
   ROCK: "#a68c3c", GHOST: "#6a5596", DRAGON: "#6a3ce0",

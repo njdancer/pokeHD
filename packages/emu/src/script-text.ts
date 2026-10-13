@@ -244,7 +244,7 @@ function messageFill(g: GameBoy, enemy: string): MessageFill {
         const length = format & 0x1f;
         let digits = [...g.readBytes(address, length)].map((b) => `${b >> 4}${b & 0xf}`).join("");
         if (format & 0x80) digits = digits.replace(/^0+(?=\d)/, "");
-        return (format & 0x20 ? "¥" : "") + digits;
+        return (format & 0x20 ? "₽" : "") + digits;
       }
       const bytes = format >> 4;
       let value = 0;
