@@ -59,11 +59,11 @@ export function decodeGiftables(rom: Uint8Array, bytes: readonly Uint8Array[]): 
   return { party, bag, money: fromBcd(money) };
 }
 
-/** "¥500", "POTION ×3", "SPARKY (PIKACHU, Lv 12)". */
+/** "₽500", "POTION ×3", "SPARKY (PIKACHU, Lv 12)". */
 export function describeGift(rom: Uint8Array, gift: Gift): string {
   switch (gift.kind) {
     case "money":
-      return `¥${gift.amount.toLocaleString("en-US")}`;
+      return `₽${gift.amount.toLocaleString("en-US")}`;
     case "item":
       return `${itemName(rom, gift.item)} ×${gift.quantity}`;
     case "mon": {
