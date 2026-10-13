@@ -40,6 +40,12 @@ const ROUND: ReadonlySet<Label> = new Set(["plant", "statue", "rock"]);
 /** Slab heights for things seen from above, in units. */
 const SLAB: Partial<Record<Label, number>> = { table: 0.32, counter: 0.42, furniture: 0.18 };
 
+/**
+ * The floor slab's outer faces: between the floor ramp's two darkest shades, so the exit steps
+ * (in their doormat's colour) stand out against them.
+ */
+const SLAB_EDGE = 0x6c5439;
+
 const WALL_LABELS: ReadonlySet<Label> = new Set(["wall-interior", "picture", "window"]);
 
 /** A region is indoors when anything in it is labelled floor. */
@@ -134,6 +140,74 @@ function roomBounds(region: Region, inside: Uint8Array) {
   return x1 > x0 ? { x0, y0, x1, y1 } : null;
 }
 
+/** A way out along the room's front edge: a run of exit warps, in region tiles. */
+export interface Exit {
+  x0: number;
+  x1: number;
+  /** The room's front edge (the bottom of the warps' tiles). */
+  y: number;
+}
+
+/**
+ * Doormats on the bottom row of each map: warps the player leaves by walking down off the map's
+ * edge (the game's own exits, e.g. Museum 1F's (10,7)/(11,7) and (16,7)/(17,7)). Warps drawn as
+ * stairs or doors work by stepping on them, so they aren't exits here. Adjacent warps merge into
+ * one doorway.
+ */
+export function findExits(region: Region): Exit[] {
+  const out: Exit[] = [];
+  for (const { map, x, y } of region.maps) {
+    const row = map.heightBlocks * 2 - 1;
+    const xs = map.warps
+      .filter((w) => w.y === row && labelAt(region, x + w.x * 2, y + w.y * 2 + 1) === "floor")
+      .map((w) => w.x)
+      .sort((a, b) => a - b);
+    for (const wx of new Set(xs)) {
+      const last = out.at(-1);
+      const tx = x + wx * 2;
+      if (last && last.x1 === tx && last.y === y + map.heightBlocks * 4) last.x1 = tx + 2;
+      else out.push({ x0: tx, x1: tx + 2, y: y + map.heightBlocks * 4 });
+    }
+  }
+  return out;
+}
+
+/** Mean colour of an image's pixels over a tile rectangle. */
+function meanColour(image: Image, x0: number, y0: number, x1: number, y1: number): number {
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let py = y0 * 8; py < y1 * 8; py++) {
+    for (let px = x0 * 8; px < x1 * 8; px++) {
+      const i = (py * image.width + px) * 4;
+      r += image.data[i]!; g += image.data[i + 1]!; b += image.data[i + 2]!; n++;
+    }
+  }
+  return n ? (Math.round(r / n) << 16) | (Math.round(g / n) << 8) | Math.round(b / n) : 0;
+}
+
+/**
+ * Steps down off the front edge at an exit, in the doormat's colour, so the way out reads as a
+ * way out rather than a drop. The floor slab's front is 1 unit deep (the terrain's base).
+ */
+function exitSteps(exit: Exit, colour: number): THREE.Group {
+  const group = new THREE.Group();
+  group.name = "exit";
+  const material = new THREE.MeshStandardNodeMaterial({ color: colour, roughness: 0.95 });
+  const width = (exit.x1 - exit.x0) * TILE_UNITS;
+  const z = exit.y * TILE_UNITS;
+  const count = 3;
+  const depth = 0.3;
+  for (let k = 1; k <= count; k++) {
+    const top = -k / (count + 1);
+    const h = top + 1;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, h, depth), material);
+    mesh.position.set((exit.x0 + exit.x1) * TILE_UNITS / 2, top - h / 2, z + depth * (k - 0.5));
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+  }
+  return group;
+}
+
 /**
  * A box standing at the group's front edge: the drawing on its front face (square pixels at
  * `wallScale`), plain wall above that up to `height`, and a dark cap.
@@ -217,9 +291,15 @@ export function buildInterior(region: Region, params: StyleParams, look: Interio
   const floorImage = colourRegion(region, { ramps, replace: ROUND, fillTile: commonTile(region, "floor"), fillLabel: "floor" });
   const hidden = new Set<Label>(["void", ...UPRIGHT]);
   const room = { ...region, present: region.present.map((p, i) => p & inside[i]!) };
+  // The slab's outer faces are plain: stretching the edge pixels down them turned the floor into
+  // stripes and a doormat into a solid block, which hid the exits (QA #22). The exits get steps.
   group.add(
-    terrain(room, floorImage, imageTexture(floorImage), (l) => (l && hidden.has(l) ? NaN : (SLAB[l ?? "floor"] ?? 0))),
+    terrain(room, floorImage, imageTexture(floorImage), (l) => (l && hidden.has(l) ? NaN : (SLAB[l ?? "floor"] ?? 0)), SLAB_EDGE),
   );
+  for (const exit of findExits(region)) {
+    if (!room.present[(exit.y - 1) * region.widthTiles + exit.x0]) continue;
+    group.add(exitSteps(exit, meanColour(floorImage, exit.x0, exit.y - 2, exit.x1, exit.y)));
+  }
 
   for (const g of uprights) {
     // Walls sit back as thick as they're drawn; furniture is a shallow cabinet.

@@ -20,7 +20,7 @@ export function imageTexture(image: Image): THREE.DataTexture {
 
 export function geometryFrom(arrays: MeshArrays | MeshArrays[]): THREE.BufferGeometry {
   const list = Array.isArray(arrays) ? arrays : [arrays];
-  const total = (k: keyof MeshArrays) => list.reduce((n, a) => n + a[k].length, 0);
+  const total = (k: "positions" | "normals" | "uvs" | "indices") => list.reduce((n, a) => n + a[k].length, 0);
   const positions = new Float32Array(total("positions"));
   const normals = new Float32Array(total("normals"));
   const uvs = new Float32Array(total("uvs"));
@@ -59,8 +59,18 @@ function shadowed<T extends THREE.Object3D>(o: T, cast = true): T {
   return o;
 }
 
-/** Terrain on the tile grid: each tile a column at `heightOf(label)`, textured with `image`. */
-export function terrain(region: Region, image: Image, tex: THREE.Texture, heightOf: (l: Label | undefined) => number) {
+/**
+ * Terrain on the tile grid: each tile a column at `heightOf(label)`, textured with `image`. With
+ * `edgeColour`, the outline walls (where the ground drops away at its edge) are that plain colour
+ * instead of their edge pixels stretched down the face.
+ */
+export function terrain(
+  region: Region,
+  image: Image,
+  tex: THREE.Texture,
+  heightOf: (l: Label | undefined) => number,
+  edgeColour?: number,
+) {
   const heights = new Float32Array(region.widthTiles * region.heightTiles);
   for (let ty = 0; ty < region.heightTiles; ty++) {
     for (let tx = 0; tx < region.widthTiles; tx++) {
@@ -78,8 +88,14 @@ export function terrain(region: Region, image: Image, tex: THREE.Texture, height
     ax: [TILE_UNITS, 0, 0],
     ay: [0, 0, TILE_UNITS],
     ah: [0, 1, 0],
+    splitEdges: edgeColour !== undefined,
   });
-  return shadowed(new THREE.Mesh(geometryFrom(arrays), texturedMaterial(tex)));
+  const geometry = geometryFrom(arrays);
+  if (edgeColour === undefined || arrays.edgeStart === undefined) return shadowed(new THREE.Mesh(geometry, texturedMaterial(tex)));
+  geometry.addGroup(0, arrays.edgeStart, 0);
+  geometry.addGroup(arrays.edgeStart, arrays.indices.length - arrays.edgeStart, 1);
+  const edge = new THREE.MeshStandardNodeMaterial({ color: edgeColour, roughness: 0.95, metalness: 0 });
+  return shadowed(new THREE.Mesh(geometry, [texturedMaterial(tex), edge]));
 }
 
 /** Voxel terrain at pixel resolution: every pixel a column. */
