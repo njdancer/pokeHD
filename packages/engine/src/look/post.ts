@@ -12,7 +12,7 @@ import type { LookParams, ToneMappingName } from "./params.ts";
 
 // Post-processing chain, in order:
 //   scene → AO → depth of field → tilt-shift band → bloom → tone map → LUT grade
-//   → vignette → FXAA/SMAA
+//   → vignette → FXAA/SMAA → the game's fade
 // No MSAA: AO and depth of field need a single-sample depth buffer to read.
 // Values that only change uniforms update every frame for free; toggling an effect or changing
 // a resource size rebuilds the graph (see STRUCTURAL in params.ts), so disabled effects cost
@@ -53,6 +53,9 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
     vignetteIntensity: uniform(0),
     vignetteRadius: uniform(0.8),
     vignetteSmoothness: uniform(0.5),
+    /** The game's screen fade: how far toward `fadeColour` (0 none, 1 all of it). */
+    fade: uniform(0),
+    fadeColour: uniform(new THREE.Color(0xffffff)),
   };
 
   const lutData = new Uint8Array(LUT_SIZE ** 3 * 4);
@@ -129,6 +132,9 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
       owned.push(node);
       out = v4(node);
     }
+    // Last, on the finished picture: a fade to white is the screen's white, whatever the grade,
+    // tone mapping, vignette or depth of field would make of a white quad in the scene (QA bug 11).
+    out = vec4(mix(out.rgb, u.fadeColour, u.fade), out.a);
 
     pipeline.outputNode = out;
     pipeline.needsUpdate = true;
@@ -175,6 +181,11 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
         bakeLut(p.grade, LUT_SIZE, lutData, place);
         lut.needsUpdate = true;
       }
+    },
+    /** The game's screen fade, as `LiveState.fade` has it: 0 none, 1 black, −1 white. */
+    setFade(fade: number) {
+      u.fade.value = Math.min(Math.abs(fade), 1);
+      u.fadeColour.value.set(fade > 0 ? 0x000000 : 0xffffff);
     },
     render() {
       pipeline.render();
