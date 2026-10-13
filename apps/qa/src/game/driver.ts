@@ -637,7 +637,10 @@ export function createDriver(opts: DriverOptions): GameDriver {
       busy++;
       try {
         const box = await gameBox();
-        return await need(page).screenshot({ clip: box, type: "png" });
+        // Straight from CDP: Playwright's page.screenshot overrides the device metrics to take it,
+        // which in the headed stream window resizes the page for a few frames (a flicker on stream).
+        const { data } = (await need(input).send("Page.captureScreenshot", { format: "png", clip: { ...box, scale: 1 } })) as { data: string };
+        return Buffer.from(data, "base64");
       } finally {
         busy--;
       }
