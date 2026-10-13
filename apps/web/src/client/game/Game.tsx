@@ -586,6 +586,17 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         ...(custom ? { onNameAsk: (ask: NameAsk) => setNameAsk(ask) } : {}),
         onScriptMessage: ({ id, message }) => {
           scriptRef.current = newScriptView(id, message);
+          // The menu's sheet stays up over the game while the game answers it, so its words would
+          // sit unseen under the sheet: a purchase's "Here you are! Thank you!" is the menu's to
+          // show (a notice) and read past, and a sheet the game has moved on from goes (QA bug 25).
+          const heard = liveActionsRef.current?.heard(message) ?? null;
+          if (heard === "reply") {
+            scriptRef.current.closed = true;
+            host?.readOnMessage(id);
+            host?.closeMessage(id);
+            return;
+          }
+          if (heard === "away" && menuStateRef.current.ask) setAsk(null);
           // All of it fits in one box: the game can print the rest while the player reads.
           if (scriptRef.current.boxes.length <= 1) host?.readOnMessage(id);
         },
