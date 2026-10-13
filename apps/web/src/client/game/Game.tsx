@@ -72,7 +72,7 @@ import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type Sc
 import { BattleTracker, battleMenuShown, battleText, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { BattleMenu, type BattleKey } from "./BattleMenu.tsx";
-import { battleMenuLayout } from "./battle-menu-flag.ts";
+import { battleMenusOn } from "./battle-menu-flag.ts";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
 import { TextOverlay, type TextActions } from "./TextOverlay.tsx";
 import { battleTextFits, hdTextFits, introTextFits, textKey } from "./hd-text.ts";
@@ -105,8 +105,8 @@ const showStats = new URLSearchParams(location.search).has("stats");
 const noRender = import.meta.env.DEV && new URLSearchParams(location.search).get("render") === "0";
 /** ?classic: the game's own title screen and naming screens, as on the Game Boy (scripted play-throughs use it). */
 const classic = new URLSearchParams(location.search).has("classic");
-/** HD battle menus, a trial for now: their layout on this device, or null while off (battle-menu-flag.ts). */
-const BATTLE_MENUS = battleMenuLayout();
+/** HD battle menus (D44): on unless this device turned them off (battle-menu-flag.ts). */
+const BATTLE_MENUS = battleMenusOn();
 /** The joypad's buttons as the HD battle menu's keys. */
 const BATTLE_KEYS: [number, BattleKey][] = [[Button.Up, "up"], [Button.Down, "down"], [Button.Left, "left"], [Button.Right, "right"], [Button.A, "a"], [Button.B, "b"]];
 
@@ -671,7 +671,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           }
           // The HD battle menu stands in for the battle's menus: the Game Boy's are masked out
           // while the game asks, and while it draws them either side of asking.
-          const choosing = !!BATTLE_MENUS && !!battleScreen && fight?.state?.type !== "link" && (!!battleAskRef.current || battleMenuShown(text));
+          const choosing = BATTLE_MENUS && !!battleScreen && fight?.state?.type !== "link" && (!!battleAskRef.current || battleMenuShown(text));
           // A Pokédex menu action running the game's routine (a POTION from the Inventory tab): what
           // it draws (the party menu ItemUseMedicine redraws, "recovered by 20!") is the menu's to
           // report, in its own words once the action is done, so neither the HD text layer nor the
@@ -1382,7 +1382,6 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           key={battleAsk.id}
           ask={battleAsk.ask}
           rom={rom}
-          layout={BATTLE_MENUS}
           who={battleHud?.state.player.mon?.name ?? null}
           bindKeys={(handler) => (battleKeysRef.current = handler)}
           onAnswer={(answer: BattleAnswer) => {

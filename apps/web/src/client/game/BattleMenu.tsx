@@ -3,16 +3,13 @@
 // and its move list. The game asks (BattleMenus in @pokehd/emu) and waits; a tap answers, and
 // the game's own code carries on from there with its own rules and messages.
 //
-// Two layouts for Nick to pick from (battle-menu-flag.ts):
-// - `moves`: the moves up front, one tap a turn, with Pokémon, Bag and Run underneath.
-// - `classic`: the game's four choices first; Fight opens the moves.
-// Keys and gamepads move a highlight and press it (`bindKeys`).
+// The moves come first, so a turn is one tap, with Pokémon, Bag and Run underneath (Nick's pick,
+// D44). Keys and gamepads move a highlight and press it (`bindKeys`).
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { BattleAnswer, BattleAsk, MoveChoice } from "@pokehd/emu";
 import { typeName } from "@pokehd/rom";
 import { niceName } from "../dex/catalogue.ts";
 import { TYPE_COLOURS } from "../menu/parts.tsx";
-import type { BattleMenuLayout } from "./battle-menu-flag.ts";
 import "./battle-menu.css";
 
 export type BattleKey = "up" | "down" | "left" | "right" | "a" | "b";
@@ -20,7 +17,6 @@ export type BattleKey = "up" | "down" | "left" | "right" | "a" | "b";
 interface Props {
   ask: BattleAsk;
   rom: Uint8Array;
-  layout: BattleMenuLayout;
   /** The player's Pokémon's name, for "What will SQUIRTLE do?". */
   who: string | null;
   onAnswer(answer: BattleAnswer): void;
@@ -41,9 +37,7 @@ interface Choice {
   label: string;
 }
 
-export function BattleMenu({ ask, rom, layout, who, onAnswer, bindKeys }: Props) {
-  // Classic: the four choices, or the moves after Fight.
-  const [fighting, setFighting] = useState(false);
+export function BattleMenu({ ask, rom, who, onAnswer, bindKeys }: Props) {
   const [focus, setFocus] = useState<string | null>(null);
   // One answer per question (the page mounts a new menu for the next, by its id).
   const [answered, setAnswered] = useState(false);
@@ -84,33 +78,15 @@ export function BattleMenu({ ask, rom, layout, who, onAnswer, bindKeys }: Props)
       action("rock", "Rock", 1, 0, () => answer({ choice: "rock" }), "🪨"),
       action("run", "Run", 1, 1, () => answer({ choice: "run" }), <RunIcon />),
     ];
-  } else if (layout === "classic" && !fighting) {
-    title = who ? `What will ${who} do?` : "What will you do?";
-    choices = [
-      action("fight", "Fight", 0, 0, () => {
-        setFighting(true);
-        // The highlight follows keys only; a tap leaves none.
-        if (focus) setFocus("move0");
-      }, <FightIcon />),
-      action("pkmn", "Pokémon", 0, 1, () => answer({ choice: "pkmn" }), <BallIcon />),
-      action("item", "Bag", 1, 0, () => answer({ choice: "item" }), <BagIcon />),
-      action("run", "Run", 1, 1, () => answer({ choice: "run" }), <RunIcon />),
-    ];
   } else {
     title = who ? `What will ${who} do?` : "What will you do?";
     choices = moveChoices(ask.moves, (i) => ({ fight: i }));
-    if (layout === "classic") back = () => {
-      setFighting(false);
-      if (focus) setFocus("fight");
-    };
-    else {
-      const row = Math.ceil(ask.moves.length / 2);
-      choices.push(
-        { ...action("pkmn", "Pokémon", row, 0, () => answer({ choice: "pkmn" }), <BallIcon />), className: "bm-action bm-small bm-pkmn" },
-        { ...action("item", "Bag", row, 1, () => answer({ choice: "item" }), <BagIcon />), className: "bm-action bm-small bm-item" },
-        { ...action("run", "Run", row, 2, () => answer({ choice: "run" }), <RunIcon />), className: "bm-action bm-small bm-run" },
-      );
-    }
+    const row = Math.ceil(ask.moves.length / 2);
+    choices.push(
+      { ...action("pkmn", "Pokémon", row, 0, () => answer({ choice: "pkmn" }), <BallIcon />), className: "bm-action bm-small bm-pkmn" },
+      { ...action("item", "Bag", row, 1, () => answer({ choice: "item" }), <BagIcon />), className: "bm-action bm-small bm-item" },
+      { ...action("run", "Run", row, 2, () => answer({ choice: "run" }), <RunIcon />), className: "bm-action bm-small bm-run" },
+    );
   }
 
   // Keys: the arrows move the highlight between neighbours, A presses it, B goes back.
@@ -142,7 +118,7 @@ export function BattleMenu({ ask, rom, layout, who, onAnswer, bindKeys }: Props)
 
   const rows = groupRows(choices);
   return (
-    <div ref={root} className="battle-menu" data-testid="battle-menu" data-layout={layout}>
+    <div ref={root} className="battle-menu" data-testid="battle-menu">
       <div className="bm-panel">
         <div className="bm-title">
           {back && (
@@ -242,14 +218,6 @@ function RunIcon() {
     <svg viewBox="0 0 32 32">
       <path d="M6 16h16m-6-7 7 7-7 7" fill="none" {...s} strokeWidth={3} />
       <path d="M25 7v18" fill="none" {...s} strokeWidth={3} />
-    </svg>
-  );
-}
-
-function FightIcon() {
-  return (
-    <svg viewBox="0 0 32 32">
-      <path d="M16 3l3.5 8.5L28 13l-6.5 6 2 9L16 23.5 8.5 28l2-9L4 13l8.5-1.5z" fill="#f2c94c" {...s} />
     </svg>
   );
 }
