@@ -18,6 +18,8 @@ export interface DexProgress {
   /** Pokédex numbers. */
   seen: ReadonlySet<number>;
   owned: ReadonlySet<number>;
+  /** Not caught, but the game is showing their full page (Oak's starters). */
+  onShow?: ReadonlySet<number>;
   /** Maps visited, oldest first, with when (ms since 1970). */
   places: readonly { map: number; at: number }[];
   people: readonly PersonMet[];
@@ -138,13 +140,6 @@ export function buildCatalogue(rom: Uint8Array, world: WorldData): Catalogue {
       return { key: `${map}:${npc}`, map, npc, sprite: o.sprite, name, trainer };
     },
   };
-}
-
-/** Pokédex numbers set in a 19-byte flag array (wPokedexSeen / wPokedexOwned). */
-export function dexFlags(bytes: ArrayLike<number>): Set<number> {
-  const out = new Set<number>();
-  for (let dex = 1; dex <= 151; dex++) if ((bytes[(dex - 1) >> 3]! >> ((dex - 1) & 7)) & 1) out.add(dex);
-  return out;
 }
 
 /** Height and weight the way the game prints them: 2′04″ and 15.0 lb. */
