@@ -1,5 +1,5 @@
-// Resume points: an emulator save state taken every minute and whenever the page is hidden, so
-// closing the tab doesn't lose play since the last save. Kept next to the battery save. The
+// Resume points: an emulator save state taken every couple of seconds of play (resume-keeper.ts),
+// so closing the tab or reloading doesn't lose play since the last save. Kept next to the battery save. The
 // emulator starts from one only while it holds exactly the stored save (see EmulatorHost's
 // `resume`), so the save file always wins over a stale point; its SHA-1 is checked too, so a
 // damaged copy is never loaded.
@@ -51,12 +51,35 @@ export async function readResumePoint(key: string): Promise<ResumePoint | null> 
   return { state, takenAt: stored.takenAt, ...(stored.saveSha1 ? { saveSha1: stored.saveSha1 } : {}) };
 }
 
+/** A point hashed and paired with its save, ready to store with no more waiting. */
+export interface PreparedPoint {
+  state: Uint8Array;
+  sha1: string;
+  /** The battery save the state holds (the page's newest when it was taken), if any. */
+  save: Uint8Array | undefined;
+  /** Its SHA-1, picture scratch blanked, or NO_SAVE. */
+  saveSha1: string;
+  /** When the emulator was asked for it (ms). */
+  takenAt: number;
+}
+
+/** Hashes a point taken at `takenAt` while `save` was the newest battery save. */
+export async function prepareResumePoint(state: Uint8Array, save: Uint8Array | undefined, takenAt = Date.now()): Promise<PreparedPoint> {
+  const [sha1, saveSha1] = await Promise.all([sha1Hex(state), save ? saveHash(save) : NO_SAVE]);
+  return { state, sha1, save, saveSha1, takenAt };
+}
+
+/** Stores a prepared point in place of the one there. */
+export async function writeResumePoint(key: string, point: PreparedPoint): Promise<void> {
+  const stored: StoredPoint = { state: point.state.slice().buffer, sha1: point.sha1, takenAt: point.takenAt, saveSha1: point.saveSha1 };
+  await run("saves", "readwrite", (s) => s.put(stored, pointKey(key)));
+}
+
 /** Stores a point taken while `save` was the stored battery save. Returns its state's SHA-1. */
 export async function storeResumePoint(key: string, state: Uint8Array, save?: Uint8Array): Promise<string> {
-  const sha1 = await sha1Hex(state);
-  const point: StoredPoint = { state: state.slice().buffer, sha1, takenAt: Date.now(), saveSha1: save ? await saveHash(save) : NO_SAVE };
-  await run("saves", "readwrite", (s) => s.put(point, pointKey(key)));
-  return sha1;
+  const point = await prepareResumePoint(state, save);
+  await writeResumePoint(key, point);
+  return point.sha1;
 }
 
 type Fetch = typeof fetch;
@@ -109,6 +132,27 @@ export async function pickResumePoint(save: Uint8Array | undefined, points: (Res
 }
 
 export const deleteResumePoint = (key: string) => run("saves", "readwrite", (s) => s.delete(pointKey(key)));
+
+/**
+ * Games being put away, by key: the last point a game takes as it goes (`finish` in Game) is
+ * stored a moment after its page component unmounts. A game starting on the same key (a
+ * remount: hot reload, another boot) waits for it, so it resumes from that point rather than the
+ * one before, and the late write can't land over the new game's own points afterwards.
+ */
+const leaving = new Map<string, Promise<unknown>>();
+
+/** Records that the game on `key` is going; `done` settles once its last point is stored. */
+export function gameLeaving(key: string, done: Promise<unknown>): void {
+  const settled = done.then(
+    () => {},
+    () => {},
+  );
+  leaving.set(key, settled);
+  void settled.then(() => leaving.get(key) === settled && leaving.delete(key));
+}
+
+/** Settles once any game going on `key` has stored its last point. */
+export const gameLeft = (key: string): Promise<unknown> => leaving.get(key) ?? Promise.resolve();
 
 const AUTOSAVE_KEY = "pokehd.autosave.v1";
 
