@@ -31,7 +31,7 @@ export const CLUB: TilesetLabelTable = {
     0x16: "machine",
     0x17: "counter",
     0x18: "counter",
-    0x19: "unused",
+    0x19: "void", // Bike Shop's border block: the black outside the room
     0x1a: "floor",
     0x1b: "machine",
     0x1c: "machine",
