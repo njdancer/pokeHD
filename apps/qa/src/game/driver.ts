@@ -13,7 +13,7 @@ import { parseWorld, readGlyphs, stitchOverworld, SYMBOLS, type StitchedWorld, t
 import { GlitchWatcher } from "./glitches.ts";
 import { describeButtons, describeGameBoyText, describePanels, mapName } from "./outcome.ts";
 import { describeLayouts, installLayoutLog, type LayoutEntry } from "./layout-log.ts";
-import { composeSheet, MAX_SHEET_FRAMES, pickFrames, Recorder } from "./recorder.ts";
+import { composeSheet, cropShot, MAX_SHEET_FRAMES, pickFrames, Recorder } from "./recorder.ts";
 import { readScreen, type ScreenRead } from "./screen-read.ts";
 import { buildTextMap } from "./textmap.ts";
 import type { Direction, GameDriver, GameStatus, Glitch, Move, Outcome, RestartOptions } from "./types.ts";
@@ -97,6 +97,10 @@ export function createDriver(opts: DriverOptions): GameDriver {
    * window comes to the front to be screenshotted, hiding the stream for a few frames (a flicker).
    */
   let sheetBrowser: Browser | null = null;
+  async function sheet(): Promise<Page> {
+    sheetBrowser ??= await chromium.launch({ headless: true, ...(!existsSync(chromium.executablePath()) && { channel: "chrome" }) });
+    return (sheetPage ??= await sheetBrowser.newPage());
+  }
   let poller: ReturnType<typeof setInterval> | null = null;
   let fitter: ReturnType<typeof setInterval> | null = null;
 
@@ -448,9 +452,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
     if (!picked.length) throw new Error("No recorded frames in that span");
     const scale = picked[0]!.frame.scale;
     const crop = { x: Math.round(box.x * scale), y: Math.round(box.y * scale), w: Math.round(box.width * scale), h: Math.round(box.height * scale) };
-    sheetBrowser ??= await chromium.launch({ headless: true, ...(!existsSync(chromium.executablePath()) && { channel: "chrome" }) });
-    sheetPage ??= await sheetBrowser.newPage();
-    return composeSheet(sheetPage, {
+    return composeSheet(await sheet(), {
       frames: picked.map(({ frame, at }) => ({ data: frame.data, label: `${at - zero >= 0 ? "+" : ""}${((at - zero) / 1000).toFixed(2)} s` })),
       crop,
       cellWidth: Math.min(264, crop.w),
@@ -643,10 +645,13 @@ export function createDriver(opts: DriverOptions): GameDriver {
       busy++;
       try {
         const box = await gameBox();
-        // Straight from CDP: Playwright's page.screenshot overrides the device metrics to take it,
-        // which in the headed stream window resizes the page for a few frames (a flicker on stream).
-        const { data } = (await need(input).send("Page.captureScreenshot", { format: "png", clip: { ...box, scale: 1 } })) as { data: string };
-        return Buffer.from(data, "base64");
+        if (direct) return await need(page).screenshot({ clip: box, type: "png" });
+        // The whole window, then cropped elsewhere: a clipped capture (Playwright's, or CDP's with
+        // `clip`) emulates a viewport on the clip for a moment, which the headed stream window shows
+        // as the game zooming to fill the stream for a few frames (a flicker).
+        const { data } = (await need(input).send("Page.captureScreenshot", { format: "png" })) as { data: string };
+        const viewportWidth = await need(page).evaluate(() => innerWidth);
+        return await cropShot(await sheet(), data, box, viewportWidth);
       } finally {
         busy--;
       }
