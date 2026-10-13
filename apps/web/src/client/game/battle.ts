@@ -146,6 +146,10 @@ export interface BattleFrame {
 
 /** Frames a HUD may be missing before its HD card goes. */
 const HUD_HOLD_FRAMES = 2;
+/** Longest the way out of a battle can wait for the game's white-out before it counts as over. */
+const LEAVE_FRAMES = 120;
+/** hWY at or below the screen's bottom: the window is down. */
+const WINDOW_DOWN = 144;
 
 /**
  * Follows battles frame by frame for the game page. The battle screen's ~3.8 KB of video memory
@@ -166,6 +170,17 @@ export class BattleTracker {
   #seen = false;
   /** Frames since each HUD was last on screen. */
   #hudGone: Record<Side, number> = { player: Infinity, enemy: Infinity };
+  /**
+   * Frames since the battle ended, while the game is still on its way out; null otherwise. EndOfBattle
+   * clears wIsInBattle and wCurOpponent, then waits for the sound effect to finish
+   * (WaitForSoundToFinish) with the battle's last frame still up, and only then whites it out and
+   * returns to the overworld loop, which sets BIT_BATTLE_OVER_OR_BLACKOUT (`battleTransition`).
+   * Between the two nothing says "battle", and the window over the last frame would bring the
+   * Game Boy screen up for a few frames (QA bug 11).
+   */
+  #leaving: number | null = null;
+  /** `battleTransition` has said "out" since the battle ended. */
+  #outSeen = false;
 
   /** `base` must include the tile map (TEXT_WATCHES): the evolution screen is spotted from it. */
   constructor(rom: Uint8Array, base: Record<string, Watch>, watch: (watches: Record<string, Watch>) => void) {
@@ -181,6 +196,15 @@ export class BattleTracker {
     this.#watch(on ? { ...this.#base, ...BATTLE_SCREEN_WATCHES, ...EVOLUTION_WATCHES } : this.#base);
   }
 
+  /** Whether the way out of the battle (see `#leaving`) still runs, this frame. */
+  #stillLeaving(between: "in" | "out" | null, watched: Record<string, Uint8Array>): boolean {
+    if (this.#leaving === null) return false;
+    if (between === "out") this.#outSeen = true;
+    const windowDown = (watched["windowY"]?.[0] ?? 0) >= WINDOW_DOWN;
+    if (this.#outSeen || windowDown || ++this.#leaving > LEAVE_FRAMES) this.#leaving = null;
+    return this.#leaving !== null;
+  }
+
   frame(watched: Record<string, Uint8Array>): BattleFrame {
     const state = this.#decoder.decode(watched as BattleWatched);
     const tileMap = watched["tileMap"];
@@ -193,7 +217,10 @@ export class BattleTracker {
       this.#colours.reset();
       this.#seen = false;
       this.#hudGone = { player: Infinity, enemy: Infinity };
+      this.#leaving = 0;
+      this.#outSeen = false;
     }
+    if (state) this.#leaving = null;
 
     // The evolution screen: the Pokémon alone in HD, its text in HD boxes (QA bug 27).
     if (evolving) {
@@ -208,7 +235,8 @@ export class BattleTracker {
 
     if (!state) {
       const between = battleTransition(watched as BattleWatched);
-      return { state, screen: null, view: null, huds: null, scene: between ? "transition" : undefined };
+      const leaving = this.#stillLeaving(between, watched);
+      return { state, screen: null, view: null, huds: null, scene: between || leaving ? "transition" : undefined };
     }
     // The first frame or so, until the extra watches arrive.
     if (!watched["picTiles"]) return { state, screen: null, view: null, huds: null, scene: "transition" };

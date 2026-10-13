@@ -60,6 +60,11 @@ export interface WorldContent {
   /** A framing that overrides the look's camera while set (a battle). */
   readonly view?: CameraView | null;
   /**
+   * The game's screen fade over the finished picture: 0 none, 1 black, −1 white, in between
+   * partly. Applied after all post-processing, so full is exactly the screen's black or white.
+   */
+  readonly fade?: number;
+  /**
    * Outdoors (the default) follows the day; indoors and caves hold a fixed light of their own.
    * Changes land at once: the game changes maps behind its own fade to black.
    */
@@ -371,10 +376,12 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     const k = 1 - Math.exp(-dt / PLACE_TINT_SECONDS);
     for (let i = 0; i < 3; i++) placeTint[i]! += (want[i]! - placeTint[i]!) * k;
     post.update(p, camera.position.distanceTo(world.target), placeTint, dt);
+    const fade = world.fade ?? 0;
+    post.setFade(fade);
 
     const { position: cp, quaternion: cq } = camera;
     watched.length = 0;
-    watched.push(cp.x, cp.y, cp.z, cq.x, cq.y, cq.z, cq.w, camera.fov, camera.aspect, ...placeTint, lightPhase, p.time.dusk, elapsed);
+    watched.push(cp.x, cp.y, cp.z, cq.x, cq.y, cq.z, cq.w, camera.fov, camera.aspect, ...placeTint, lightPhase, p.time.dusk, elapsed, fade);
     const moved = watch.changed(world.root, watched);
     // A battle animates through textures and attributes the watch doesn't see; shaders still
     // compiling skip draws that a later frame has to make up.
