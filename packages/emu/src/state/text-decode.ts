@@ -347,8 +347,11 @@ export class ScreenTextDecoder {
 
   #decodeDialog(grid: Grid, box: TextBox, options: number): Dialog {
     const arrow = cell(grid, MORE_ARROW.x, MORE_ARROW.y) === CURSOR.more;
+    // Lines are 18 letters wide, right up to the border ("To make a complete"); only the ▼'s
+    // own cell is left out, while it shows.
+    const right = box.x + box.width - 1;
     const [first, second] = DIALOG.rows.map(
-      (row) => rowLine(grid, row, box.x + 1, MORE_ARROW.x)?.text ?? "",
+      (row) => rowLine(grid, row, box.x + 1, row === MORE_ARROW.y && arrow ? MORE_ARROW.x : right)?.text ?? "",
     ) as [string, string];
     const key = `${first}\n${second}`;
     const prev = this.#dialog;
