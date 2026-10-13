@@ -55,6 +55,69 @@ describe.skipIf(!existsSync(ROM_PATH))("labels", () => {
     }
   });
 
+  /** Each map's steps: the tile the game checks for collision (a step's bottom-left) and its label. */
+  function* steps(tileset: Tileset) {
+    const labels = blockLabels(tileset);
+    for (const map of world.maps) {
+      if (map?.tileset !== tileset.id) continue;
+      const at = (tx: number, ty: number) => {
+        const b = map.blocks[(ty >> 2) * map.widthBlocks + (tx >> 2)]!;
+        const i = (ty & 3) * 4 + (tx & 3);
+        return { tile: tileset.blocks[b * 16 + i]!, label: labels[b]![i]! };
+      };
+      for (let y = 0; y < map.heightBlocks * 2; y++) {
+        for (let x = 0; x < map.widthBlocks * 2; x++) yield { map, x, y, at, ...at(x * 2, y * 2 + 1) };
+      }
+    }
+  }
+
+  const OPEN: ReadonlySet<string> = new Set(["ground", "lawn", "tall-grass", "floor"]);
+  const SOLID: ReadonlySet<string> = new Set(["cliff", "rock", "wall", "wall-interior", "void", "tree", "roof"]);
+
+  it("labels a step open ground only if the ROM lets you stand there, and solid only if not, in every tileset (QA #32, #35)", () => {
+    // Deliberate: Fuchsia Gym's invisible walls look like floor in the game too, and the Pokémon
+    // Mansion's broken-floor dark is walkable but drawn black.
+    const allowed = new Set(["GYM 0x1f", "FACILITY 0x11"]);
+    const wrong = new Set<string>();
+    for (const tileset of world.tilesets) {
+      const walkable = new Set(tileset.semantics.walkable);
+      for (const { map, x, y, tile, label } of steps(tileset)) {
+        const key = `${tileset.name} 0x${tile.toString(16).padStart(2, "0")}`;
+        if (allowed.has(key)) continue;
+        if (OPEN.has(label) && !walkable.has(tile)) wrong.add(`${key} is ${label} but solid (${map.name} ${x},${y})`);
+        if (SOLID.has(label) && walkable.has(tile)) wrong.add(`${key} is ${label} but walkable (${map.name} ${x},${y})`);
+      }
+    }
+    expect([...wrong].filter((w, i, all) => all.findIndex((v) => v.split(" (")[0] === w.split(" (")[0]) === i)).toEqual([]);
+  });
+
+  it("draws a cliff between every pair of steps the ROM keeps apart as different heights (QA #35)", () => {
+    // Mt Moon 1F's south strip is raised floor (0x05) beside low floor (0x20). The ROM's pair
+    // collisions stop you crossing; the HD view needs something solid-looking on the seam, where
+    // the GB draws only a shadowed edge. Two seams in the game have no edge tile at all.
+    const bare = new Set(["MT_MOON_B2F 35,6 east", "MT_MOON_B2F 35,7 east", "VICTORY_ROAD_2F 6,7 south"]);
+    const barrier: ReadonlySet<string> = new Set(["cliff", "ledge", "rock"]);
+    const open: string[] = [];
+    for (const tileset of world.tilesets) {
+      const pairs = tileset.semantics.pairCollisions.filter((p) => !p.surfing);
+      if (!pairs.length) continue;
+      const apart = (a: number, b: number) => pairs.some((p) => (p.tileA === a && p.tileB === b) || (p.tileA === b && p.tileB === a));
+      for (const { map, x, y, at, tile } of steps(tileset)) {
+        for (const [dx, dy, dir] of [[1, 0, "east"], [0, 1, "south"]] as const) {
+          if (x + dx >= map.widthBlocks * 2 || y + dy >= map.heightBlocks * 2) continue;
+          if (!apart(tile, at((x + dx) * 2, (y + dy) * 2 + 1).tile)) continue;
+          // The tiles on the seam that no step stands on: the next step's top row going south,
+          // this step's right column going east.
+          const seam = dy ? [at(x * 2, y * 2 + 2), at(x * 2 + 1, y * 2 + 2)] : [at(x * 2 + 1, y * 2), at(x * 2 + 1, y * 2 + 1)];
+          if (!seam.some((s) => barrier.has(s.label)) && !bare.has(`${map.name} ${x},${y} ${dir}`)) {
+            open.push(`${map.name} ${x},${y} ${dir}: ${seam.map((s) => `0x${s.tile.toString(16)} ${s.label}`).join(", ")}`);
+          }
+        }
+      }
+    }
+    expect(open).toEqual([]);
+  });
+
   it("applies block overrides over tile labels", () => {
     const blocks = blockLabels(overworld);
     expect(overworld.blocks[0x06 * 16 + 14]).toBe(0x37);
