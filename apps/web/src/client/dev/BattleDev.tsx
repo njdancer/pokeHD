@@ -5,7 +5,7 @@
 // ?frame=N plays N Game Boy frames (mashing A) at once and holds there; ?phase=0.5 holds the
 // time of day; ?size=1440 pins the drawing buffer to 2560×1440. Without ?frame it plays on in
 // real time. Once it holds, window.__battle.ready is true; ?shot=name also posts a render to
-// /__dev/shot (shots/name.png). ?battlemenus=moves|classic answers the battle's menus with the
+// /__dev/shot (shots/name.png). ?battlemenus answers the battle's menus with the
 // HD battle menu (BattleMenus); with ?frame it holds at the first question instead.
 import { useEffect, useRef, useState } from "react";
 import {
@@ -20,7 +20,6 @@ import { fetchDevRom } from "../dev-rom.ts";
 import { BattleTracker, battleMenuShown, battleText, maskBattleScreen } from "../game/battle.ts";
 import { BattleHud } from "../game/BattleHud.tsx";
 import { BattleMenu } from "../game/BattleMenu.tsx";
-import { BATTLE_MENU_LAYOUTS } from "../game/battle-menu-flag.ts";
 import { screenLayout, type ScreenLayout } from "../game/screen.ts";
 import "../game/game.css";
 
@@ -30,7 +29,7 @@ const arena = (ARENA_STYLES as readonly string[]).includes(query.get("arena") ??
 const holdAt = query.has("frame") ? Number(query.get("frame")) : null;
 const phase = query.has("phase") ? Number(query.get("phase")) : null;
 const shot = query.get("shot");
-const menuLayout = BATTLE_MENU_LAYOUTS.find((l) => l === query.get("battlemenus")) ?? null;
+const withMenus = query.has("battlemenus");
 /** The whole screen, as a box for the mask to clear. */
 const WHOLE_SCREEN = [{ x: 0, y: 0, width: 20, height: 18, lines: [] }];
 
@@ -85,7 +84,7 @@ export function BattleDev() {
       const tracker = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...BATTLE_WATCHES, ...TEXT_WATCHES }, (next) => (watches = next));
       const text = new ScreenTextDecoder(readGlyphs(rom));
       let resume = () => {};
-      const menus: BattleMenus | null = menuLayout
+      const menus: BattleMenus | null = withMenus
         ? new BattleMenus(gb, {
             rom,
             onAsk: (id, a) =>
@@ -165,8 +164,8 @@ export function BattleDev() {
     <div className="game" ref={holder}>
       <canvas ref={screenRef} className={`gb-screen ${layout}`} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
       {hud && layout === "battle" && <BattleHud state={hud.state} huds={hud.huds} menuUp={!!ask} />}
-      {ask && menuLayout && (
-        <BattleMenu key={ask.id} ask={ask.ask} rom={ask.rom} layout={menuLayout} who={hud?.state.player.mon?.name ?? null} bindKeys={() => {}} onAnswer={ask.answer} />
+      {ask && (
+        <BattleMenu key={ask.id} ask={ask.ask} rom={ask.rom} who={hud?.state.player.mon?.name ?? null} bindKeys={() => {}} onAnswer={ask.answer} />
       )}
       <div className="game-hud">
         <span role="status">{status}</span>
