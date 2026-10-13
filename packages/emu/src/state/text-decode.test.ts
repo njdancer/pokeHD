@@ -70,6 +70,26 @@ describe("ScreenTextDecoder", () => {
     expect(text.quantity?.value).toBe(1);
   });
 
+  it("reads the battle menu, its columns one space apart (QA bug 41)", () => {
+    const decoder = new ScreenTextDecoder(glyphs);
+    const menu = (fight: string) =>
+      decoder.decode(
+        screen([
+          ...Array<string>(12).fill(""),
+          "┌──────┌───────────┐",
+          "│      │           │",
+          `│      │${fight}│`,
+          "│      │           │",
+          "│      │ ITEM  RUN │",
+          "└──────└───────────┘",
+        ]),
+      ).menus;
+    expect(menu("▶FIGHT PKMN")).toEqual([
+      expect.objectContaining({ kind: "battle", cursor: 0, items: ["FIGHT", "PKMN", "ITEM", "RUN"].map((text, i) => ({ text, row: i < 2 ? 14 : 16 })) }),
+    ]);
+    expect(menu(" FIGHT▶PKMN")[0]).toMatchObject({ kind: "battle", cursor: 1 });
+  });
+
   it("keeps a menu whose bottom is under the message box", () => {
     const decoder = new ScreenTextDecoder(glyphs);
     const text = decoder.decode(

@@ -69,7 +69,7 @@ import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
 import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
-import { BattleTracker, battleMenuShown, battleText, maskBattleScreen } from "./battle.ts";
+import { BattleTracker, battleCovered, battleMenuShown, battleText, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { BattleMenu, type BattleKey } from "./BattleMenu.tsx";
 import { battleMenusOn } from "./battle-menu-flag.ts";
@@ -677,7 +677,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           // report, in its own words once the action is done, so neither the HD text layer nor the
           // Game Boy screen shows it.
           const fits = acting || choosing ? false : intro ? introTextFits(text) : battleScreen ? battleTextFits(text) : hdTextFits(text, state.mode, inWorld);
-          if (battleScreen) maskBattleScreen(image.data, battleScreen, fits || choosing ? text.boxes : []);
+          if (battleScreen) maskBattleScreen(image.data, battleScreen, battleCovered(text, fits, choosing));
           ctx.putImageData(image, 0, 0);
           // Nothing on the Game Boy screen the HD view doesn't show: keep it down.
           const mapOnly = trackMapOnly((bytes as unknown as TextWatched).tileMap, state.mode, inWorld);

@@ -268,6 +268,20 @@ export function maskBattleScreen(data: Uint8ClampedArray, screen: BattleScreen, 
   }
 }
 
+/** The whole screen, as a box: nothing of the Game Boy screen shows. */
+const WHOLE_SCREEN: TextBox = { x: 0, y: 0, width: 20, height: 18, lines: [] };
+
+/**
+ * What `maskBattleScreen` clears beyond the scene and the HUDs. While the HD battle menu asks,
+ * everything: the game's menu box is drawn over its message box's right side, so the message box
+ * is no box the text decoder finds any more (its top-right corner is gone), and covering only the
+ * boxes it does find left the message box's left eight columns, an empty bordered box, on screen
+ * (QA bug 41). Otherwise the boxes the HD text layer draws, when it draws them.
+ */
+export function battleCovered(text: ScreenText, fits: boolean, choosing: boolean): readonly TextBox[] {
+  return choosing ? [WHOLE_SCREEN] : fits ? text.boxes : [];
+}
+
 /** Per cell, 1 where the Game Boy screen still shows: text and menus not under `covered`. */
 function uiCells(cells: Uint8Array, covered: readonly TextBox[]): Uint8Array {
   const keep = cells.map((c) => (c === CELL_UI ? 1 : 0));

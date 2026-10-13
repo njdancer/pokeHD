@@ -30,6 +30,8 @@ const TEXT_DELAY_MASK = 0b111;
 
 const BORDER_CHARS = new Set<string>(Object.values(BOX));
 const CURSOR_CHARS = new Set<string>([CURSOR.active, CURSOR.inactive]);
+/** A word in a menu row: anything between spaces and cursors. */
+const WORD = new RegExp(`[^\\s${CURSOR.active}${CURSOR.inactive}]+`, "g");
 
 /** A screen of decoded characters; `null` where a tile isn't text. */
 type Grid = (string | null)[];
@@ -213,15 +215,18 @@ function decodeMenu(grid: Grid, box: TextBox, watched: TextWatched): Menu | null
   const rows: number[] = [];
   for (let y = box.y + 1; y < box.y + box.height - 1; y++) rows.push(y);
 
-  // The FIGHT/PKMN/ITEM/RUN menu has two columns; every other menu has one, at the cursor.
-  const all = rows.flatMap((y) => segments(grid, y, box.x + 1, right)).map((s) => ({
-    ...s,
-    text: CURSOR_CHARS.has(s.text[0]!) ? s.text.slice(1) : s.text,
-    col: CURSOR_CHARS.has(s.text[0]!) ? s.col + 1 : s.col,
-  }));
-  if (all.some((s) => s.text === "FIGHT")) {
-    const items = all.map(({ text, row }) => ({ text, row }));
-    const index = all.findIndex((s) => s.row === cursor.y && s.col === cursor.x + 1);
+  // The FIGHT/PKMN/ITEM/RUN menu has two columns; every other menu has one, at the cursor. Its
+  // columns are one space apart ("FIGHT ", "<PK><MN>": BattleMenuText), the right column's cursor
+  // in that space, so it's read by words: read as whole segments, "FIGHT PKMN" never matched, and
+  // the battle menu counted as some other menu (QA bugs 41 and 42).
+  const words = rows.flatMap((y) => segments(grid, y, box.x + 1, right)).flatMap((s) => {
+    const out: { text: string; row: number; col: number }[] = [];
+    for (const m of s.text.matchAll(WORD)) out.push({ text: m[0], row: s.row, col: s.col + m.index });
+    return out;
+  });
+  if (words.some((s) => s.text === "FIGHT")) {
+    const items = words.map(({ text, row }) => ({ text, row }));
+    const index = words.findIndex((s) => s.row === cursor.y && s.col === cursor.x + 1);
     return { kind: "battle", box, items, cursor: index < 0 ? null : index, active: cursor.active };
   }
 
