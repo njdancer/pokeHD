@@ -18,6 +18,11 @@ export interface HeightfieldInput {
   ah: readonly [number, number, number];
   /** Also emit the base face under each column (for free-standing props). */
   bottom?: boolean;
+  /**
+   * Put the outline walls (those dropping from a column to an empty cell or past the grid's
+   * edge) last in `indices`, from `edgeStart`, so they can take their own material.
+   */
+  splitEdges?: boolean;
 }
 
 export interface MeshArrays {
@@ -25,6 +30,8 @@ export interface MeshArrays {
   normals: Float32Array;
   uvs: Float32Array;
   indices: Uint32Array;
+  /** With `splitEdges`, where the outline walls start in `indices` (they run to the end). */
+  edgeStart?: number;
 }
 
 export function meshHeightfield(input: HeightfieldInput): MeshArrays {
@@ -33,6 +40,7 @@ export function meshHeightfield(input: HeightfieldInput): MeshArrays {
   const nor: number[] = [];
   const tex: number[] = [];
   const idx: number[] = [];
+  const edgeIdx: number[] = [];
   const at = (x: number, y: number) => {
     if (x < 0 || y < 0 || x >= w || y >= h) return base;
     const v = heights[y * w + x]!;
@@ -51,6 +59,7 @@ export function meshHeightfield(input: HeightfieldInput): MeshArrays {
     corners: [number, number, number][],
     uvs: (readonly [number, number])[],
     normal: readonly [number, number, number],
+    edge = false,
   ) => {
     const p = corners.map(([x, y, z]) => point(x, y, z));
     const n = normalise(normal);
@@ -64,8 +73,9 @@ export function meshHeightfield(input: HeightfieldInput): MeshArrays {
       nor.push(...n);
       tex.push(...uvs[i]!);
     });
-    if (flip) idx.push(start, start + 2, start + 1, start, start + 3, start + 2);
-    else idx.push(start, start + 1, start + 2, start, start + 2, start + 3);
+    const out = edge && input.splitEdges ? edgeIdx : idx;
+    if (flip) out.push(start, start + 2, start + 1, start, start + 3, start + 2);
+    else out.push(start, start + 1, start + 2, start, start + 2, start + 3);
   };
 
   // Tops (and bottoms): runs along x of equal height.
@@ -91,7 +101,7 @@ export function meshHeightfield(input: HeightfieldInput): MeshArrays {
       const b = at(x, y);
       if (a === b || (!filled(x, y - 1) && !filled(x, y))) { x++; continue; }
       let end = x + 1;
-      while (end < w && at(end, y - 1) === a && at(end, y) === b && (filled(end, y - 1) || filled(end, y))) end++;
+      while (end < w && at(end, y - 1) === a && at(end, y) === b && filled(end, y - 1) === filled(x, y - 1) && filled(end, y) === filled(x, y)) end++;
       const upper = a > b ? y - 1 : y;
       const vMid = (uv(x, upper)[1] + uv(x, upper + 1)[1]) / 2;
       const u0 = uv(x, upper)[0];
@@ -99,7 +109,8 @@ export function meshHeightfield(input: HeightfieldInput): MeshArrays {
       const lo = Math.min(a, b);
       const hi = Math.max(a, b);
       // Faces toward the lower side: +y if the upper cell is row y-1.
-      quad([[x, y, lo], [end, y, lo], [end, y, hi], [x, y, hi]], [[u0, vMid], [u1, vMid], [u1, vMid], [u0, vMid]], dir(ay, a > b ? 1 : -1));
+      const edge = !filled(x, y - 1) || !filled(x, y);
+      quad([[x, y, lo], [end, y, lo], [end, y, hi], [x, y, hi]], [[u0, vMid], [u1, vMid], [u1, vMid], [u0, vMid]], dir(ay, a > b ? 1 : -1), edge);
       x = end;
     }
   }
@@ -112,14 +123,15 @@ export function meshHeightfield(input: HeightfieldInput): MeshArrays {
       const b = at(x, y);
       if (a === b || (!filled(x - 1, y) && !filled(x, y))) { y++; continue; }
       let end = y + 1;
-      while (end < h && at(x - 1, end) === a && at(x, end) === b && (filled(x - 1, end) || filled(x, end))) end++;
+      while (end < h && at(x - 1, end) === a && at(x, end) === b && filled(x - 1, end) === filled(x - 1, y) && filled(x, end) === filled(x, y)) end++;
       const upper = a > b ? x - 1 : x;
       const uMid = (uv(upper, y)[0] + uv(upper + 1, y)[0]) / 2;
       const v0 = uv(upper, y)[1];
       const v1 = uv(upper, end)[1];
       const lo = Math.min(a, b);
       const hi = Math.max(a, b);
-      quad([[x, y, lo], [x, end, lo], [x, end, hi], [x, y, hi]], [[uMid, v0], [uMid, v1], [uMid, v1], [uMid, v0]], dir(ax, a > b ? 1 : -1));
+      const edge = !filled(x - 1, y) || !filled(x, y);
+      quad([[x, y, lo], [x, end, lo], [x, end, hi], [x, y, hi]], [[uMid, v0], [uMid, v1], [uMid, v1], [uMid, v0]], dir(ax, a > b ? 1 : -1), edge);
       y = end;
     }
   }
@@ -128,7 +140,8 @@ export function meshHeightfield(input: HeightfieldInput): MeshArrays {
     positions: new Float32Array(pos),
     normals: new Float32Array(nor),
     uvs: new Float32Array(tex),
-    indices: new Uint32Array(idx),
+    indices: new Uint32Array([...idx, ...edgeIdx]),
+    ...(input.splitEdges ? { edgeStart: idx.length } : {}),
   };
 }
 
