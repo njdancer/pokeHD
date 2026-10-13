@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CELL_HUD, CELL_SCENE, CELL_UI, TEXT_WATCHES, type BattleScreen, type ScreenText, type TextWatched } from "@pokehd/emu";
-import { barColour, battleMenuShown, battleText, maskBattleScreen } from "./battle.ts";
+import { barColour, battleCovered, battleMenuShown, battleText, maskBattleScreen } from "./battle.ts";
 
 describe("maskBattleScreen", () => {
   const screen = (origin = { x: 0, y: 0 }): BattleScreen => {
@@ -25,6 +25,19 @@ describe("maskBattleScreen", () => {
     maskBattleScreen(data, screen(), [{ x: 0, y: 12, width: 20, height: 6, lines: [] }]);
     expect(alpha(data, 10, 12 * 8)).toBe(0);
     expect(alpha(data, 159, 143)).toBe(0);
+  });
+
+  it("shows nothing of the game's menu or the message box under it while the HD menu asks (QA bug 41)", () => {
+    // FIGHT / PKMN / ITEM / RUN drawn over the message box's right side: the menu is the only
+    // box the decoder finds, and the message box's left eight columns are left over.
+    const menu = { x: 8, y: 12, width: 12, height: 6, lines: [] };
+    const text = { shown: true, boxes: [menu], dialog: null, menus: [], quantity: null, loose: [], pictures: false } as unknown as ScreenText;
+    const data = new Uint8ClampedArray(160 * 144 * 4).fill(255);
+    maskBattleScreen(data, screen(), battleCovered(text, false, true));
+    for (let y = 0; y < 144; y++) for (let x = 0; x < 160; x++) expect(alpha(data, x, y)).toBe(0);
+    // A message the HD text layer draws: its boxes go; nothing else is asked.
+    expect(battleCovered(text, true, false)).toEqual([menu]);
+    expect(battleCovered(text, false, false)).toEqual([]);
   });
 
   it("moves the mask with the screen when the game shakes it", () => {
