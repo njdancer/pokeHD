@@ -128,3 +128,5 @@
 
 /* Behind a menu (the intro): only the world and the loading screen show. */
 .game.held > :not(.scene) { visibility: hidden; pointer-events: none; }
+/* The HD battle menu is up at the bottom (BattleMenu.tsx sets --bm-height): the player's card goes above it. */
+.battle-hud.menu-up .battle-card.player:not(.with-touch-pad *) { bottom: calc(var(--bm-height, 0px) + 24px); transition: bottom .16s ease-out; }

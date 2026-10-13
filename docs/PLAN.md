@@ -201,8 +201,8 @@ boxes and menus as styled overlays with a modern font; the game still drives the
 The page's own start screen, Oak's introduction in HD, names typed on the device's keyboard
 (Oak checks the invited name and a change renames the player) and real buttons on every HD
 menu, all pressing the game's own buttons (`Controls`). Battle messages are HD boxes (tap to
-read on). Next: tappable battle menus (FIGHT, moves, PKMN, ITEM, RUN), which still show on the
-Game Boy screen.
+read on). Battle menus (FIGHT, moves, PKMN, ITEM, RUN) are HD buttons answering the game's own
+menu routines (D44), a trial behind `?battlemenus` until Nick picks a layout.
 ### p2-slots: save slots and the intro (D39)
 Any number of saves per ROM, each with its own battery save, resume point and earlier saves;
 duplicate, delete (to a bin), rename and start new at any time. First load opens an intro with
