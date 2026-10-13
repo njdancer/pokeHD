@@ -8,8 +8,8 @@
 // its "thoughts" on the stream.
 import Anthropic from "@anthropic-ai/sdk";
 import { createSdkMcpServer, query, tool, type SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { appendFileSync, mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import type { Outcome } from "./game/types.ts";
@@ -123,12 +123,15 @@ export class Player {
     // and anything a parent Claude Code session (one running this command) would otherwise pass down
     // (its proxy, its host-managed auth), which the player can't use.
     // CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`) is the machine's subscription too, so it stays.
+    // Or the token saved by `claude setup-token` on this machine, kept out of the repo and the shell env.
+    const tokenFile = join(homedir(), ".config", "pokehd", "claude-oauth-token");
+    if (!process.env["CLAUDE_CODE_OAUTH_TOKEN"] && existsSync(tokenFile)) process.env["CLAUDE_CODE_OAUTH_TOKEN"] = readFileSync(tokenFile, "utf8").trim();
     const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => k === "CLAUDE_CODE_OAUTH_TOKEN" || !/^(ANTHROPIC_|CLAUDE_CODE_|CLAUDE_AGENT_SDK_|CLAUDECODE$)/.test(k)));
     // Claude Code tells the model the signed-in account's email, read from its own config. With a
     // token from `claude setup-token` the player doesn't need that config, so it gets an empty one
     // and never learns who is signed in. Without a token it borrows the machine's login, email included.
     const isolated = env["CLAUDE_CODE_OAUTH_TOKEN"] ? { CLAUDE_CONFIG_DIR: mkdtempSync(join(tmpdir(), "pokehd-qa-config-")) } : {};
-    if (!env["CLAUDE_CODE_OAUTH_TOKEN"]) console.warn("No CLAUDE_CODE_OAUTH_TOKEN: the player borrows this machine's Claude login, and Claude Code shows it the account's email. Run `claude setup-token` and set CLAUDE_CODE_OAUTH_TOKEN to keep it out.");
+    if (!env["CLAUDE_CODE_OAUTH_TOKEN"]) console.warn("No CLAUDE_CODE_OAUTH_TOKEN: the player borrows this machine's Claude login, and Claude Code shows it the account's email. Save a token from `claude setup-token` in ~/.config/pokehd/claude-oauth-token to keep it out.");
     session = query({
       prompt: prompt(this),
       options: {
