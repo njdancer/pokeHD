@@ -40,9 +40,36 @@ export function inWorldTracker(resumed = false) {
 }
 
 /**
+ * Tracks whether the window is up over nothing but the map, so the HD view can stay in front.
+ * Maps whose script sets BIT_NO_AUTO_TEXT_BOX (Oak's lab, marts, the museum and others) open
+ * every text without a box: DisplayTextIDInit copies the plain screen buffer to the window and
+ * puts it up (hWY = 0), then LoadFontTilePatterns copies the font over about 17 frames, and only
+ * then does PrintText draw the message box. For that quarter second the game shows the map
+ * exactly as it was, so there's nothing for the Game Boy screen to add. The screen buffer is
+ * compared with the one from the last frame the window was down; anything drawn into it (a
+ * box, a menu, a full-screen picture) makes it differ.
+ */
+export function mapOnlyTracker() {
+  let map: Uint8Array | null = null;
+  return (tileMap: Uint8Array, mode: OverworldMode, inWorld: boolean): boolean => {
+    if (!inWorld || mode === "battle") {
+      map = null;
+      return false;
+    }
+    if (mode === "overworld") {
+      if (map?.length !== tileMap.length) map = new Uint8Array(tileMap.length);
+      map.set(tileMap);
+      return false;
+    }
+    return map !== null && map.length === tileMap.length && map.every((b, i) => b === tileMap[i]);
+  };
+}
+
+/**
  * `pip` is the player's choice for the overworld: the small screen in the corner, or none.
  * `hdText` is true while the HD text layer shows the game's text and menus (p2-text), so the
- * screen needn't come up for them. `battle` is what a battle shows, when there's an HD view to
+ * screen needn't come up for them (or while the window shows only the map, see
+ * `mapOnlyTracker`). `battle` is what a battle shows, when there's an HD view to
  * show it in (p2-battles). `onboarding` is true while the page's own start screen or Oak's HD
  * introduction is showing (tap-first UI).
  */
