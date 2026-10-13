@@ -126,7 +126,7 @@ test("friends send each other money, an item and a Pokémon", async ({ browser }
   await panel.getByRole("tab", { name: "Money" }).click();
   await panel.getByLabel("Amount").fill("500");
   await panel.getByRole("button", { name: "Send" }).click();
-  await expect(panel.getByText(/Sent ¥500 to Alex/)).toBeVisible({ timeout: 30_000 });
+  await expect(panel.getByText(/Sent ₽500 to Alex/)).toBeVisible({ timeout: 30_000 });
 
   await panel.getByRole("tab", { name: "Item" }).click();
   await panel.getByRole("listitem").filter({ hasText: "POTION" }).getByRole("button", { name: "Send" }).click();
@@ -140,13 +140,13 @@ test("friends send each other money, an item and a Pokémon", async ({ browser }
   await sender.screenshot({ path: "test-results/gifts-sender.png" });
 
   const notices = receiver.locator(".gift-notices");
-  await expect(notices.getByText(/sent you ¥500/)).toBeVisible({ timeout: 30_000 });
+  await expect(notices.getByText(/sent you ₽500/)).toBeVisible({ timeout: 30_000 });
   await expect(notices.getByText(/sent you POTION ×1/)).toBeVisible({ timeout: 30_000 });
   await expect(notices.getByText(/sent you SPARKY \(PIKACHU, Lv 12\)/)).toBeVisible({ timeout: 30_000 });
   await receiver.screenshot({ path: "test-results/gifts-receiver.png" });
 
   // Not saved yet, so a reload brings them again (the room still holds them).
-  const received = receiver.locator(".gift-notices").getByText(/sent you ¥500/);
+  const received = receiver.locator(".gift-notices").getByText(/sent you ₽500/);
   await receiver.reload();
   await expect(receiver.getByTestId("stats")).toBeVisible({ timeout: 60_000 });
   for (let tick = 0; tick < 600 && !(await received.isVisible()); tick++) await press(receiver, "z");

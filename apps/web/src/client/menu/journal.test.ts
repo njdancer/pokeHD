@@ -157,7 +157,7 @@ describe("PlayJournal", () => {
   it("calls a Pokémon given just after a payment bought", () => {
     const { journal, tick } = clocked();
     journal.money(1000);
-    journal.money(500); // the Magikarp salesman takes ¥500
+    journal.money(500); // the Magikarp salesman takes ₽500
     tick(3000);
     journal.record({ type: "mon-added", species: 0x85, level: 5, into: "party", how: "gift", ...at(68) });
     tick(60_000);

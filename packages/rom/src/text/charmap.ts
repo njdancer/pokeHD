@@ -14,7 +14,9 @@ export const FONT_CHARS: readonly string[] = [
   // $c0–$df: blank in the English font.
   ...Array<string>(32).fill(" "),
   "'", "PK", "MN", "-", "'r", "'m", "?", "!", ".",
-  "ァ", "ゥ", "ェ", "▷", "▶", "▼", "♂", "¥", "×", ".", "/", ",", "♀",
+  // $f0 is "¥" in pret's charmap (from the Japanese game), but the English font draws a P with a
+  // stroke through it, the Pokédollar: "₽", the sign the HD UI uses for money everywhere.
+  "ァ", "ゥ", "ェ", "▷", "▶", "▼", "♂", "₽", "×", ".", "/", ",", "♀",
   ..."0123456789",
 ];
 
