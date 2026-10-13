@@ -52,6 +52,8 @@ export interface GameDriver {
   /** Marks the start of a player turn in the recording. */
   markTurn(turn: number): void;
   tap(x: number, y: number): Promise<Outcome>;
+  /** Drags one finger from (x1, y1) to (x2, y2) over `ms` milliseconds, then lifts it. */
+  swipe(x1: number, y1: number, x2: number, y2: number, ms: number): Promise<Outcome>;
   /**
    * Walks a path with the on-screen joystick, one thumb held down and slid between directions.
    * Stops early when something interrupts (a wall, a warp, a battle, someone talking).
