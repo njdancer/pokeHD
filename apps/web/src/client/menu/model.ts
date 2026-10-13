@@ -174,6 +174,13 @@ export interface MenuModel {
   /** Steps of Repel left. */
   repel: number;
   biking: boolean;
+  /** What the game's own checks allow where the player stands (see items.ts). */
+  field: {
+    /** An Escape Rope works here (ItemUseEscapeRope). */
+    escapeRope: boolean;
+    /** The game lets the player get on the bike here (IsBikeRidingAllowed, and not surfing). */
+    bike: boolean;
+  };
   layers: MapLayers;
   learns(dex: number): Learns | undefined;
   /** Whether this Pokémon can learn the TM or HM (the ROM's flags in the real game). */

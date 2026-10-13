@@ -1,7 +1,7 @@
 // What the Pokédex menu says about items: a shelf for each (for the filters), the price the
 // game's own table gives, and a line about what it does. Shelves and lines are our own labels;
 // names and prices come from the ROM.
-import { isKeyItem, itemName, romOffset, SYMBOLS } from "@pokehd/rom";
+import { isKeyItem, itemName, MAP_NAMES, romOffset, SYMBOLS, type SymbolName } from "@pokehd/rom";
 import { fromBcd } from "@pokehd/emu";
 
 export type Shelf = "Healing" | "Balls" | "Battle" | "Travel" | "Machines" | "Key" | "Other";
@@ -30,6 +30,34 @@ export function itemPrice(rom: Uint8Array, item: number): number {
   if (item >= HM01 || item < 1) return 0;
   const at = romOffset(SYMBOLS.ItemPrices) + (item - 1) * 3;
   return fromBcd(rom.subarray(at, at + 3));
+}
+
+/** A tileset list in the ROM, ended by $ff (EscapeRopeTilesets, BikeRidingTilesets). */
+function tilesets(rom: Uint8Array, table: SymbolName): Set<number> {
+  const out = new Set<number>();
+  for (let i = romOffset(SYMBOLS[table]); i < rom.length && rom[i] !== 0xff; i++) out.add(rom[i]!);
+  return out;
+}
+
+const AGATHAS_ROOM = MAP_NAMES.indexOf("AGATHAS_ROOM");
+const ROUTE_23 = MAP_NAMES.indexOf("ROUTE_23");
+const INDIGO_PLATEAU = MAP_NAMES.indexOf("INDIGO_PLATEAU");
+
+/**
+ * Whether an Escape Rope works here, by the game's own test (ItemUseEscapeRope): outside a battle,
+ * anywhere but Agatha's room whose tileset (wCurMapTileset, the map header's) is in
+ * EscapeRopeTilesets: forest, cemetery, cavern, facility and interior. Elsewhere it's "not the time".
+ */
+export function escapeRopeWorks(rom: Uint8Array, map: number, tileset: number): boolean {
+  return map !== AGATHAS_ROOM && tilesets(rom, "EscapeRopeTilesets").has(tileset);
+}
+
+/**
+ * Whether the game lets the player get on the bike here (IsBikeRidingAllowed): Route 23, the
+ * Indigo Plateau, or a map whose tileset is in BikeRidingTilesets. Getting off works anywhere.
+ */
+export function bikeAllowed(rom: Uint8Array, map: number, tileset: number): boolean {
+  return map === ROUTE_23 || map === INDIGO_PLATEAU || tilesets(rom, "BikeRidingTilesets").has(tileset);
 }
 
 export const niceItem = (rom: Uint8Array, item: number) => itemName(rom, item);

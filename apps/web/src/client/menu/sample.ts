@@ -140,6 +140,7 @@ export function sampleModel(trainers: readonly TrainerClass[]): MenuModel {
     app: { sound: true, readAloud: true, gameBoyScreen: false },
     repel: 0,
     biking: false,
+    field: { escapeRope: false, bike: true },
     layers: SAMPLE_LAYERS,
     learns: (dex) => SAMPLE_LEARNS[dex],
     canLearn: (dex, item) => item === 0xc4 && (dex === 32 || dex === 1 || dex === 69),
