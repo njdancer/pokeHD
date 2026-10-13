@@ -12,7 +12,9 @@ export const LABEL_RAMPS: Record<Label, Ramp> = {
   "tall-grass": [0xb2dc78, 0x6cb04a, 0x387838, 0x15301f],
   flower: [0xfff6ee, 0xf28ba0, 0xbf4a62, 0x3a1e2a],
   tree: [0xc0e494, 0x5fa64c, 0x2d6a3a, 0x0f261c],
-  cliff: [0xece0c4, 0xbba383, 0x7b6552, 0x30271f],
+  // Grey stone, well below the ground's sand: a mountain top is mostly shade 0 and its raised
+  // edge faces away from the camera on its north side, so this colour is what says "solid" (QA #32).
+  cliff: [0xb3a997, 0x857a6a, 0x564c42, 0x221d18],
   ledge: [0xd8e8a8, 0x9cbf6c, 0x5f7f44, 0x2a3424],
   stairs: [0xece0c4, 0xbba383, 0x7b6552, 0x30271f],
   water: [0xc8ecff, 0x6cb6ea, 0x2f74b8, 0x12305a],
