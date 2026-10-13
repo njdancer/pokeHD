@@ -20,6 +20,12 @@ import { acting } from "./game/acting.ts";
 export interface ScriptMessage {
   id: number;
   message: Message;
+  /**
+   * Frames the game would spend printing each letter at the player's text speed (0 when it
+   * prints at once). The game's ▼ only takes a press once its letters are out, so the page
+   * doesn't read on from a box until it has been up that long.
+   */
+  letterFrames: number;
 }
 
 export interface ScriptTextOptions {
@@ -32,10 +38,18 @@ export interface ScriptTextOptions {
 
 /** wStatusFlags5 bit: the game's own switch for printing text without letter delays. */
 const NO_TEXT_DELAY = 1 << 6;
+/** wLetterPrintingDelayFlags bits (PrintLetterDelay): a delay at all, and the options' speed. */
+const TEXT_DELAY = 1 << 1;
+const FAST_TEXT_DELAY = 1 << 0;
 /** wLinkState in a link battle: ManualTextScroll waits on a timer there, not on buttons. */
 const LINK_STATE_BATTLING = 4;
 /** Frames a closing message may take before it's given up on (a wait we didn't expect). */
 const CLOSE_TIMEOUT = 600;
+/**
+ * Frames after the player closes a `done` message within which the game's next wait still counts
+ * as the one that closes its box. One that comes later is for something else.
+ */
+const CLOSING_WAIT_FRAMES = 30;
 const NAME_LENGTH = 11;
 
 type Phase = "held" | "reading" | "closing";
@@ -51,6 +65,8 @@ export class ScriptText {
     phase: Phase;
     /** Waits inside the message (not its last). */
     inner: number;
+    /** The message's own waits (its ▼s and text_waitbuttons). */
+    own: number;
     /** All the waits to let pass once closing (the last one included). */
     total: number;
     passed: number;
@@ -125,15 +141,24 @@ export class ScriptText {
     // A `done` message ends with no ▼ of its own; a message box from a person then waits for a
     // button before it closes. Code taking over decides for itself.
     const total = message.ending === "done" ? waits + 1 : waits;
-    this.#current = { id: ++this.#ids, phase: "held", inner, total, passed: 0, closingFrames: 0 };
+    this.#current = { id: ++this.#ids, phase: "held", inner, own: waits, total, passed: 0, closingFrames: 0 };
+    const letterFrames = letterDelay(g);
     this.#noDelay(true);
-    this.#options.onMessage({ id: this.#ids, message });
+    this.#options.onMessage({ id: this.#ids, message, letterFrames });
   }
 
   /** The game waits for A or B (at `routine`'s start): ours while a message is on the page. */
   #wait(g: GameBoy, routine: number): void {
     const m = this.#current;
     if (!m) return;
+    // A `done` message's closing wait only if it was already waiting, or comes right after: in
+    // battle the next wait is often for what comes next. After "CHARMANDER grew to level 16!" the
+    // game plays its jingle, then waits under the stats box, which a tap during the jingle must
+    // not pass unseen (QA bug 26). The game's own wait then; a tap there reads on as usual.
+    if (m.phase === "closing" && m.passed >= m.own && m.closingFrames > CLOSING_WAIT_FRAMES) {
+      this.#end();
+      return;
+    }
     const pass = m.phase === "closing" ? m.passed < m.total : m.phase === "reading" && m.passed < m.inner;
     if (pass) {
       // Return from the wait, as if the button had been pressed.
@@ -171,6 +196,19 @@ export class ScriptText {
       this.#setNoDelay = false;
     }
   }
+}
+
+/**
+ * Frames PrintLetterDelay would wait after each letter of the message about to print (read
+ * before we turn the delay off). TextCommandProcessor turns the delay on for the message, less
+ * any bits in hClearLetterPrintingDelayFlags; battles start with it off, so it's read as it will
+ * be, not as it is.
+ */
+export function letterDelay(g: GameBoy): number {
+  if (g.read(SYMBOLS.wStatusFlags5.address) & NO_TEXT_DELAY) return 0;
+  const flags = (g.read(SYMBOLS.wLetterPrintingDelayFlags.address) | TEXT_DELAY) ^ g.read(SYMBOLS.hClearLetterPrintingDelayFlags.address);
+  if (!(flags & TEXT_DELAY)) return 0;
+  return flags & FAST_TEXT_DELAY ? g.read(SYMBOLS.wOptions.address) & 0xf : 1;
 }
 
 /** "Enemy " as the game prefixes a foe's Pokémon's name. */
