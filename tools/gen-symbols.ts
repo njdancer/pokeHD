@@ -163,6 +163,9 @@ export const ALLOWLIST: readonly string[] = [
   "wStatusFlags3",
   "wStatusFlags4",
   "wStatusFlags5",
+  // How fast the game prints letters (PrintLetterDelay): whole messages wait as long (QA bug 26)
+  "wLetterPrintingDelayFlags",
+  "hClearLetterPrintingDelayFlags",
   "wStatusFlags6",
   "wStatusFlags7",
   "wWhichPokemon",

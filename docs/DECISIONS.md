@@ -587,6 +587,16 @@ press and no click. A first try that replaced the whole printing routine for pla
 worked, but it left out 46 messages (sounds inside the text) and duplicated the printer's job, so
 we didn't keep it.
 
+**A box takes a tap only after the game would have printed it (2026-10-14, QA bug 26):** shown
+whole and at once, a box could be closed by a tap the player made before they saw it. Battle
+messages follow each other with no tap in between ("CHARMANDER used SCRATCH!", then "Enemy PIDGEY
+fainted!"), so a tap meant for the first closed the second unseen. On the Game Boy the ▼ takes a
+fresh press only once the last letter is out. So each box ignores taps until it has been up as long
+as the game would take to print it at the player's text speed (`PrintLetterDelay`: 3 frames a
+letter at MEDIUM, at least 6 frames). The cost: fast readers wait as long as on the Game Boy, not
+less. Also, a `done` message's extra closing wait passes only if it comes within half a second of
+the tap: after "grew to level 16!" the next wait is the stats box's, which needs a tap of its own.
+
 ## D37. Colour and relief come from a process run on the player's ROM; nothing baked ships
 
 **Status:** decided by Nick on 2026-10-08. Supersedes D11's "reviewed palette file".

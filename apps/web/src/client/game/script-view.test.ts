@@ -1,7 +1,7 @@
 import type { ScreenText } from "@pokehd/emu";
 import type { Message } from "@pokehd/rom";
 import { describe, expect, it } from "vitest";
-import { newScriptView, SCRIPT_UNFIT_FRAMES, scriptView, type ScriptView } from "./script-view.ts";
+import { newScriptView, SCRIPT_MIN_SHOWN_FRAMES, SCRIPT_UNFIT_FRAMES, scriptTap, scriptView, type ScriptView } from "./script-view.ts";
 
 const box = { x: 0, y: 12, width: 20, height: 6, lines: [] };
 const screen = (lines: [string, string]) => ({ dialog: { box, lines, state: "waiting" }, menus: [], boxes: [box] }) as unknown as ScreenText;
@@ -63,5 +63,59 @@ describe("scriptView", () => {
     // The next message clears the box: the read one goes.
     expect(scriptView(ref, screen(["Thank you!", ""]), true, () => {})).toBeNull();
     expect(ref.current).toBeNull();
+  });
+});
+
+describe("scriptTap", () => {
+  const fainted: Message = { pages: [{ lines: ["Enemy PIDGEY", "fainted!"], wait: "arrow", next: "end" }], ending: "prompt" };
+  const show = (ref: { current: ScriptView | null }, lines: [string, string], frames: number) => {
+    for (let f = 0; f < frames; f++) scriptView(ref, screen(lines), true, () => {});
+  };
+
+  // QA bug 26: "Enemy PIDGEY fainted!" follows "CHARMANDER used SCRATCH!" with no tap between.
+  it("reads on only once the game would have printed the box at the player's text speed", () => {
+    const ref: { current: ScriptView | null } = { current: newScriptView(3, fainted, 3) };
+    // 20 letters at medium speed (3 frames each).
+    expect(ref.current!.readyAt).toBe(60);
+    show(ref, ["Enemy PIDGEY", "fainted!"], 2);
+    expect(scriptTap(ref.current)).toBe("wait"); // meant for the message before
+    show(ref, ["Enemy PIDGEY", "fainted!"], 32);
+    expect(scriptTap(ref.current)).toBe("wait"); // mid-print: the Game Boy would ignore it too
+    expect(ref.current!.closed).toBe(false);
+    show(ref, ["Enemy PIDGEY", "fainted!"], 26);
+    expect(scriptTap(ref.current)).toBe("close");
+    expect(ref.current!.closed).toBe(true);
+    // Read: further taps go nowhere while the game finishes it.
+    expect(scriptTap(ref.current)).toBe("wait");
+    ref.current!.ended = true;
+    expect(scriptTap(ref.current)).toBe("none");
+    expect(scriptTap(null)).toBe("none");
+  });
+
+  it("counts only frames the page showed the box", () => {
+    const ref: { current: ScriptView | null } = { current: newScriptView(3, fainted, 3) };
+    // The HD text can't show it (another screen's up): those frames don't count.
+    for (let f = 0; f < 5; f++) scriptView(ref, screen(["Enemy PIDGEY", "fainted!"]), false, () => {});
+    expect(ref.current!.shown).toBe(0);
+  });
+
+  it("still waits a few frames when the game prints at once", () => {
+    const ref: { current: ScriptView | null } = { current: newScriptView(3, fainted, 0) };
+    expect(ref.current!.readyAt).toBe(SCRIPT_MIN_SHOWN_FRAMES);
+    expect(scriptTap(ref.current)).toBe("wait");
+    show(ref, ["Enemy PIDGEY", "fainted!"], SCRIPT_MIN_SHOWN_FRAMES);
+    expect(scriptTap(ref.current)).toBe("close");
+  });
+
+  it("gives each box of a long message its own time, so mashing can't skip one unseen", () => {
+    const ref: { current: ScriptView | null } = { current: newScriptView(25, dream, 1) };
+    const [first, second] = ref.current!.boxes;
+    expect(ref.current!.readyAt).toBe(first!.join("").length);
+    show(ref, ["To make a complete", "guide on all the"], ref.current!.readyAt);
+    expect(scriptTap(ref.current)).toBe("next");
+    expect(ref.current!.index).toBe(1);
+    expect(ref.current!.readyAt).toBe(second!.join("").length);
+    expect(scriptTap(ref.current)).toBe("wait");
+    expect(ref.current!.index).toBe(1);
   });
 });

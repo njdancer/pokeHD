@@ -16,11 +16,59 @@ export interface ScriptView {
   unfit: number;
   /** Every line of the message, to tell its pages on screen from anything else. */
   lines: Set<string>;
+  /** Frames the game would take to print each letter (ScriptMessage.letterFrames). */
+  letterFrames: number;
+  /** Frames the box the player is on has been on the page. */
+  shown: number;
+  /** Frames the box must be on the page before a tap reads on from it (see `scriptTap`). */
+  readyAt: number;
 }
 
-export function newScriptView(id: number, message: Message): ScriptView {
+export function newScriptView(id: number, message: Message, letterFrames = 0): ScriptView {
   const lines = new Set(message.pages.flatMap((p) => p.lines.map((l) => l.trim())).filter(Boolean));
-  return { id, boxes: messageBoxes(message), index: 0, closed: false, ended: false, unfit: 0, lines };
+  const script = { id, boxes: messageBoxes(message), index: 0, closed: false, ended: false, unfit: 0, lines, letterFrames, shown: 0, readyAt: 0 };
+  script.readyAt = printFrames(script);
+  return script;
+}
+
+/**
+ * Frames a box must have been on the page before a tap reads on from it, however fast the game
+ * prints: a tap landing sooner was meant for what was there before.
+ */
+export const SCRIPT_MIN_SHOWN_FRAMES = 6;
+
+/** Letters in the box the player is on. */
+const letters = (script: ScriptView) => (script.boxes[script.index] ?? []).reduce((n, line) => n + line.length, 0);
+
+/** Frames the game would take to print the box the player is on, at the player's text speed. */
+function printFrames(script: ScriptView): number {
+  return Math.max(SCRIPT_MIN_SHOWN_FRAMES, letters(script) * script.letterFrames);
+}
+
+/**
+ * A tap (A or B) on a whole message: `next`, on to its next box; `close`, the player has read
+ * it; `wait`, the tap goes nowhere (the box is too new to have been read, or the message was
+ * read already and the game is finishing it); `none`, no message takes the tap.
+ *
+ * A box takes a tap once the game would have printed it at the player's text speed. On the Game
+ * Boy the ▼ only takes a fresh press once the last letter is out; a tap while the letters print
+ * does nothing (holding A hurries them, a letter a frame, but a tap holds it for only a few).
+ * Battle messages follow one another with no tap between them ("CHARMANDER used SCRATCH!", then
+ * "Enemy PIDGEY fainted!" a few seconds later), and shown whole and at once, a tap meant for the
+ * first, or made before the player could have read the second, closed the second unseen (QA bug
+ * 26). Mashing through a long message skipped its middle boxes the same way.
+ */
+export function scriptTap(script: ScriptView | null): "next" | "close" | "wait" | "none" {
+  if (!script || script.ended) return "none";
+  if (script.closed || script.shown < script.readyAt) return "wait";
+  if (script.index < script.boxes.length - 1) {
+    script.index++;
+    script.shown = 0;
+    script.readyAt = printFrames(script);
+    return "next";
+  }
+  script.closed = true;
+  return "close";
 }
 
 /** Frames the HD text may not show a message before it goes back to the game's own text. */
@@ -75,5 +123,6 @@ export function scriptView(
     return null;
   }
   script.unfit = 0;
+  script.shown++;
   return { lines: script.boxes[script.index] ?? null };
 }
