@@ -48,7 +48,7 @@ export function introTextFits(text: ScreenText | null): boolean {
 /** A cheap fingerprint, so React only re-renders when the text on screen changes. */
 export function textKey(text: ScreenText): string {
   if (!text.shown) return "";
-  const boxes = text.boxes.map((b) => `${b.x},${b.y},${b.width},${b.height}:${b.lines.map((l) => `${l.row},${l.col},${l.text}`).join("|")}`);
+  const boxes = text.boxes.map((b) => `${b.x},${b.y},${b.width},${b.height}:${b.title?.text ?? ""}:${b.lines.map((l) => `${l.row},${l.col},${l.text}`).join("|")}`);
   const menus = text.menus.map((m) => `${m.box.x},${m.box.y},${m.cursor},${m.active}`);
   return `${boxes.join(";")}#${menus.join(";")}#${text.dialog?.state ?? ""}#${text.loose.length}#${text.pictures}`;
 }
