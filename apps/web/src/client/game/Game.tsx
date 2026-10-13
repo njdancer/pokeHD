@@ -35,7 +35,7 @@ import {
 } from "@pokehd/emu";
 import { createEngine, type Engine } from "@pokehd/engine";
 import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
-import { decodeText, encodeName, messageBoxes, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
+import { decodeText, encodeName, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
 import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../input/index.ts";
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { cloudBackup } from "../saves/cloud-save.ts";
@@ -78,6 +78,7 @@ import { IntroStage } from "./IntroStage.tsx";
 import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
 import { LockScreen } from "./LockScreen.tsx";
 import { Starter, type StartChoice } from "./onboarding.ts";
+import { newScriptView, scriptView, type ScriptView } from "./script-view.ts";
 import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
@@ -563,10 +564,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         onEraseAnswered: () => setErasing(null),
         ...(custom ? { onNameAsk: (ask: NameAsk) => setNameAsk(ask) } : {}),
         onScriptMessage: ({ id, message }) => {
-          const boxes = messageBoxes(message);
-          scriptRef.current = { id, boxes, index: 0, closed: false, ended: false, unfit: 0, lines: new Set(message.pages.flatMap((p) => p.lines.map((l) => l.trim())).filter(Boolean)) };
+          scriptRef.current = newScriptView(id, message);
           // All of it fits in one box: the game can print the rest while the player reads.
-          if (boxes.length <= 1) host?.readOnMessage(id);
+          if (scriptRef.current.boxes.length <= 1) host?.readOnMessage(id);
         },
         onScriptEnd: (id) => {
           if (scriptRef.current?.id === id) scriptRef.current.ended = true;
@@ -1428,55 +1428,3 @@ function RoomBadge({ status, friends }: { status: RoomStatus; friends: number })
   return <span className="room-badge" data-status={status}>{text[status]}</span>;
 }
 
-/** A whole message from the script, as the page shows it (ScriptText in @pokehd/emu). */
-interface ScriptView {
-  id: number;
-  boxes: string[][];
-  /** The box showing. */
-  index: number;
-  /** The player has read it: the game is finishing it. */
-  closed: boolean;
-  /** The game is done with it (a menu took over, the box closed, or another message began). */
-  ended: boolean;
-  /** Frames the HD text couldn't show it. */
-  unfit: number;
-  /** Every line of the message, to tell its pages on screen from anything else. */
-  lines: Set<string>;
-}
-
-/** Frames the HD text may not fit before a message goes back to the game's own text. */
-const SCRIPT_UNFIT_FRAMES = 10;
-
-/**
- * This frame's message box from a whole message: the box the player is on (`lines`), or hidden
- * while the game finishes a message already read. Null when no message applies, so the game's
- * own pages show (read through by the DialogJoiner).
- */
-function scriptView(
-  ref: { current: ScriptView | null },
-  text: ScreenText,
-  fits: boolean,
-  release: (id: number) => void,
-): { lines: string[] | null; hidden: boolean } | null {
-  const script = ref.current;
-  if (!script) return null;
-  const dialog = text.dialog;
-  // The message box shows this message's pages (or nothing yet).
-  const ours = !dialog || dialog.lines.every((l) => !l.trim() || script.lines.has(l.trim()));
-  if (script.ended && (!dialog || !ours)) {
-    ref.current = null;
-    return null;
-  }
-  if (!fits) {
-    // The HD text can't show it here (a screen it doesn't draw): the game's own text takes over.
-    if (!script.closed && !script.ended && ++script.unfit > SCRIPT_UNFIT_FRAMES) {
-      release(script.id);
-      ref.current = null;
-    }
-    return null;
-  }
-  script.unfit = 0;
-  if (!ours) return null;
-  if (script.closed) return { lines: null, hidden: true };
-  return { lines: script.boxes[script.index] ?? null, hidden: false };
-}

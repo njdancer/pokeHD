@@ -121,6 +121,23 @@ describe("ScreenTextDecoder", () => {
     expect(decoder.decode(box("THERE", "A")).dialog?.state).toBe("idle");
   });
 
+  it("reads lines that fill the box to its border, leaving out only the ▼", () => {
+    const decoder = new ScreenTextDecoder(glyphs);
+    const box = (first: string, second: string, arrow = false) =>
+      screen([
+        ...Array<string>(12).fill(""),
+        "┌──────────────────┐",
+        "│                  │",
+        `│${first.padEnd(18)}│`,
+        "│                  │",
+        arrow ? `│${second.slice(0, 17).padEnd(17)}▼│` : `│${second.padEnd(18)}│`,
+        "└──────────────────┘",
+      ]);
+    expect(decoder.decode(box("TOMAKEACOMPLETEXYZ", "GUIDEONALLTHE", true)).dialog?.lines).toEqual(["TOMAKEACOMPLETEXYZ", "GUIDEONALLTHE"]);
+    expect(decoder.decode(box("A", "THATWASMYDREAMXYZW")).dialog?.lines).toEqual(["A", "THATWASMYDREAMXYZW"]);
+    expect(decoder.decode(box("A", "THATWASMYDREAMXYZW", true)).dialog?.lines).toEqual(["A", "THATWASMYDREAMXYZ"]);
+  });
+
   it("takes a ▼ under a menu still showing its ▶ as the game waiting at the text, not the menu", () => {
     const decoder = new ScreenTextDecoder(glyphs);
     // The PC's menu just chosen, and "Accessed my PC." waiting below it; the arrow blinks.
