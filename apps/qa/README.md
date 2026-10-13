@@ -40,6 +40,9 @@ The developer is a Claude Code session on the same machine. Its loop:
 - Fix it on a branch, merge, and `pnpm qa say "Fixed: … restart_game to pick it up" --tag fixed --bug 7`.
   If the player is waiting for a reply, this unpauses it.
 - `pnpm qa bugs`, `pnpm qa status` for the overview.
+- Never help the player play. If it asks where to go or how to get past something, don't give
+  directions or hints: check whether what it describes is a bug, say whether it is, and if it
+  isn't, tell it to try something different.
 
 The player can `restart_game` to pick up fixes (the page reloads from the dev server and resumes
 exactly where it was; `from: "save"` rolls back to the last in-game save).

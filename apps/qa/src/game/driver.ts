@@ -35,9 +35,13 @@ export interface DriverOptions {
 const DIRS: Record<Direction, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const GAME_SIZE = { width: 528, height: 1000 } as const;
 /**
- * The stream page's window: 1280×720 so it fits a laptop's screen, at 1.5× so the page (which
- * scales its 1920×1080 stage to fit) still renders, records and broadcasts at 1920×1080.
+ * The stream page's window: 1280 wide, and tall enough that the page under Chromium's bars is
+ * about 720. Headed, the page takes whatever the window really shows: Chromium's bars (automation, "sharing this tab") take height from it, and a
+ * fixed viewport would then run off the bottom of the window and of the tab capture. The page
+ * scales its 1920×1080 stage to fit. Headless there are no bars, so the viewport is fixed, at
+ * 1.5× so it still records at 1920×1080.
  */
+const STREAM_WINDOW = { width: 1280, height: 912 } as const;
 const STREAM_VIEWPORT = { width: 1280, height: 720 } as const;
 const STREAM_SCALE = 1.5;
 const READY_TIMEOUT_MS = 120_000;
@@ -432,12 +436,16 @@ export function createDriver(opts: DriverOptions): GameDriver {
         // Playwright's own Chromium when it's installed, else the machine's Google Chrome.
         ...(!existsSync(chromium.executablePath()) && { channel: "chrome" }),
         headless: opts.headless ?? true,
-        viewport: direct ? GAME_SIZE : STREAM_VIEWPORT,
-        ...(!direct && { deviceScaleFactor: STREAM_SCALE }),
+        ...(direct
+          ? { viewport: GAME_SIZE }
+          : (opts.headless ?? true)
+            ? { viewport: STREAM_VIEWPORT, deviceScaleFactor: STREAM_SCALE }
+            : { viewport: null }),
         hasTouch: true,
         isMobile: false,
         // The stream must keep playing whatever else the browser shows.
         args: [
+          ...(!direct && !(opts.headless ?? true) ? [`--window-size=${STREAM_WINDOW.width},${STREAM_WINDOW.height}`] : []),
           "--disable-background-timer-throttling",
           "--disable-renderer-backgrounding",
           "--disable-backgrounding-occluded-windows",

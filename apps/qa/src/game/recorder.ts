@@ -51,7 +51,8 @@ export class Recorder {
   async start(page: Page, maxWidth = 960): Promise<void> {
     const session = await page.context().newCDPSession(page);
     this.#session = session;
-    const viewport = page.viewportSize() ?? { width: 1920, height: 1080 };
+    // With no fixed viewport (a headed stream window), the window's own size.
+    const viewport = page.viewportSize() ?? (await page.evaluate(() => ({ width: innerWidth, height: innerHeight })));
     // Stamped on arrival, in the same clock as `markTurn`.
     session.on("Page.screencastFrame", (e: { data: string; sessionId: number }) => {
       const t = Date.now();
