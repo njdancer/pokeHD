@@ -62,8 +62,7 @@ export class ScriptText {
   constructor(gb: GameBoy, options: ScriptTextOptions) {
     this.#gb = gb;
     this.#options = options;
-    const at = romOffset(SYMBOLS.EnemyText);
-    this.#enemy = decodeText(options.rom.subarray(at, at + 16));
+    this.#enemy = enemyPrefix(options.rom);
     this.#removeHooks = [
       gb.addHook("PrintText_NoCreatingTextBox", (g) => this.#start(g)),
       gb.addHook("ManualTextScroll", (g) => {
@@ -118,9 +117,7 @@ export class ScriptText {
   #start(g: GameBoy): void {
     // Printed by one of our own calls (the Pokédex menu's actions): those answer their own waits.
     if (acting.has(g)) return;
-    const { hl } = g.registers;
-    const bank = hl < 0x4000 ? 0 : g.read(SYMBOLS.hLoadedROMBank.address);
-    const message = readMessage(this.#options.rom, bank, hl, this.#fill(g));
+    const message = printingMessage(g, this.#options.rom, this.#enemy);
     if (!hasText(message)) return;
     this.#end();
     const waits = waitsOf(message);
@@ -174,31 +171,47 @@ export class ScriptText {
       this.#setNoDelay = false;
     }
   }
+}
 
-  /** Names and numbers as the game is about to print them. */
-  #fill(g: GameBoy): MessageFill {
-    const name = (address: number) => decodeText(g.readBytes(address, NAME_LENGTH));
-    const mon = (side: number) => (side === 0 ? name(SYMBOLS.wBattleMonNick.address) : this.#enemy + name(SYMBOLS.wEnemyMonNick.address));
-    return {
-      name: (code) => {
-        if (code === 0x52) return name(SYMBOLS.wPlayerName.address);
-        if (code === 0x53) return name(SYMBOLS.wRivalName.address);
-        const turn = g.read(SYMBOLS.hWhoseTurn.address);
-        return mon(code === 0x5a ? turn : turn ^ 1);
-      },
-      ram: (address) => decodeText(g.readBytes(address, 20)),
-      number: (command, address, format) => {
-        if (command === "bcd") {
-          const length = format & 0x1f;
-          let digits = [...g.readBytes(address, length)].map((b) => `${b >> 4}${b & 0xf}`).join("");
-          if (format & 0x80) digits = digits.replace(/^0+(?=\d)/, "");
-          return (format & 0x20 ? "¥" : "") + digits;
-        }
-        const bytes = format >> 4;
-        let value = 0;
-        for (const b of g.readBytes(address, bytes)) value = value * 256 + b;
-        return String(value);
-      },
-    };
-  }
+/** "Enemy " as the game prefixes a foe's Pokémon's name. */
+export function enemyPrefix(rom: Uint8Array): string {
+  const at = romOffset(SYMBOLS.EnemyText);
+  return decodeText(rom.subarray(at, at + 16));
+}
+
+/**
+ * The message the game is about to print, at `PrintText_NoCreatingTextBox` (hl points at its
+ * text script, in the bank switched in), with the names and numbers it will fill in.
+ */
+export function printingMessage(g: GameBoy, rom: Uint8Array, enemy: string): Message {
+  const { hl } = g.registers;
+  const bank = hl < 0x4000 ? 0 : g.read(SYMBOLS.hLoadedROMBank.address);
+  return readMessage(rom, bank, hl, messageFill(g, enemy));
+}
+
+/** Names and numbers as the game is about to print them. */
+function messageFill(g: GameBoy, enemy: string): MessageFill {
+  const name = (address: number) => decodeText(g.readBytes(address, NAME_LENGTH));
+  const mon = (side: number) => (side === 0 ? name(SYMBOLS.wBattleMonNick.address) : enemy + name(SYMBOLS.wEnemyMonNick.address));
+  return {
+    name: (code) => {
+      if (code === 0x52) return name(SYMBOLS.wPlayerName.address);
+      if (code === 0x53) return name(SYMBOLS.wRivalName.address);
+      const turn = g.read(SYMBOLS.hWhoseTurn.address);
+      return mon(code === 0x5a ? turn : turn ^ 1);
+    },
+    ram: (address) => decodeText(g.readBytes(address, 20)),
+    number: (command, address, format) => {
+      if (command === "bcd") {
+        const length = format & 0x1f;
+        let digits = [...g.readBytes(address, length)].map((b) => `${b >> 4}${b & 0xf}`).join("");
+        if (format & 0x80) digits = digits.replace(/^0+(?=\d)/, "");
+        return (format & 0x20 ? "¥" : "") + digits;
+      }
+      const bytes = format >> 4;
+      let value = 0;
+      for (const b of g.readBytes(address, bytes)) value = value * 256 + b;
+      return String(value);
+    },
+  };
 }
