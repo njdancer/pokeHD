@@ -12,6 +12,7 @@ import { ScreenTextDecoder, TEXT_WATCHES, type TextWatched } from "@pokehd/emu";
 import { parseWorld, readGlyphs, stitchOverworld, SYMBOLS, type StitchedWorld, type WorldData } from "@pokehd/rom";
 import { GlitchWatcher } from "./glitches.ts";
 import { describeButtons, describeGameBoyText, describePanels, mapName } from "./outcome.ts";
+import { describeLayouts, installLayoutLog, type LayoutEntry } from "./layout-log.ts";
 import { composeSheet, MAX_SHEET_FRAMES, pickFrames, Recorder } from "./recorder.ts";
 import { readScreen, type ScreenRead } from "./screen-read.ts";
 import { buildTextMap } from "./textmap.ts";
@@ -252,9 +253,13 @@ export function createDriver(opts: DriverOptions): GameDriver {
 
   async function act(fn: () => Promise<void>, minMs = 250): Promise<Outcome> {
     const before = last ?? (await read());
+    const from = Date.now();
     await fn();
     const after = await settle(minMs);
-    return outcome(before, after);
+    const result = await outcome(before, after);
+    const log = await (await gameFrame()).evaluate(() => (window as unknown as { __qaLayouts?: LayoutEntry[] }).__qaLayouts ?? []).catch(() => []);
+    const screen = describeLayouts(log, from, Date.now());
+    return screen ? { text: `${result.text}\n${screen}` } : result;
   }
 
   // ---- start and reload ----
@@ -432,6 +437,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
         r.fulfill({ json: { player: { id: "qa", name: "Claude" }, email: "qa@example.com", admin: false, romAccess: true } }),
       );
       await context.route("**/api/room", (r) => r.abort());
+      // Times every switch to and from the Game Boy screen, in the page (see layout-log.ts).
+      await context.addInitScript(installLayoutLog);
       await context.route("**/__qa/blank", (r) => r.fulfill({ contentType: "text/html", body: "<!doctype html><title>reloading</title>" }));
       page = context.pages()[0] ?? (await context.newPage());
       page.on("pageerror", (e) => {

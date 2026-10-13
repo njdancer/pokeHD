@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SPRITE_NAMES, type MapData, type Tileset, type WorldData } from "@pokehd/rom";
 import { GlitchWatcher, type GlitchSample } from "./glitches.ts";
+import { describeLayouts } from "./layout-log.ts";
 import { describeButtons, describeGameBoyText, mapName } from "./outcome.ts";
 import { pickFrames } from "./recorder.ts";
 import type { StateLite } from "./screen-read.ts";
@@ -197,5 +198,24 @@ describe("outcome text", () => {
     expect(describeGameBoyText([{ lines: [{ text: "Right! So your" }, { text: "name is RED! ▼" }] }, { lines: [] }])).toBe(
       'Game Boy screen text:\n"Right! So your / name is RED!"',
     );
+  });
+});
+
+describe("describeLayouts", () => {
+  const log = [
+    { t: 0, layout: "hidden" },
+    { t: 1000, layout: "full" },
+    { t: 1040, layout: "hidden" },
+    { t: 2000, layout: "dialog" },
+  ];
+  it("times each flash of the Game Boy screen and says what's in front now", () => {
+    expect(describeLayouts(log, 500, 2500)).toBe("Screen: the original Game Boy screen showed once (0.04 s full screen) and is in front now (along the bottom).");
+  });
+  it("says nothing when the screen didn't change", () => {
+    expect(describeLayouts(log, 1100, 1900)).toBeNull();
+    expect(describeLayouts([{ t: 0, layout: "full" }], 10, 20)).toBeNull();
+  });
+  it("says nothing when the Game Boy screen only went away", () => {
+    expect(describeLayouts([{ t: 0, layout: "full" }, { t: 50, layout: "hidden" }], 10, 100)).toBeNull();
   });
 });
