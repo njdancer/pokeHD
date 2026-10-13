@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { battleMenuLayout } from "./battle-menu-flag.ts";
+import { battleMenusOn } from "./battle-menu-flag.ts";
 
-describe("battleMenuLayout", () => {
+describe("battleMenusOn", () => {
   beforeEach(() => {
     const store = new Map<string, string>();
     globalThis.localStorage = {
@@ -10,12 +10,16 @@ describe("battleMenuLayout", () => {
     } as Storage;
   });
 
-  it("is off until asked, then remembers the layout", () => {
-    expect(battleMenuLayout("")).toBe(null);
-    expect(battleMenuLayout("?battlemenus")).toBe("moves");
-    expect(battleMenuLayout("")).toBe("moves");
-    expect(battleMenuLayout("?battlemenus=classic")).toBe("classic");
-    expect(battleMenuLayout("?battlemenus=0")).toBe(null);
-    expect(battleMenuLayout("")).toBe(null);
+  it("is on by default; ?battlemenus=0 turns it off on the device until ?battlemenus", () => {
+    expect(battleMenusOn("")).toBe(true);
+    expect(battleMenusOn("?battlemenus=0")).toBe(false);
+    expect(battleMenusOn("")).toBe(false);
+    expect(battleMenusOn("?battlemenus")).toBe(true);
+    expect(battleMenusOn("")).toBe(true);
+  });
+
+  it("keeps the old trial's remembered choice: on", () => {
+    localStorage.setItem("pokehd.battleMenus", "moves");
+    expect(battleMenusOn("")).toBe(true);
   });
 });

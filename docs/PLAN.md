@@ -202,7 +202,7 @@ The page's own start screen, Oak's introduction in HD, names typed on the device
 (Oak checks the invited name and a change renames the player) and real buttons on every HD
 menu, all pressing the game's own buttons (`Controls`). Battle messages are HD boxes (tap to
 read on). Battle menus (FIGHT, moves, PKMN, ITEM, RUN) are HD buttons answering the game's own
-menu routines (D44), a trial behind `?battlemenus` until Nick picks a layout.
+menu routines (D44), with the moves up front.
 ### p2-slots: save slots and the intro (D39)
 Any number of saves per ROM, each with its own battery save, resume point and earlier saves;
 duplicate, delete (to a bin), rename and start new at any time. First load opens an intro with
