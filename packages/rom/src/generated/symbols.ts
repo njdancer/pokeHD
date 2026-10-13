@@ -107,6 +107,7 @@ export const SYMBOLS = {
   ShowPokedexMenu: { bank: 0x10, address: 0x4000 },
   "ShowPokedexMenu.exitPokedex": { bank: 0x10, address: 0x4042 },
   SpriteSheetPointerTable: { bank: 0x05, address: 0x7b27 },
+  StarterDex: { bank: 0x17, address: 0x40dc },
   SubBCDPredefPredef: { bank: 0x13, address: 0x7e9d },
   SuperPalettes: { bank: 0x1c, address: 0x6660 },
   SwitchPartyMon_InitVarOrSwapData: { bank: 0x04, address: 0x7653 },

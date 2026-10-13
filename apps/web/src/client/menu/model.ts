@@ -155,6 +155,8 @@ export interface MenuModel {
   past: Item[];
   seen: ReadonlySet<number>;
   owned: ReadonlySet<number>;
+  /** Not caught, but the game is showing their full page (Oak's starters): shown in full too. */
+  onShow?: ReadonlySet<number>;
   people: Person[];
   friends: Friend[];
   /** Places visited (town map names), for the map's fog and the Index. */

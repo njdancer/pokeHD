@@ -26,6 +26,7 @@ import {
   type ScreenText,
   type TextWatched,
   decodeSnapshot,
+  dexProgress,
   fromBcd,
   SNAPSHOT_RANGES,
   type AskAnswer,
@@ -63,7 +64,7 @@ import { GiftCourier } from "../room/gifts.ts";
 import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
 import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
-import { inWorldTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
+import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
 import { BattleTracker, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { EraseConfirm, GrownUps, SavedToast } from "./KidProof.tsx";
@@ -79,7 +80,7 @@ import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
 import { LoadingScreen, LOADING_FADE_MS } from "../LoadingScreen.tsx";
-import { buildCatalogue, dexFlags, type DexProgress } from "../dex/catalogue.ts";
+import { buildCatalogue, type DexProgress } from "../dex/catalogue.ts";
 import { DexJournal } from "../dex/journal.ts";
 import type { DexMenuProps } from "../menu/DexMenu.tsx";
 import type { LiveActions } from "../menu/live.ts";
@@ -520,6 +521,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       let battles: BattleTracker | null = null;
       let shownHud = "";
       let trackInWorld = inWorldTracker();
+      /** The window up over just the map, before the game draws its box (see mapOnlyTracker). */
+      const trackMapOnly = mapOnlyTracker();
       let latest: OverworldState | null = null;
       let emuFrames = 0;
       // The Pokédex's journal: places visited, people met and what they first said (p2-dex).
@@ -623,6 +626,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
             introCanvas.current.getContext("2d")!.putImageData(introImage, 0, 0);
           }
           const fits = intro ? introTextFits(text) : hdTextFits(text, state.mode, inWorld);
+          // Nothing on the Game Boy screen the HD view doesn't show: keep it down.
+          const mapOnly = trackMapOnly((bytes as unknown as TextWatched).tileMap, state.mode, inWorld);
+          const quiet = fits || mapOnly;
           // Whole messages from the script: the page shows the message the game is printing.
           const script = scriptView(scriptRef, text, fits, (id) => host?.releaseMessage(id));
           // Otherwise whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
@@ -639,9 +645,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           }
           const scene = sceneRef.current;
           const onboard = start !== null;
-          if (scene.mode !== state.mode || scene.inWorld !== inWorld || scene.hdText !== fits || scene.battle !== battle || scene.onboarding !== onboard) {
-            sceneRef.current = { mode: state.mode, inWorld, hdText: fits, battle, onboarding: onboard };
-            setLayout(screenLayout(state.mode, inWorld, pipRef.current, fits, battle, onboard));
+          if (scene.mode !== state.mode || scene.inWorld !== inWorld || scene.hdText !== quiet || scene.battle !== battle || scene.onboarding !== onboard) {
+            sceneRef.current = { mode: state.mode, inWorld, hdText: quiet, battle, onboarding: onboard };
+            setLayout(screenLayout(state.mode, inWorld, pipRef.current, quiet, battle, onboard));
           }
         },
         onError: (text, stack) => {
@@ -674,7 +680,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
               }
               if (disposed) return;
               const dexNo = opened.kind === "data" ? pokedexNumber(rom, opened.species) : 0;
-              setDex({ progress: journal.progress(dexFlags(seen!), dexFlags(owned!), decodeText(rival!)), openOn: dexNo || undefined });
+              const flags = dexProgress(owned!, seen!);
+              setDex({ progress: { ...journal.progress(flags.seen, flags.owned, decodeText(rival!)), onShow: flags.onShow }, openOn: dexNo || undefined });
             });
         },
         onTalk: (map, npc) => {

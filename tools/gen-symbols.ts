@@ -224,6 +224,7 @@ export const ALLOWLIST: readonly string[] = [
   "ShowPokedexDataInternal.waitForButtonPress",
   "ShowPokedexMenu",
   "ShowPokedexMenu.exitPokedex",
+  "StarterDex",
   "wSpriteIndex",
   "TrainerNames",
   "TrainerPicAndMoneyPointers",

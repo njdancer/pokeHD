@@ -62,6 +62,18 @@ export function createPost(renderer: THREE.WebGPURenderer, scene: THREE.Scene, c
   lut.minFilter = lut.magFilter = THREE.LinearFilter;
   lut.wrapS = lut.wrapT = lut.wrapR = THREE.ClampToEdgeWrapping;
   lut.unpackAlignment = 1;
+  // Upload an identity grade now, before anything can bind the LUT. Three gives a texture still
+  // at version 0 a shared 1x1 *2D* placeholder, and on WebGPU a 3D view of that is invalid: the
+  // post quad's bind group fails, and since three pops pipeline error scopes only after an
+  // await, the error lands on (and marks as failed) whichever pipeline happens to be compiling,
+  // such as a scene mesh precompiled by `compile` before the first `update` bakes the grade.
+  for (let i = 0, max = LUT_SIZE - 1; i < LUT_SIZE ** 3; i++) {
+    lutData[i * 4] = Math.round(((i % LUT_SIZE) / max) * 255);
+    lutData[i * 4 + 1] = Math.round(((Math.floor(i / LUT_SIZE) % LUT_SIZE) / max) * 255);
+    lutData[i * 4 + 2] = Math.round((Math.floor(i / LUT_SIZE ** 2) / max) * 255);
+    lutData[i * 4 + 3] = 255;
+  }
+  lut.needsUpdate = true;
   let lutKey = "";
   let sinceBake = 0;
 
