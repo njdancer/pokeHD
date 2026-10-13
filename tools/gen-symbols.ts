@@ -255,6 +255,9 @@ export const ALLOWLIST: readonly string[] = [
   // where an Escape Rope (or a blackout) takes the player.
   "EnterMap",
   "wLastBlackoutMap",
+  // and where on it the player stands: the block map view a warp sets (event_displacement)
+  "wCurrentTileBlockMapViewPointer",
+  "wOverworldMap",
   "EvosMovesPointerTable",
   "Moves",
   "TechnicalMachines",
