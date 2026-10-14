@@ -4,7 +4,7 @@
 // a cancel answers as B would.
 import { useEffect, useState } from "react";
 import type { AskAnswer, GameAsk, GameSnapshot } from "@pokehd/emu";
-import { isKeyItem, monName, type WorldData } from "@pokehd/rom";
+import { isKeyItem, monName, moveName, romOffset, SYMBOLS, typeName, type WorldData } from "@pokehd/rom";
 import type { Catalogue } from "../dex/catalogue.ts";
 import { niceName } from "../dex/catalogue.ts";
 import { Menu, type MenuContext } from "./context.ts";
@@ -22,7 +22,9 @@ export interface AskSheetProps {
   answer(answer: AskAnswer): void;
 }
 
-const TITLES: Record<"switch" | "item" | "next" | "other", string> = {
+const MOVE_DATA = 6;
+
+const TITLES:Record<"switch" | "item" | "next" | "other", string> = {
   switch: "Switch to who?",
   item: "Use it on who?",
   next: "Who's next?",
@@ -76,6 +78,8 @@ function titleOf(ask: GameAsk): string {
       return "How many?";
     case "yes-no":
       return ask.text.replace(/\n/g, " ") || "Your choice";
+    case "forget-move":
+      return "Forget which move?";
   }
 }
 
@@ -154,6 +158,24 @@ function Body({ rom, ask, game, answer }: { rom: Uint8Array; ask: GameAsk; game:
           })}
         </div>
       );
+    case "forget-move":
+      return (
+        <div className="dm-list">
+          {/* LearnMove's list: the one picked makes room ("1, 2 and… Poof!"); cancelling asks "Abandon learning…?". */}
+          <div className="dm-banner">
+            {niceName(ask.mon)} is learning {niceName(moveName(rom, ask.move))}
+          </div>
+          {ask.moves.map((move, index) => (
+            <button key={index} type="button" className="dm-c dm-row" disabled={ask.hm[index]} onClick={() => answer({ index })}>
+              <span className="grow">
+                <span>{niceName(moveName(rom, move))}</span>
+                <span className="sub">{ask.hm[index] ? "HM moves can't be forgotten" : moveType(rom, move)}</span>
+              </span>
+              <span className="chev">›</span>
+            </button>
+          ))}
+        </div>
+      );
     case "quantity":
       return <Quantity max={ask.max} price={ask.price} answer={answer} />;
     case "yes-no":
@@ -169,6 +191,12 @@ function Body({ rom, ask, game, answer }: { rom: Uint8Array; ask: GameAsk; game:
         </div>
       );
   }
+}
+
+/** A move's type, from the ROM's Moves table (animation, effect, power, type, accuracy, PP). */
+function moveType(rom: Uint8Array, move: number): string {
+  const type = typeName(rom, rom[romOffset(SYMBOLS.Moves) + (move - 1) * MOVE_DATA + 3]!);
+  return type[0] + type.slice(1).toLowerCase();
 }
 
 function Quantity({ max, price, answer }: { max: number; price: number; answer(a: AskAnswer): void }) {

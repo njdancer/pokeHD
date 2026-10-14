@@ -12,6 +12,11 @@
 // | `DisplayChooseQuantityMenu` | wItemQuantity, hMoney (the total, halved when selling), a = $ff for "cancelled" |
 // | `DisplayTextBoxID` with a two-option menu (YES/NO, HEAL/CANCEL…) | wCurrentMenuItem, wChosenMenuItem, wMenuExitMethod, wTwoOptionMenuID back to 0 |
 // | `HandleMenuInput`, straight after a battle switch or a PC Pokémon list | A on the first item (SWITCH, DEPOSIT, WITHDRAW) |
+// | `HandleMenuInput` for LearnMove's "which move should be forgotten?" | a = A with wCurrentMenuItem, or B to cancel |
+//
+// LearnMove's questions (a fifth move, from a TM, an HM or a level: "Delete an older move to make
+// room for …?", the move to forget, "Abandon learning …?") always come to the page, also in the
+// middle of one of the menu's own actions (GameActions), which has no answer for them.
 //
 // The page has already said what it wants done with the Pokémon it chose, so the little menu
 // the game puts up next (SWITCH / STATS / CANCEL, DEPOSIT / STATS / CANCEL) gets its first item.
@@ -20,6 +25,7 @@ import type { GameBoy } from "../core.ts";
 import { readWord, StandIn, type Answer } from "../ffi.ts";
 import { fromBcd, toBcd } from "../gifts/gifts.ts";
 import { enemyPrefix, printingMessage } from "../script-text.ts";
+import { acting } from "./acting.ts";
 
 const addr = (name: SymbolName) => SYMBOLS[name].address;
 
@@ -43,6 +49,8 @@ const BATTLE_PARTY_MENU = 2;
 const NAME_LENGTH = 11;
 const NAME_BUFFER_LENGTH = 20;
 const PAD_A = 0x01;
+const PAD_B = 0x02;
+const NUM_MOVES = 4;
 
 /** What the game asks the player, for the page's sheet. */
 export type GameAsk =
@@ -66,7 +74,13 @@ export type GameAsk =
    * the two lines left on the screen), `yes` and `no` the game's own words for the two options
    * ("YES"/"NO", "HEAL"/"CANCEL", "TRADE"/"CANCEL"…), answered by `{ yes: true }` and `{ yes: false }`.
    */
-  | { kind: "yes-no"; text: string; yes: string; no: string };
+  | { kind: "yes-no"; text: string; yes: string; no: string }
+  /**
+   * Which move to forget, so `mon` can learn `move` (LearnMove's list): `moves` are the move IDs
+   * it knows, `hm` which of them the game won't let go ("HM techniques can't be deleted!").
+   * Answered by `{ index }`, or null to cancel (B: the game asks "Abandon learning …?" next).
+   */
+  | { kind: "forget-move"; text: string; mon: string; move: number; moves: number[]; hm: boolean[] };
 
 /** The page's answer: an index into the team or list, a quantity, yes/no, or null to cancel. */
 export type AskAnswer = { index: number } | { quantity: number } | { yes: boolean } | null;
@@ -76,6 +90,18 @@ export interface GameAsksOptions {
   onAsk(id: number, ask: GameAsk): void;
   /** Our own calls are under way (GameActions): their questions are theirs to answer. */
   busy(): boolean;
+}
+
+/**
+ * The game's routine at its first instruction (DisplayTextBoxID, HandleMenuInput) was called from
+ * LearnMove, the routine that teaches a move from a TM, an HM or a level (its return address, at
+ * the stack's top on entry, is between LearnMove and LearnedMove1Text, all in one bank).
+ */
+export function learnMoveCall(g: GameBoy): boolean {
+  const start = SYMBOLS.LearnMove;
+  if (g.read(addr("hLoadedROMBank")) !== start.bank) return false;
+  const back = readWord(g, g.registers.sp);
+  return back > start.address && back <= addr("LearnedMove1Text");
 }
 
 /** The text box's lines on the Game Boy screen (the empty ones left out). */
@@ -95,9 +121,13 @@ export function textBoxText(gb: GameBoy): string {
  * by the time a question's menu opens the start of the question may be gone ("We heal your" of
  * "We heal your POKéMON back to perfect health!", which the nurse asks over on later visits).
  */
-export function askedText(shown: readonly string[], printed: Message | null): string {
-  const last = printed ? messageBoxes(printed).at(-1)?.map((l) => l.trim()) : undefined;
-  if (last && shown.length > 0 && last.length >= shown.length && last.slice(-shown.length).every((l, i) => l === shown[i])) return last.join("\n");
+export function askedText(shown: readonly string[], printed: Message | null, whole = false): string {
+  const boxes = printed ? messageBoxes(printed).map((box) => box.map((l) => l.trim())) : [];
+  const last = boxes.at(-1);
+  if (last && shown.length > 0 && last.length >= shown.length && last.slice(-shown.length).every((l, i) => l === shown[i])) {
+    // `whole`: the player saw none of it (the menu's own action printed it unseen), so all of it.
+    return whole ? boxes.map((b) => b.join("\n")).join("\n") : last.join("\n");
+  }
   return shown.join("\n");
 }
 
@@ -164,7 +194,8 @@ export class GameAsks {
         this.#ask(g, () => this.#listAsk(g)!, (a) => this.#listAnswer(g, a)),
       ),
       new StandIn(gb, "DisplayChooseQuantityMenu", free, (g) => this.#ask(g, () => this.#quantityAsk(g), (a) => this.#quantityAnswer(g, a))),
-      new StandIn(gb, "DisplayTextBoxID", (g) => free() && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU, (g) =>
+      // LearnMove's yes/no and its list are the page's even inside the menu's own action.
+      new StandIn(gb, "DisplayTextBoxID", (g) => (free() || learnMoveCall(g)) && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU, (g) =>
         this.#ask(g, () => this.#yesNoAsk(g), (a) => {
           const yes = a !== null && "yes" in a && a.yes;
           // NO/YES (clearing the save) puts the "no" first.
@@ -176,6 +207,7 @@ export class GameAsks {
           return {};
         }),
       ),
+      new StandIn(gb, "HandleMenuInput", learnMoveCall, (g) => this.#ask(g, () => this.#forgetAsk(g), (a) => this.#forgetAnswer(g, a))),
       new StandIn(gb, "HandleMenuInput", (g) => free() && thenFirst() && g.read(addr("wMaxMenuItem")) === 2, (g) => {
         g.write(addr("wCurrentMenuItem"), 0);
         return { registers: { af: (PAD_A << 8) | (g.registers.af & 0xff) } };
@@ -201,7 +233,39 @@ export class GameAsks {
     const menu = g.read(addr("wTwoOptionMenuID"));
     const [first, second] = twoOptions(this.#options.rom, menu);
     const [yes, no] = menu === NO_YES_MENU ? [second, first] : [first, second];
-    return { kind: "yes-no", text: askedText(textBoxLines(g), this.#printed), yes, no };
+    return { kind: "yes-no", text: askedText(textBoxLines(g), this.#printed, acting.has(g)), yes, no };
+  }
+
+  /** LearnMove's list: the moves TryingToLearn copied to wMoves, and the one it's learning. */
+  #forgetAsk(g: GameBoy): GameAsk {
+    const count = Math.min(g.read(addr("wNumMovesMinusOne")) + 1, NUM_MOVES);
+    const moves = [...g.readBytes(addr("wMoves"), count)];
+    const hms = this.#hmMoves();
+    return {
+      kind: "forget-move",
+      text: askedText(textBoxLines(g), this.#printed, acting.has(g)),
+      mon: decodeText(g.readBytes(addr("wLearnMoveMonName"), NAME_LENGTH)),
+      move: g.read(addr("wMoveNum")),
+      moves,
+      hm: moves.map((m) => hms.includes(m)),
+    };
+  }
+
+  /** HandleMenuInput's outputs: A on the move to forget, or B. */
+  #forgetAnswer(g: GameBoy, a: AskAnswer): Answer {
+    const index = a && "index" in a ? a.index : -1;
+    const chose = index >= 0 && index <= g.read(addr("wNumMovesMinusOne"));
+    if (chose) g.write(addr("wCurrentMenuItem"), index);
+    return { registers: { af: ((chose ? PAD_A : PAD_B) << 8) | (g.registers.af & 0xff) } };
+  }
+
+  /** The moves IsMoveHM won't let go: the ROM's HMMoves list, to its $ff. */
+  #hmMoves(): number[] {
+    const rom = this.#options.rom;
+    const at = romOffset(SYMBOLS.HMMoves);
+    const out: number[] = [];
+    for (let i = at; rom[i] !== 0xff && out.length < 8; i++) out.push(rom[i]!);
+    return out;
   }
 
   /** Asks the page once, then waits until it answers. */
