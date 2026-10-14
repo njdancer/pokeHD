@@ -141,23 +141,41 @@ describe.skipIf(!existsSync(ROM_PATH))("buildTextMap on the ROM's caves", () => 
   const rom = existsSync(ROM_PATH) ? parseWorld(new Uint8Array(readFileSync(ROM_PATH))) : null;
   const at = (name: string, x: number, y: number): StateLite => ({ ...state(x, y), mapId: rom!.maps.findIndex((m) => m?.name === name) });
 
-  it("marks raised floor the ROM's pair collisions keep apart from the low floor (Mt Moon 1F)", () => {
+  it("shows the light floor on top of the rock walls, which no warp leads to, as wall (Mt Moon 1F)", () => {
     // 1F's west strip is light floor (0x05) beside dark floor (0x20): CAVERN $20,$05 in
-    // TilePairCollisionsLand, so stepping west from (2,3) doesn't move you.
+    // TilePairCollisionsLand keeps you off it, and walls ring it everywhere else, so nobody stands there.
     const text = buildTextMap(rom!, null, at("MT_MOON_1F", 2, 3), { left: 1, right: 1, up: 1, down: 1 });
-    expect(grid(text)).toEqual(["^..", "^@.", "^.."]);
-    expect(text).toContain("^ raised floor (no step straight between ^ and the lower floor");
+    expect(grid(text)).toEqual(["#..", "#@.", "#.."]);
+    expect(blockerAt(rom!, null, at("MT_MOON_1F", 2, 3), { dx: -1, dy: 0 })).toBe("a wall");
+    // Nowhere on 1F is raised floor anyone can reach, so none shows.
+    const map = rom!.maps.find((m) => m?.name === "MT_MOON_1F")!;
+    const whole = buildTextMap(rom!, null, at("MT_MOON_1F", 2, 3), { left: 2, right: map.widthBlocks * 2, up: 3, down: map.heightBlocks * 2 });
+    expect(grid(whole).join("")).not.toMatch(/[\^_/]/);
   });
 
-  it("marks the stone steps that join the two heights (Mt Moon B2F)", () => {
-    const text = buildTextMap(rom!, null, at("MT_MOON_B2F", 28, 8), { left: 1, right: 1, up: 2, down: 0 });
-    expect(grid(text)).toEqual(["^^^", "#//", ".@."]);
-    expect(text).toContain("/ stairs between floor heights");
+  it("shows floor at the player's own height as walkable, on light floor too (Mt Moon B1F)", () => {
+    // B1F's floor is all light floor (0x05): plain walkable floor when you're on it.
+    expect(grid(buildTextMap(rom!, null, at("MT_MOON_B1F", 21, 11), { left: 1, right: 1, up: 1, down: 0 }))).toEqual(["...", ".@."]);
+    // Arriving on a ladder (a warp tile of neither height), the light floor round it is yours too.
+    const text = buildTextMap(rom!, null, at("MT_MOON_B1F", 5, 5), { left: 1, right: 1, up: 1, down: 1 });
+    expect(grid(text)).toEqual(["...", ".@.", "..."]);
+    expect(text).not.toContain("raised floor");
+  });
+
+  it("marks the stone steps that join the two heights, and the other height from each (Mt Moon B2F)", () => {
+    const below = buildTextMap(rom!, null, at("MT_MOON_B2F", 28, 8), { left: 1, right: 1, up: 2, down: 0 });
+    expect(grid(below)).toEqual(["^^^", "#//", ".@."]);
+    expect(below).toContain("/ stairs between floor heights");
+    expect(below).toContain("^ raised floor (walkable, but no step straight between ^ and the lower floor");
+    const above = buildTextMap(rom!, null, at("MT_MOON_B2F", 28, 6), { left: 1, right: 1, up: 0, down: 2 });
+    expect(grid(above)).toEqual([".@.", "#//", "___"]);
+    expect(above).toContain("_ lower floor (walkable, but no step straight between _ and the raised floor you're on");
   });
 
   it("says when a step would drop between floor heights, but not onto the stairs", () => {
-    expect(blockerAt(rom!, null, at("MT_MOON_1F", 2, 3), { dx: -1, dy: 0 })).toBe("a drop between floor heights (use the stairs /)");
+    expect(blockerAt(rom!, null, at("MT_MOON_B2F", 25, 12), { dx: 0, dy: -1 })).toBe("a drop between floor heights (use the stairs /)");
     expect(blockerAt(rom!, null, at("MT_MOON_B2F", 28, 8), { dx: 0, dy: -1 })).toBeNull();
+    expect(blockerAt(rom!, null, at("MT_MOON_B2F", 28, 6), { dx: 0, dy: 1 })).toBeNull();
   });
 });
 
