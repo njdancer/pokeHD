@@ -619,8 +619,11 @@ export function createDriver(opts: DriverOptions): GameDriver {
     },
 
     async joystick(moves: Move[]) {
-      const runs = moves.map((m) => ({ direction: m.direction, steps: Math.max(1, Math.min(20, Math.round(m.tiles))) })).filter((m) => m.direction in DIRS);
-      const total = runs.reduce((n, r) => n + r.steps, 0);
+      // A run leg ("↑*") goes until something stops it, at most 40 steps.
+      const runs = moves
+        .map((m) => ({ direction: m.direction, steps: m.run ? 40 : Math.max(1, Math.min(20, Math.round(m.tiles))), run: !!m.run }))
+        .filter((m) => m.direction in DIRS);
+      let total = runs.reduce((n, r) => n + (r.run ? 0 : r.steps), 0);
       const before = await read();
       const stick = before.joystick;
       if (!stick || !runs.length) {
@@ -641,7 +644,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const following = from
         ? await frame
             .evaluate(walkPath, {
-              legs: runs.map((r) => ({ ...DIRS[r.direction], steps: r.steps })),
+              legs: runs.map((r) => ({ ...DIRS[r.direction], steps: r.steps, run: r.run })),
               centre,
               reach: (lean * GAME_SIZE.width) / box.width,
               stall: stallFrames(stepFrames),
@@ -683,7 +686,17 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const why = from && to ? (interruption(from, to) ?? stop) : stop;
       const blocker = why === "blocked" && rom && to ? blockerAt(rom.world, rom.stitched, to, DIRS[stoppedGoing]) : null;
       const walked = countSteps(seen);
-      const note = from ? walkNote({ asked: total, walked, stop: why, direction: stoppedGoing, blocker }) : "";
+      // Each run says how far it went and what stopped it; its steps count as asked for.
+      const runNotes = (result?.ran ?? []).map((r) => {
+        const dir = runs[r.leg]!.direction;
+        total += r.steps;
+        const what = rom && to ? blockerAt(rom.world, rom.stitched, { ...to, player: { ...to.player, x: r.x, y: r.y } }, DIRS[dir]) : null;
+        return `You ran ${r.steps} step${r.steps === 1 ? "" : "s"} ${dir}${what ? ` until ${what} was in the way` : ", until something stopped you"}.`;
+      });
+      // A run that ended the walk ended it as asked.
+      const lastRun = result?.ran?.at(-1);
+      if (lastRun && result?.end === "done" && lastRun.leg === runs.length - 1) total = walked;
+      const note = from ? [...runNotes, walkNote({ asked: total, walked, stop: why, direction: stoppedGoing, blocker })].filter(Boolean).join("\n") : "";
       const debug = process.env["POKEHD_QA_DEBUG"] && from && to ? ` [debug: (${from.player.x},${from.player.y}) → (${to.player.x},${to.player.y}), ${walked} counted, stop ${why}]` : "";
       const log = await (await gameFrame()).evaluate(() => (window as unknown as { __qaLayouts?: LayoutEntry[] }).__qaLayouts ?? []).catch(() => []);
       const screen = describeLayouts(log, layoutsFrom, Date.now());

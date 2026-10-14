@@ -45,9 +45,10 @@ export const TOOLS = {
     description:
       // The movement eval's "overshoot" wording: Sonnet ran corridors to their ends and got through
       // Viridian Forest where Haiku wandered; told how, Haiku reached more multi-turn goals (88% to 93%)
-      // in fewer turns, confirmed on the held-out set.
-      "Walk with the on-screen joystick: one arrow per step, in order, e.g. \"↑↑↑→→\" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Stops early if something interrupts you (a wall, a door, someone talking, a battle), and says what stopped you. To explore, run a corridor to its end: ask for more steps than you can see (say 12 ↑) and the wall stops you there, then look at the new map and turn. Returns what's on screen afterwards.",
-    shape: { moves: z.string().describe(`Arrows in order, e.g. "↑↑→→→↓". At most ${MAX_STEPS} steps.`) },
+      // in fewer turns, confirmed on the held-out set. "*" makes that a run of its own (Haiku never
+      // used it when merely offered; here it's the recommended way, for a Sonnet player).
+      "Walk with the on-screen joystick: one arrow per step, in order, e.g. \"↑↑↑→→\" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Put * after an arrow to keep walking that way until something stops you, e.g. \"↑*\" or \"→→↑*\" (two right, then up until something's in the way); the walk carries on with any arrows after it. This uses fewer tokens and is generally preferred over ending a walk with the same arrow repeated. To explore, run a corridor to its end this way, then look at the new map and turn. Stops early if something interrupts you (a wall, a door, someone talking, a battle), and says what stopped you. Returns what's on screen afterwards.",
+    shape: { moves: z.string().describe(`Arrows in order, e.g. "↑↑→→→↓" or "→→↑*". At most ${MAX_STEPS} steps besides runs.`) },
   },
   wait: {
     description: "Do nothing for a few seconds (e.g. while text prints or an animation plays). Returns what's on screen afterwards.",
@@ -99,19 +100,32 @@ export interface ToolOutput {
 const ARROWS: Record<Direction, string> = { up: "↑", down: "↓", left: "←", right: "→" };
 const STEP: Record<string, Direction> = { "↑": "up", u: "up", "↓": "down", d: "down", "←": "left", l: "left", "→": "right", r: "right" };
 
-/** "↑↑→→→" (or "UURRR", "up up right") into runs of steps, or an error to show the player. */
+/**
+ * "↑↑→→→" (or "UURRR", "up up right") into runs of steps, or an error to show the player. A "*"
+ * after an arrow makes that leg a run: it keeps going until something stops it.
+ */
 export function parseMoves(raw: string): Move[] | string {
   const cleaned = raw.toLowerCase().replace(/\b(up|down|left|right)\b/g, (w) => w[0]!).replace(/[\s,]+/g, "");
   const moves: Move[] = [];
   for (const ch of cleaned) {
+    if (ch === "*") {
+      const last = moves.at(-1);
+      if (!last || last.run) return "A * goes right after an arrow, e.g. ↑*.";
+      // The arrow before the * becomes a run leg of its own.
+      if (last.tiles > 1) {
+        last.tiles--;
+        moves.push({ direction: last.direction, tiles: 1, run: true });
+      } else last.run = true;
+      continue;
+    }
     const direction = STEP[ch];
-    if (!direction) return `moves must be arrows (↑↓←→) or U/D/L/R; "${ch}" isn't one.`;
+    if (!direction) return `moves must be arrows (↑↓←→) or U/D/L/R, with * after an arrow to run; "${ch}" isn't one.`;
     const last = moves.at(-1);
-    if (last?.direction === direction) last.tiles++;
+    if (last?.direction === direction && !last.run) last.tiles++;
     else moves.push({ direction, tiles: 1 });
   }
-  const steps = moves.reduce((n, m) => n + m.tiles, 0);
-  if (!steps) return "moves needs at least one arrow.";
+  const steps = moves.reduce((n, m) => n + (m.run ? 0 : m.tiles), 0);
+  if (!moves.length) return "moves needs at least one arrow.";
   if (steps > MAX_STEPS) return `That's ${steps} steps; at most ${MAX_STEPS} at a time.`;
   return moves;
 }
