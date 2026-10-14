@@ -302,15 +302,45 @@ const MOVE_LISTS = [
 const MOVE_LIST_SIZE = { width: 16, height: 6 };
 
 /**
+ * The turn's move list as the text decoder reads it: MoveSelectionMenu draws its box at (4, 12),
+ * then puts a ─ and a ┘ over the box's top edge for PrintMenuItem's box above, so no box is found
+ * there and the moves read as text outside any box, from column 6 on rows 13 to 16.
+ */
+const TURN_MOVES = { col: 6, from: 13, to: 16 };
+
+/**
+ * PrintMenuItem's box beside the turn's move list, at (0, 8): TYPE/, the move's type and its PP,
+ * or "disabled!". It stays up under "No PP left for this move!" and "<move> is disabled!", and
+ * runs into the message box below it (its bottom edge is the message box's top), so the decoder
+ * reads it down to the screen's bottom.
+ */
+export function isMoveInfo(box: TextBox): boolean {
+  return box.x === 0 && box.y === 8 && box.lines.some((l) => l.text.startsWith("TYPE/") || l.text === "disabled!");
+}
+
+/**
  * The battle's own menus are on screen: FIGHT / PKMN / ITEM / RUN (or the Safari Zone's) or a
- * move list. The HD battle menu answers them (BattleMenus), so these never show.
+ * move list. The HD battle menu answers them (BattleMenus), so these never show. The turn's move
+ * list counts while the game draws it either side of its question (after a move is chosen from
+ * the HD menu, and again after "No PP left for this move!"), until a message goes up in its place
+ * (QA bug 46).
  */
 export function battleMenuShown(text: ScreenText): boolean {
   return (
     text.menus.some((m) => m.kind === "battle") ||
     text.boxes.some((b) => b.lines.some((l) => l.text.includes("THROW ROCK"))) ||
-    text.boxes.some((b) => b.width === MOVE_LIST_SIZE.width && b.height === MOVE_LIST_SIZE.height && MOVE_LISTS.some((at) => at.x === b.x && at.y === b.y))
+    text.boxes.some((b) => b.width === MOVE_LIST_SIZE.width && b.height === MOVE_LIST_SIZE.height && MOVE_LISTS.some((at) => at.x === b.x && at.y === b.y)) ||
+    (!text.dialog && (text.boxes.some(isMoveInfo) || text.loose.some((l) => l.col === TURN_MOVES.col && l.row >= TURN_MOVES.from && l.row <= TURN_MOVES.to)))
   );
+}
+
+/**
+ * The battle screen's text as the HD text layer shows it: without the move's TYPE box, which the
+ * HD menu shows in its own way. Under "No PP left for this move!" only the message is drawn (QA
+ * bug 46); `battleCovered` takes the screen's own text, so the Game Boy's TYPE box is masked too.
+ */
+export function battleTextShown(text: ScreenText): ScreenText {
+  return text.boxes.some(isMoveInfo) ? { ...text, boxes: text.boxes.filter((b) => !isMoveInfo(b)) } : text;
 }
 
 /** Blank, in the game's tile set (the space character). */

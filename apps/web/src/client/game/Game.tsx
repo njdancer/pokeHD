@@ -69,7 +69,7 @@ import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
 import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
-import { BattleTracker, battleCovered, battleMenuShown, battleText, maskBattleScreen } from "./battle.ts";
+import { BattleTracker, battleCovered, battleMenuShown, battleText, battleTextShown, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { BattleMenu, type BattleKey } from "./BattleMenu.tsx";
 import { battleMenusOn } from "./battle-menu-flag.ts";
@@ -643,7 +643,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           // Text and menus: drawn by the HD text layer when it can show all of them. On the battle
           // screen only its text and menu cells are read (the HUDs and pictures are drawn in HD).
           const textBytes = bytes as unknown as TextWatched;
-          const text = textDecoder.decode(battleScreen ? battleText(textBytes, battleScreen) : textBytes);
+          const onScreen = textDecoder.decode(battleScreen ? battleText(textBytes, battleScreen) : textBytes);
+          // On the battle screen, less the move's TYPE box: under "No PP left!" only the message shows.
+          const text = battleScreen ? battleTextShown(onScreen) : onScreen;
           if (talking) {
             const d = text.dialog;
             if (!d) {
@@ -676,14 +678,14 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           // LearnMove's list at a level up draws its Game Boy box before the sheet asks which move
           // to forget: masked the same way (QA bug 48).
           const choosing =
-            (BATTLE_MENUS && !!battleScreen && fight?.state?.type !== "link" && (!!battleAskRef.current || battleMenuShown(text))) ||
+            (BATTLE_MENUS && !!battleScreen && fight?.state?.type !== "link" && (!!battleAskRef.current || battleMenuShown(onScreen))) ||
             (!!battleScreen && menuStateRef.current.ask === "forget-move");
           // A Pokédex menu action running the game's routine (a POTION from the Inventory tab): what
           // it draws (the party menu ItemUseMedicine redraws, "recovered by 20!") is the menu's to
           // report, in its own words once the action is done, so neither the HD text layer nor the
           // Game Boy screen shows it.
           const fits = acting || choosing ? false : intro ? introTextFits(text) : battleScreen ? battleTextFits(text) : hdTextFits(text, state.mode, inWorld);
-          if (battleScreen) maskBattleScreen(image.data, battleScreen, battleCovered(text, fits, choosing));
+          if (battleScreen) maskBattleScreen(image.data, battleScreen, battleCovered(onScreen, fits, choosing));
           ctx.putImageData(image, 0, 0);
           // Nothing on the Game Boy screen the HD view doesn't show: keep it down.
           const mapOnly = trackMapOnly((bytes as unknown as TextWatched).tileMap, state.mode, inWorld);
