@@ -16,7 +16,7 @@
 import { isKeyItem, romOffset, SYMBOLS, type SymbolName } from "@pokehd/rom";
 import type { GameBoy } from "../core.ts";
 import { StandIn } from "../ffi.ts";
-import { textBoxText } from "./asks.ts";
+import { learnMoveCall, textBoxText } from "./asks.ts";
 import { saveGame } from "../gifts/gifts.ts";
 import { type Job, SafePoint, type Step } from "../gifts/safepoint.ts";
 import { acting } from "./acting.ts";
@@ -89,11 +89,7 @@ export class GameActions {
     this.#rom = options.rom;
     this.#safe = SafePoint.of(gb);
     const ours = () => this.#running !== null;
-    const keep = (g: GameBoy) => {
-      const text = textBoxText(g);
-      const messages = this.#running?.messages;
-      if (text && messages && messages.at(-1) !== text) messages.push(text);
-    };
+    const keep = (g: GameBoy) => this.#keep(g);
     this.#standIns = [
       // "Use on which Pokémon?": the party menu's outputs (HandlePartyMenuInput), or cancelled.
       new StandIn(gb, "DisplayPartyMenu", ours, (g) => {
@@ -106,8 +102,11 @@ export class GameActions {
         g.write(addr("wBattleMonSpecies2"), species);
         return { carry: false };
       }),
-      // A yes/no: "delete an older move?" and the like. Answered from the action, else no.
-      new StandIn(gb, "DisplayTextBoxID", (g) => ours() && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU, (g) => {
+      // A yes/no: a TM's "Teach … to a POKéMON?" and the like. Answered from the action, else no.
+      // LearnMove's ("Delete an older move…?", "Abandon learning…?") and its move list are the
+      // page's to ask (GameAsks): answering them ourselves went round and round (QA bug 48). What
+      // the action printed until then goes with the question, so the result starts afresh.
+      new StandIn(gb, "DisplayTextBoxID", (g) => ours() && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU && !this.#leftToPage(g), (g) => {
         keep(g);
         const yes = this.#running?.yesNo.shift() ?? false;
         g.write(addr("wCurrentMenuItem"), yes ? 0 : 1);
@@ -118,6 +117,20 @@ export class GameActions {
       new StandIn(gb, "WaitForTextScrollButtonPress", ours, (g) => (keep(g), {})),
       new StandIn(gb, "ManualTextScroll", ours, (g) => (keep(g), {})),
     ];
+  }
+
+  /** Keeps the text box's words for the result, unless it still shows the last kept. */
+  #keep(g: GameBoy): void {
+    const text = textBoxText(g);
+    const messages = this.#running?.messages;
+    if (text && messages && messages.at(-1) !== text) messages.push(text);
+  }
+
+  /** LearnMove asks the page (GameAsks), not the action: true, with what was printed so far dropped. */
+  #leftToPage(g: GameBoy): boolean {
+    if (!learnMoveCall(g)) return false;
+    if (this.#running) this.#running.messages = [];
+    return true;
   }
 
   /** Whether one of the actions is running in the game right now (not just queued). */
@@ -213,6 +226,8 @@ export class GameActions {
                 g.write(addr("wPseudoItemID"), 0);
               },
               after: (g) => {
+                // Its last words may wait for no button ("… did not learn MEGA PUNCH!").
+                this.#keep(g);
                 const result = g.read(addr("wActionResultOrTookBattleTurn"));
                 if (result !== ITEM_USED) failed = this.#running?.messages.at(-1) ?? "it can't be used now";
               },

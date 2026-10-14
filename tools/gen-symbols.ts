@@ -324,6 +324,14 @@ export const ALLOWLIST: readonly string[] = [
   "wPlayerSelectedMove",
   "wTopMenuItemX",
   "wTopMenuItemY",
+  // Learning a fifth move (LearnMove, from a TM or a level): its questions, asked by the page,
+  // told apart by their caller in LearnMove … LearnedMove1Text (QA bugs 47, 48)
+  "HMMoves",
+  "LearnMove",
+  "LearnedMove1Text",
+  "wLearnMoveMonName",
+  "wMoveNum",
+  "wMoves",
   // The play journal (dex menu): battles, catches, items, gifts, badges and evolutions, read at
   // the routines that make them happen
   "AddItemToInventory_",
