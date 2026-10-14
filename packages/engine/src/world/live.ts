@@ -11,6 +11,7 @@ import { actorBob, actorOffset, createGhosts, GHOST_LOOKS, DEFAULT_GHOST_LOOK, t
 import { DEFAULT_STYLE_PARAMS, type StyleParams } from "./params.ts";
 import { placeColours as sgbPlaceColours, PLAIN_COLOURS, playerRamp } from "./place.ts";
 import { buildRegion, placeMaps, TILE_UNITS } from "./region.ts";
+import { fadeSceneryAroundPeople, setFadePeople } from "./scenery-fade.ts";
 import { createSpriteSet, faceCamera, SPRITE_RED, SPRITE_SEEL, type Facing, type SpriteActor } from "./sprites.ts";
 import { DEFAULT_STYLE, type StyleId } from "./styles.ts";
 import { hasTerraces, stepLevel, terraces } from "./terraces.ts";
@@ -302,6 +303,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     owner.offset = { x: -r.rootX * TILE_UNITS, z: -r.rootY * TILE_UNITS };
     group.position.set(owner.bx * 2 + owner.offset.x, 0, owner.by * 2 + owner.offset.z);
     owner.group = group;
+    fadeSceneryAroundPeople(group);
     if (!compile) {
       compiled.add(group);
       show(owner);
@@ -628,6 +630,8 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       ghosts.update(clock(), camera, locate);
       faceCamera(playerSprite, camera);
       for (const s of npcSprites.values()) faceCamera(s.mesh, camera);
+      // Scenery in front of a person fades around them (./scenery-fade.ts).
+      setFadePeople([playerSprite, ...[...npcSprites.values()].map((s) => s.mesh)], playerSprite.position);
     },
     dispose() {
       disposed = true;
