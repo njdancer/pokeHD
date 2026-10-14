@@ -169,8 +169,8 @@
 /* ---------- right column ---------- */
 .qs .qs-info, .qs .qs-bugs { left: 1372px; width: 520px; transition: left .7s var(--ease), width .7s var(--ease), top .7s var(--ease), height .7s var(--ease); }
 .qs .qs-info { top: 200px; height: calc(828px - var(--bugs-h, 372px)); overflow: hidden; padding: 14px 24px 18px; display: flex; flex-direction: column; gap: 10px; }
-/* At most what leaves the player card room for its whole team. */
-.qs .qs-bugs { top: auto; bottom: 28px; height: auto; max-height: 396px; display: flex; flex-direction: column; padding: 18px 26px 18px 26px; }
+/* Always room for three bugs of two lines each; the player card takes the rest. */
+.qs .qs-bugs { top: auto; bottom: 28px; height: 333px; display: flex; flex-direction: column; padding: 18px 26px 18px 26px; }
 .qs .qs-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .qs .qs-place { font-family:"Fredoka",sans-serif; font-weight: 700; font-size: 54px; line-height: 1.05; color: var(--ink); flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; transition: font-size .7s var(--ease); }
 .qs .qs-facts { flex: none; margin-top: 18px; display: flex; align-items: baseline; gap: 10px; font-size: 26px; font-weight: 900; color: var(--muted); white-space: nowrap; text-transform: uppercase; letter-spacing: .05em; }
@@ -270,9 +270,6 @@
 .qs[data-mode="talk"] .qs-info { padding-top: 10px; gap: 8px; }
 .qs[data-mode="talk"] .qs-place { font-size: 44px; }
 .qs[data-mode="talk"] .qs-party { grid-template-columns: repeat(3, minmax(0,1fr)); }
-.qs[data-mode="talk"] .qs-bugs { max-height: 470px; }
-.qs[data-mode="talk"] .qs-bl { gap: 4px; }
-.qs[data-mode="talk"] .qs-bug { padding: 6px 0; }
 .qs[data-mode="talk"] .qs-name { font-size: 21px; letter-spacing: -.01em; }
 .qs[data-mode="talk"] .qs-slot { gap: 2px; padding-right: 8px; }
 /* Narrower slots: the picture's see-through margin may overlap the slot's edge. */
