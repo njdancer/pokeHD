@@ -66,3 +66,17 @@ export const TABS: { id: TabId; label: string }[] = [
   { id: "map", label: "Map" },
   { id: "me", label: "Me" },
 ];
+
+/** Each tab's stack cut back to below its first screen with a purpose (a one-off pick). */
+export function withoutPicks<P extends { stacks: Record<TabId, Screen[]> }>(place: P): P {
+  let changed = false;
+  const stacks = { ...place.stacks };
+  for (const t of Object.keys(stacks) as TabId[]) {
+    const at = stacks[t].findIndex((s) => "for" in s && s.for !== undefined);
+    if (at < 0) continue;
+    // The root always stays.
+    stacks[t] = stacks[t].slice(0, Math.max(at, 1));
+    changed = true;
+  }
+  return changed ? { ...place, stacks } : place;
+}
