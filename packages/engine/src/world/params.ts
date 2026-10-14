@@ -21,6 +21,8 @@ export interface StyleParams {
   grassHeight: number;
   /** Raised height of ledges and cliffs, in units. */
   ledgeHeight: number;
+  /** Caves: the rise from one floor level to the next (./terraces.ts), in units. */
+  terraceHeight: number;
 }
 
 export const DEFAULT_STYLE_PARAMS: StyleParams = {
@@ -34,4 +36,5 @@ export const DEFAULT_STYLE_PARAMS: StyleParams = {
   grassDensity: 20,
   grassHeight: 0.4,
   ledgeHeight: 0.22,
+  terraceHeight: 0.5,
 };

@@ -124,19 +124,19 @@ BUILT_IN_PRESETS["Dusk"] = preset({
 // cooler, lit by a dim cold light from overhead, with the dark closing in at the edges.
 BUILT_IN_PRESETS["Cave"] = preset({
   time: { phase: 0.5, drift: false },
-  sun: { intensity: 1.3, morningColor: "#a9b8d6", middayColor: "#a9b8d6", eveningColor: "#a9b8d6" },
+  sun: { intensity: 2.0, morningColor: "#a9b8d6", middayColor: "#a9b8d6", eveningColor: "#a9b8d6" },
   sky: {
     zenithMorning: "#10131b", zenithEvening: "#10131b", horizonMorning: "#1d1e26", horizonEvening: "#1d1e26",
-    skyLight: 1.2, groundColor: "#4a3c30", sunDiscIntensity: 0,
+    skyLight: 2.0, groundColor: "#4a3c30", sunDiscIntensity: 0,
   },
   shadows: { softness: 4 },
-  fog: { color: "#15171e", skyTint: 0, near: 30, far: 75 },
+  fog: { color: "#1c1e26", skyTint: 0, near: 40, far: 110 },
   bloom: { strength: 0.3, threshold: 0.9 },
   grade: {
-    exposure: 1.1, contrast: 1.1, saturation: 1.0, temperature: -0.03, tint: 0, lift: 0,
+    exposure: 1.3, contrast: 1.1, saturation: 1.0, temperature: -0.03, tint: 0, lift: 0,
     shadowTint: "#1f2c50", highlightTint: "#e6d6b8", splitToneAmount: 0.3,
   },
-  vignette: { intensity: 0.65, radius: 0.75, smoothness: 0.7 },
+  vignette: { intensity: 0.45, radius: 0.75, smoothness: 0.7 },
 });
 
 /** The chosen look (D15): golden mornings and evenings around a Diorama midday. */

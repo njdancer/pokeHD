@@ -68,14 +68,14 @@ export function terrain(
   region: Region,
   image: Image,
   tex: THREE.Texture,
-  heightOf: (l: Label | undefined) => number,
+  heightOf: (l: Label | undefined, i: number) => number,
   edgeColour?: number,
 ) {
   const heights = new Float32Array(region.widthTiles * region.heightTiles);
   for (let ty = 0; ty < region.heightTiles; ty++) {
     for (let tx = 0; tx < region.widthTiles; tx++) {
       const i = ty * region.widthTiles + tx;
-      heights[i] = region.present[i] ? heightOf(labelAt(region, tx, ty)) : NaN;
+      heights[i] = region.present[i] ? heightOf(labelAt(region, tx, ty), i) : NaN;
     }
   }
   const arrays = meshHeightfield({
@@ -241,6 +241,7 @@ export function voxelProps(
   params: StyleParams,
   scaleOf: (p: StepProp) => number,
   round: (p: StepProp) => boolean,
+  groundY: (p: StepProp) => number = () => 0,
 ): THREE.Group {
   // Props drawn with the same four tiles look identical, so each look is meshed once and
   // instanced: a city's worth of trees is a handful of shapes. Instances are binned into
@@ -261,7 +262,7 @@ export function voxelProps(
   const m = new THREE.Matrix4();
   for (const [bin, list] of bins) {
     const mesh = shadowed(new THREE.InstancedMesh(geometries.get(bin.split("|")[0]!)!, material, list.length));
-    list.forEach((p, i) => mesh.setMatrixAt(i, m.makeTranslation(p.sx + 0.5, 0, p.sy + 0.75)));
+    list.forEach((p, i) => mesh.setMatrixAt(i, m.makeTranslation(p.sx + 0.5, groundY(p), p.sy + 0.75)));
     mesh.computeBoundingSphere();
     group.add(mesh);
   }

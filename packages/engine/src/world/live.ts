@@ -10,9 +10,10 @@ import { disposeTree } from "./content.ts";
 import { actorBob, actorOffset, createGhosts, GHOST_LOOKS, DEFAULT_GHOST_LOOK, type GhostLook, type GhostState } from "./ghosts.ts";
 import { DEFAULT_STYLE_PARAMS, type StyleParams } from "./params.ts";
 import { placeColours as sgbPlaceColours, PLAIN_COLOURS, playerRamp } from "./place.ts";
-import { placeMaps, TILE_UNITS } from "./region.ts";
+import { buildRegion, placeMaps, TILE_UNITS } from "./region.ts";
 import { createSpriteSet, faceCamera, SPRITE_RED, SPRITE_SEEL, type Facing, type SpriteActor } from "./sprites.ts";
 import { DEFAULT_STYLE, type StyleId } from "./styles.ts";
+import { hasTerraces, stepLevel, terraces } from "./terraces.ts";
 
 // The live overworld (p1-state-render): the world the game is in, driven by a stream of decoded
 // game state. Each map is a chunk built from ROM data and positioned by its connections, so
@@ -394,6 +395,35 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     return { x: c.bx * 2 + o.x, z: c.by * 2 + o.z };
   };
   const bob = actorBob;
+  /**
+   * The floor height under a drawn position (map units from the map's origin): caves stand on
+   * terraces (./terraces.ts), read from the same region the chunk is built from; elsewhere 0.
+   * Blended between steps, so walking down stone steps glides.
+   */
+  const grounds = new Map<MapId, (x: number, z: number) => number>();
+  const groundOf = (map: MapData) => {
+    let f = grounds.get(map.id);
+    if (f) return f;
+    f = () => 0;
+    const region = style === "voxel" ? null : buildRegion(world, map.id, { marginBlocks: MARGIN_BLOCKS });
+    if (region && hasTerraces(region)) {
+      const t = terraces(region);
+      const at = (sx: number, sy: number) => stepLevel(t, region, region.rootX, region.rootY, sx, sy) * params.terraceHeight;
+      f = (x, z) => {
+        const sx = x - 0.5;
+        const sy = z - 0.6;
+        const x0 = Math.floor(sx);
+        const y0 = Math.floor(sy);
+        const fx = sx - x0;
+        const fy = sy - y0;
+        const top = at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx;
+        const bottom = at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx;
+        return top * (1 - fy) + bottom * fy;
+      };
+    }
+    grounds.set(map.id, f);
+    return f;
+  };
 
   const ghosts = createGhosts(options.ghostLook ?? GHOST_LOOKS[DEFAULT_GHOST_LOOK]);
   root.add(ghosts.group);
@@ -526,10 +556,12 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         const t = Math.min(Math.max((now - last.at) / span, 0), 1);
         const x = prev.x + (last.x - prev.x) * t;
         const z = prev.z + (last.z - prev.z) * t;
-        playerSprite.position.set(x, bob(latest.player), z);
+        const ground = groundOf(here.map);
+        const lift = ground(x - here.bx * 2, z - here.by * 2);
+        playerSprite.position.set(x, bob(latest.player) + lift, z);
         player.show(playerSheet(latest.player.transport), latest.player.facing ?? "down", latest.player.animFrame, playerColours);
         const people = placeColours(world, here.map.id, outside).people;
-        target.set(x, 0.5, z);
+        target.set(x, 0.5 + lift, z);
 
         const seen = new Set<number>();
         for (const npc of latest.npcs) {
@@ -542,7 +574,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
           const d = drawn(npc, here);
           const sprite = npc.pictureId ?? here.map.npcs[npc.slot - 1]?.sprite;
           s.show(sprite === undefined ? null : world.sprites[sprite], npc.facing ?? "down", npc.animFrame, people);
-          s.mesh.position.set(d.x, bob(npc), d.z);
+          s.mesh.position.set(d.x, bob(npc) + ground(d.x - here.bx * 2, d.z - here.by * 2), d.z);
           s.mesh.visible = npc.visible;
           seen.add(npc.slot);
         }
