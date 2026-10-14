@@ -7,7 +7,7 @@ import { BallMark, ItemIcon } from "../icons.tsx";
 import { useNav, type Purpose } from "../nav.tsx";
 import { inBattle, ITEM_KINDS, type Item, type ItemKind, type Mon } from "../model.ts";
 import { HpBar, Page, Pixel, ReadButton, Row, Section, SortList, StatusPill, Switch, Types, Verbs } from "../ui.tsx";
-import { canLearn, heals, itemVerbs, monVerbs } from "../verbs.ts";
+import { canLearn, itemVerbs, monVerbs, onMon } from "../verbs.ts";
 
 type Kind = "all" | "Pokémon" | ItemKind;
 
@@ -296,7 +296,7 @@ export function BagPick({ purpose }: { purpose?: Purpose }) {
   const nav = useNav();
   const { model, moment } = env;
   let items = model.bag;
-  if (purpose && "onMon" in purpose) items = items.filter(heals);
+  if (purpose && "onMon" in purpose) items = items.filter(onMon);
   if (purpose && "giftTo" in purpose) items = items.filter((b) => b.kind !== "Key" && b.kind !== "Machines");
   if (moment === "wild") items = [...items].sort((a, b) => Number(b.kind === "Balls") - Number(a.kind === "Balls"));
   if (inBattle(moment) && nav.sheet) items = items.filter((b) => b.kind === "Healing" || b.kind === "Balls" || b.kind === "Battle");
