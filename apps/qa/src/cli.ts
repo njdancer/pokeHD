@@ -6,7 +6,8 @@
 //                         plays through Claude Code signed in with this machine's Claude login;
 //                         --via api uses ANTHROPIC_API_KEY. --game opens the game page alone
 //                         instead of the stream page. --lan serves the bus, and a live view of
-//                         the window at /watch, to other devices on the network.
+//                         the window at /watch and the player's model context at /context/view,
+//                         to other devices on the network.
 //   inbox [--wait]        The chat. --wait blocks until the player's next message, then prints it.
 //   say TEXT [--bug N] [--tag fixed|harness|question|note|prompt]
 //                         Message the player (unpauses it if it's waiting). --tag fixed --bug N
@@ -71,7 +72,8 @@ switch (command) {
     await run.listen(Number(values.port), values.lan ? "0.0.0.0" : "127.0.0.1");
     const streamUrl = `${values.app}/dev/stream?bus=${encodeURIComponent(bus)}`;
     console.log(`Run folder ${run.dir}\nBus ${bus}\nStream ${streamUrl}`);
-    if (values.lan) for (const address of lanAddresses()) console.log(`Watch live at http://${address}:${values.port}/watch`);
+    if (values.lan) for (const address of lanAddresses()) console.log(`Watch live at http://${address}:${values.port}/watch\nPlayer's context at http://${address}:${values.port}/context/view`);
+    else console.log(`Player's context at ${bus}/context/view`);
     const streamPath = values.game ? "game" : `/dev/stream?bus=${encodeURIComponent(bus)}&broadcast`;
     const driver = createDriver({ appUrl: values.app, runDir: run.dir, headless: values.headless, streamPath });
     run.setLive((listener) => driver.onFrame(listener));

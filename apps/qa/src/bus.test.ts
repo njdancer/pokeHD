@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Bus } from "./bus.ts";
+import { ContextLog, type ContextSnapshot } from "./context.ts";
 import type { ChatEvent, QaEvent, Snapshot } from "./events.ts";
 
 const roots: string[] = [];
@@ -48,6 +49,30 @@ describe("Bus", () => {
     expect(snap.chat.at(-1)!.text).toBe("Fixed it");
     expect(seen.map((e) => e.t)).toEqual(["bugs", "bugs", "chat"]);
     expect(readFileSync(join(b.dir, "events.jsonl"), "utf8").trim().split("\n")).toHaveLength(3);
+  });
+
+  it("serves the player's context, its images and the viewer page", async () => {
+    const b = bus();
+    const port = await b.listen(0);
+    const base = `http://127.0.0.1:${port}`;
+    expect((await fetch(`${base}/context`)).status).toBe(503);
+    const log = new ContextLog(150_000);
+    log.startChapter("prompt", []);
+    log.add("user", [{ type: "image", source: { data: Buffer.from("png").toString("base64"), media_type: "image/png" } }]);
+    log.add("assistant", [{ type: "text", text: "hi" }]);
+    b.setContext(log);
+    const snap = (await (await fetch(`${base}/context?after=2`)).json()) as ContextSnapshot;
+    expect(snap.messages.map((m) => m.n)).toEqual([2]);
+    const image = await fetch(`${base}/context/image/1`);
+    expect(image.headers.get("content-type")).toBe("image/png");
+    expect(Buffer.from(await image.arrayBuffer()).toString()).toBe("png");
+    expect((await fetch(`${base}/context/image/9`)).status).toBe(404);
+    const page = await fetch(`${base}/context/view`);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    const html = await page.text();
+    expect(html).toContain('fetch("/context?after="');
+    // The page's script survives being a template literal: it parses.
+    expect(() => new Function(html.split("<script>")[1]!.split("</script>")[0]!)).not.toThrow();
   });
 
   it("streams the live view as motion JPEG", async () => {
