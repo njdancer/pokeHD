@@ -173,6 +173,7 @@ export class Player {
       void session?.interrupt().catch(() => {});
     };
     const system = systemPrompt();
+    this.#box.bus.newGeneration(this.#box.turn);
     this.context.startChapter(system, toolList("mcp__game__"), this.context.chapter > 0 ? this.#notebook() : undefined);
     say(opening);
 
@@ -247,6 +248,7 @@ export class Player {
     let messages: Message[] = [user(opening)];
     let system = systemPrompt();
     this.#box.promptChanged = false;
+    this.#box.bus.newGeneration(this.#box.turn);
     this.context.startChapter(system, toolList(""));
     this.context.add("user", messages[0]!.content);
     let systemTurns = true;
@@ -310,6 +312,7 @@ export class Player {
       system = systemPrompt();
       this.#box.promptChanged = false;
       messages = [user(this.#box.opening(`${NEW_CHAPTER}\n\nHandoff from before the reset:\n${handoff}\n\nThe screen now: ${(await this.#box.driver.wait(500)).text}`))];
+      this.#box.bus.newGeneration(this.#box.turn);
       this.context.startChapter(system, toolList(""), handoff);
       this.context.add("user", messages[0]!.content);
       this.#log({ chapter: messages[0] });

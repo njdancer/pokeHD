@@ -17,6 +17,10 @@ export interface StatusEvent {
   /** Play time as the game counts it, "h:mm". */
   playTime: string;
   fps: number | null;
+  /** The player's generation: a new one each time its conversation starts afresh (a new chapter or a harness start). */
+  gen?: number;
+  /** The run's turn when this generation began. */
+  genStart?: number;
 }
 
 /** The player's one-line note before an action (the stream's "thinking" rows). */
