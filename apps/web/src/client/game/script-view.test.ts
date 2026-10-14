@@ -1,7 +1,7 @@
 import type { ScreenText } from "@pokehd/emu";
 import type { Message } from "@pokehd/rom";
 import { describe, expect, it } from "vitest";
-import { newScriptView, SCRIPT_MIN_SHOWN_FRAMES, SCRIPT_UNFIT_FRAMES, scriptTap, scriptView, type ScriptView } from "./script-view.ts";
+import { newScriptView, SCRIPT_MIN_SHOWN_FRAMES, SCRIPT_UNFIT_FRAMES, scriptReady, scriptTap, scriptView, withScriptState, type ScriptView } from "./script-view.ts";
 
 const box = { x: 0, y: 12, width: 20, height: 6, lines: [] };
 const screen = (lines: [string, string]) => ({ dialog: { box, lines, state: "waiting" }, menus: [], boxes: [box] }) as unknown as ScreenText;
@@ -117,5 +117,22 @@ describe("scriptTap", () => {
     expect(ref.current!.readyAt).toBe(second!.join("").length);
     expect(scriptTap(ref.current)).toBe("wait");
     expect(ref.current!.index).toBe(1);
+  });
+});
+
+describe("withScriptState", () => {
+  it("shows the ▼ only when a tap reads on (QA bug 56)", () => {
+    const defeated: Message = { pages: [{ lines: ["RED defeated", "BLUE!"], wait: "end" }], ending: "done" };
+    const script = newScriptView(9, defeated, 3);
+    const text = screen(["RED defeated", "BLUE!"]);
+    // While the game would still be printing it.
+    expect(withScriptState(text, script).dialog?.state).toBe("printing");
+    script.shown = script.readyAt;
+    expect(scriptReady(script)).toBe(true);
+    expect(withScriptState(text, script)).toBe(text);
+    // Read: the game keeps it up while the rival slides back in, and a tap does nothing.
+    expect(scriptTap(script)).toBe("close");
+    expect(withScriptState(text, script).dialog?.state).toBe("idle");
+    expect(scriptTap(script)).toBe("wait");
   });
 });

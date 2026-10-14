@@ -71,6 +71,28 @@ export function scriptTap(script: ScriptView | null): "next" | "close" | "wait" 
   return "close";
 }
 
+/**
+ * A tap on the message reads on (`scriptTap` says "next" or "close"): its box shows the ▼. Not
+ * while the game would still be printing it, nor once it's read and the game only keeps it up
+ * (a trainer sliding in under "RED defeated BLUE!", a move's animation under "used EMBER!"):
+ * a tap then does nothing, and without the ▼ the box looked like the same message again on every
+ * tap (QA bug 56).
+ */
+export function scriptReady(script: ScriptView | null): boolean {
+  return !!script && !script.ended && !script.closed && script.shown >= script.readyAt;
+}
+
+/**
+ * The screen's text with the message box's state as the page shows a whole message: waiting (the
+ * ▼) only when a tap reads on (`scriptReady`), printing while the game would still be printing it,
+ * and idle once it's read and only kept up.
+ */
+export function withScriptState(text: ScreenText, script: ScriptView | null): ScreenText {
+  if (!text.dialog) return text;
+  const state = scriptReady(script) ? "waiting" : script && !script.closed && !script.ended ? "printing" : "idle";
+  return text.dialog.state === state ? text : { ...text, dialog: { ...text.dialog, state } };
+}
+
 /** Frames the HD text may not show a message before it goes back to the game's own text. */
 export const SCRIPT_UNFIT_FRAMES = 10;
 

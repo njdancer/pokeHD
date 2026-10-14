@@ -33,6 +33,8 @@ export interface Panel {
   text: string;
   /** For menus: the line the cursor is on. */
   cursor?: string;
+  /** For the message box: its ▼ is up, so a tap reads on (QA bug 56). */
+  waiting?: boolean;
 }
 export interface ScreenButton extends Rect {
   label: string;
@@ -111,7 +113,9 @@ export function readScreen(arg: { slowSince: number }): ScreenRead {
       const cursorRow = el.querySelector(".hd-pick.selected, .hd-cursor.selected");
       const row = cursorRow?.closest(".hd-row, .hd-choice");
       const cursor = row ? clean((row as HTMLElement).innerText) : undefined;
-      panels.push({ kind: el.classList.contains("battle-card") ? `battle-card ${el.getAttribute("data-testid")?.replace("battle-hud-", "") ?? ""}`.trim() : kind, text, ...(cursor ? { cursor } : {}) });
+      // A message box's ▼: the game waits for a tap (without it, a tap does nothing yet).
+      const waiting = kind === "message" ? { waiting: !!el.querySelector(".hd-more") } : {};
+      panels.push({ kind: el.classList.contains("battle-card") ? `battle-card ${el.getAttribute("data-testid")?.replace("battle-hud-", "") ?? ""}`.trim() : kind, text, ...(cursor ? { cursor } : {}), ...waiting });
     }
   }
 
