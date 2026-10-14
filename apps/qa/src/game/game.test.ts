@@ -297,6 +297,9 @@ describe("outcome text", () => {
     expect(describeGameBoyText([{ lines: [{ text: "Right! So your" }, { text: "name is RED! ▼" }] }, { lines: [] }])).toBe(
       'Game Boy screen text:\n"Right! So your / name is RED!"',
     );
+    expect(describeGameBoyText([{ lines: [{ text: "Wild ZUBAT" }, { text: "appeared!" }] }], false)).toBe(
+      "The game's text (its HD screen hasn't drawn it yet):\n\"Wild ZUBAT / appeared!\"",
+    );
   });
 });
 
