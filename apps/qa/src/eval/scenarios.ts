@@ -41,8 +41,8 @@ export interface Scenario {
   features: Feature[];
   /** Most turns the player gets. */
   turnCap: number;
-  /** Every story event set first, so trainers count as beaten and story scripts stand aside. */
-  eventsDone?: boolean;
+  /** Event flags set first (EVENT_* numbers): the route's trainers already beaten, as a player passing through would have them. */
+  events?: number[];
 }
 
 const OUTDOOR = new Set(["OVERWORLD", "PLATEAU", "FOREST"]);
@@ -451,7 +451,10 @@ export function parAcross(world: WorldData, start: Place, lastMap: number, goal:
 /** Long routes through a whole dungeon, from outside one side to outside the other. */
 export function marathons(world: WorldData): Scenario[] {
   const id = (name: string) => MAP_NAMES.indexOf(name);
-  const specs: { id: string; area: Area; start: Place; lastMap: number; goal: Region; text: string; turnCap: number }[] = [
+  // EVENT_BEAT_* flags (constants/event_constants.asm): every trainer on the way already beaten,
+  // so nobody stops the walk (battles are off in the eval, and a trainer's challenge would loop).
+  const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  const specs: { id: string; area: Area; start: Place; lastMap: number; goal: Region; text: string; turnCap: number; events: number[] }[] = [
     {
       id: "marathon-mt-moon",
       area: "cave",
@@ -460,6 +463,8 @@ export function marathons(world: WorldData): Scenario[] {
       goal: { type: "region", map: id("ROUTE_4"), xMin: 24 },
       text: "Get through Mt Moon to the far side: in at its entrance (the D 3 steps north and 2 steps east of you), through the cave's floors, and out of its other exit onto Route 4 east of the mountain, toward Cerulean City. Keep track of where you've been as you go.",
       turnCap: 120,
+      // MT_MOON_1_TRAINER_0–6, MT_MOON_EXIT_SUPER_NERD, MT_MOON_3_TRAINER_0–3.
+      events: [...range(0x571, 0x577), ...range(0x579, 0x57d)],
     },
     {
       id: "marathon-viridian-forest",
@@ -469,6 +474,8 @@ export function marathons(world: WorldData): Scenario[] {
       goal: { type: "region", map: id("ROUTE_2"), yMax: 11 },
       text: "Get through Viridian Forest to the north: in at the gate just north of you, through the forest, and out of the north gate onto Route 2 beyond it, toward Pewter City. Keep track of where you've been as you go.",
       turnCap: 80,
+      // VIRIDIAN_FOREST_TRAINER_0–2.
+      events: range(0x562, 0x564),
     },
   ];
   return specs.map((m) => {
@@ -488,7 +495,7 @@ export function marathons(world: WorldData): Scenario[] {
       parTurns: Math.max(4, Math.ceil(par / 10)),
       features: ["turn", "detour", "door"],
       turnCap: m.turnCap,
-      eventsDone: true,
+      events: m.events,
     };
   });
 }

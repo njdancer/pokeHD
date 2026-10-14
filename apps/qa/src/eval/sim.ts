@@ -6,10 +6,11 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Button, decodeOverworldState, GameBoy, OVERWORLD_WATCHES, ScreenTextDecoder, TEXT_WATCHES, type OverworldWatched, type TextWatched } from "@pokehd/emu";
+import { setParty } from "@pokehd/emu/testing";
 import { parseWorld, readGlyphs, stitchOverworld, SYMBOLS, type MapData, type StitchedWorld, type WorldData } from "@pokehd/rom";
 import { describeGameBoyText, mapName } from "../game/outcome.ts";
 import type { StateLite } from "../game/screen-read.ts";
-import { blockerAt, buildTextMap } from "../game/textmap.ts";
+import { blockerAt, buildTextMap, type View } from "../game/textmap.ts";
 import type { Direction, Move } from "../game/types.ts";
 import { countSteps, DIRS, interruption, stallFrames, walkNote, type Stop } from "../game/walk.ts";
 
@@ -64,11 +65,16 @@ export interface WalkResult {
   maps: number[];
   /** Text that came up and was cleared (only joystick here, so the harness clears it). */
   textSeen: string | null;
+  /** Every cell the player stood on or stepped into on the starting map, in order. */
+  cells: { x: number; y: number }[];
+  startMap: number;
 }
 
 export interface SimOptions {
   /** Set every story event flag, so map scripts treat the story as done (fewer cutscenes in the way). */
   eventsDone?: boolean;
+  /** Event flags to set (EVENT_* numbers from constants/event_constants.asm), e.g. trainers beaten. */
+  events?: number[];
 }
 
 export class Sim {
@@ -88,9 +94,16 @@ export class Sim {
     const gb = await GameBoy.create({ rom: rom.bytes, wasmBinary: new Uint8Array(readFileSync(WASM)) });
     const sim = new Sim(gb, rom, new Uint8Array());
     sim.#intro();
+    // One strong Pokémon, so a battle the eval can't switch off (a scripted one) is over in a few
+    // taps of A: MEWTWO (0x83) at level 100.
+    setParty(gb, rom.bytes, [{ species: 0x83, level: 100 }]);
     if (opts.eventsDone) for (let i = 0; i < W.eventBytes; i++) gb.write(W.wEventFlags + i, 0xff);
     // All eight badges: gates and guards that check them stand aside.
     gb.write(SYMBOLS.wObtainedBadges.address, 0xff);
+    // NewBattle (home/overworld.asm, 0:0683) checks BIT_NO_BATTLES, which map loads clear
+    // (reload_tiles.asm): set it right as NewBattle reads it, so no wild or sighted-trainer battle
+    // starts in between the per-frame sets.
+    gb.addHook({ bank: 0, address: 0x0683 }, (g) => g.write(SYMBOLS.wStatusFlags4.address, g.read(SYMBOLS.wStatusFlags4.address) | NO_BATTLES));
     sim.#base = gb.saveState();
     return sim;
   }
@@ -132,6 +145,7 @@ export class Sim {
     const gb = this.gb;
     gb.loadState(this.#base);
     if (opts.eventsDone) for (let i = 0; i < W.eventBytes; i++) gb.write(W.wEventFlags + i, 0xff);
+    for (const e of opts.events ?? []) gb.write(W.wEventFlags + (e >> 3), gb.read(W.wEventFlags + (e >> 3)) | (1 << (e & 7)));
     const map = this.rom.world.maps[place.map];
     if (!map) throw new Error(`No map ${place.map}`);
     let done = false;
@@ -187,9 +201,21 @@ export class Sim {
     this.#settle(false);
   }
 
+  /**
+   * Fights a battle that started anyway (the game started one from a script, not NewBattle) by
+   * tapping A until it's over: the eval is about walking. Returns whether there was one.
+   */
+  #fightThrough(): boolean {
+    if (this.state().mode !== "battle") return false;
+    for (let i = 0; i < 12_000 && this.gb.read(SYMBOLS.wIsInBattle.address) !== 0; i++) this.#frame(i % 16 < 2 ? Button.A : 0);
+    for (let i = 0; i < 3000 && this.state().mode !== "overworld"; i++) this.#frame(i % 16 < 2 ? Button.A : 0);
+    this.#settle(false);
+    return true;
+  }
+
   /** The text map around the player now, with the legend (what a result shows after a plain move). */
-  textMap(s = this.state()): string {
-    return buildTextMap(this.rom.world, this.rom.stitched, s);
+  textMap(s = this.state(), view?: View): string {
+    return buildTextMap(this.rom.world, this.rom.stitched, s, view);
   }
 
   /**
@@ -268,7 +294,9 @@ export class Sim {
     trail.push(after);
     let textSeen: string | null = null;
     let to = after;
-    if (after.mode === "dialog") {
+    const fought = this.#fightThrough();
+    if (fought) to = this.state();
+    if (to.mode === "dialog") {
       textSeen = this.screenText();
       this.#clearText();
       to = this.state();
@@ -281,9 +309,11 @@ export class Sim {
     const note = walkNote({ asked: total, walked, stop: why, direction: stoppedGoing, blocker });
     const parts = [note];
     if (to.mapId !== first.mapId) parts.push(`You're now in ${mapName(to.mapId)}.`);
+    if (fought) parts.push("(A battle started, and the harness fought it for you: this drill is only about walking.)");
     if (textSeen) parts.push(`${textSeen}\n(The text was closed for you.)`);
     parts.push(this.textMap(to), PAD_LINES);
-    return { text: parts.filter(Boolean).join("\n"), asked: total, walked, stop: why, frames: this.frames - startFrames, maps, textSeen };
+    const cells = [first, ...trail, to].filter((s) => s.mapId === first.mapId).map((s) => ({ x: s.player.x, y: s.player.y }));
+    return { text: parts.filter(Boolean).join("\n"), asked: total, walked, stop: why, frames: this.frames - startFrames, maps, textSeen, cells, startMap: first.mapId };
   }
 
   /** The opening screen description for an episode, as the live player sees one after a warp. */

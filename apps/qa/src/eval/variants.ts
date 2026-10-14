@@ -114,6 +114,108 @@ class Explored {
   }
 }
 
+/**
+ * The text map clipped to what the walk revealed (Nick's idea, as a tokens test): after a walk on
+ * the same map, instead of the full 10×9 view, only the strips of cells that came into view (every
+ * window along the way, less the view before the walk), labelled in steps from the player, who is
+ * 0,0. A walk longer than a screen shows every row it passed. `ground` adds the row or column
+ * just inside the old view's edge, already seen, to line the strips up against.
+ */
+function clippedMap(sim: Sim, walk: WalkResult, ground: boolean): string | null {
+  const s = sim.state();
+  const cells = walk.cells;
+  if (s.mapId !== walk.startMap || cells.length < 2 || s.mode !== "overworld") return null;
+  const from = cells[0]!;
+  const view = (c: { x: number; y: number }) => ({ x0: c.x - 4, x1: c.x + 5, y0: c.y - 4, y1: c.y + 4 });
+  const old = view(from);
+  const inOld = (x: number, y: number) => x >= old.x0 && x <= old.x1 && y >= old.y0 && y <= old.y1;
+  const fresh = new Set<string>();
+  for (const c of cells) {
+    const v = view(c);
+    for (let y = v.y0; y <= v.y1; y++) for (let x = v.x0; x <= v.x1; x++) if (!inOld(x, y)) fresh.add(`${x},${y}`);
+  }
+  if (!fresh.size) return "Nothing new came into view.";
+  const pts = [...fresh].map((k) => k.split(",").map(Number) as [number, number]);
+  // A big text map around the player, to read any cell from.
+  const reach = 4 + Math.max(...pts.map(([x, y]) => Math.max(Math.abs(x - s.player.x), Math.abs(y - s.player.y))));
+  const big = sim.textMap(s, { left: reach, right: reach, up: reach, down: reach }).split("\n").slice(1, 2 * reach + 2).map((l) => l.slice(l.indexOf(" ") + 1));
+  const cell = (x: number, y: number) => big[y - s.player.y + reach]?.[x - s.player.x + reach] ?? "#";
+  const strips: string[] = [];
+  const rel = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+  const strip = (name: string, xs: [number, number], ys: [number, number], seen: Set<string>) => {
+    const lines = [`New ${name} (columns ${rel(xs[0] - s.player.x)} to ${rel(xs[1] - s.player.x)}, rows ${rel(ys[0] - s.player.y)} to ${rel(ys[1] - s.player.y)}):`];
+    for (let y = ys[0]; y <= ys[1]; y++) {
+      let row = "";
+      for (let x = xs[0]; x <= xs[1]; x++) row += cell(x, y);
+      lines.push(`${rel(y - s.player.y).padStart(3)} ${row}${seen.has(String(y)) ? "   (seen before)" : ""}`);
+    }
+    strips.push(lines.join("\n"));
+  };
+  const xsAll = pts.map((p) => p[0]);
+  const north = pts.filter(([, y]) => y < old.y0);
+  const south = pts.filter(([, y]) => y > old.y1);
+  if (north.length) {
+    const ys: [number, number] = [Math.min(...north.map((p) => p[1])), old.y0 - 1 + (ground ? 1 : 0)];
+    strip("to the north", [Math.min(...xsAll), Math.max(...xsAll)], ys, new Set(ground ? [String(old.y0)] : []));
+  }
+  if (south.length) {
+    const ys: [number, number] = [old.y1 + 1 - (ground ? 1 : 0), Math.max(...south.map((p) => p[1]))];
+    strip("to the south", [Math.min(...xsAll), Math.max(...xsAll)], ys, new Set(ground ? [String(old.y1)] : []));
+  }
+  const side = pts.filter(([, y]) => y >= old.y0 && y <= old.y1);
+  const east = side.filter(([x]) => x > old.x1);
+  const west = side.filter(([x]) => x < old.x0);
+  const cols = (name: string, xs: [number, number]) => strip(name, xs, [old.y0, old.y1], new Set());
+  if (east.length) cols("to the east", [old.x1 + 1 - (ground ? 1 : 0), Math.max(...east.map((p) => p[0]))]);
+  if (west.length) cols("to the west", [Math.min(...west.map((p) => p[0])), old.x0 - 1 + (ground ? 1 : 0)]);
+  return `${strips.join("\n")}\nYou're the @ at 0,0 (columns count east, rows count south${ground ? "; the row or column marked seen before, or the first column of a side strip, was already in your last view" : ""}).`;
+}
+
+/**
+ * The text map with a space between cells. Run together, a row like "##########" is about three
+ * tokens to the model (90 cells cost ~43 tokens), so it can't see columns one by one; spaced,
+ * each cell is its own token (~100 tokens for the 90).
+ */
+function spaceCells(text: string): string {
+  const lines = text.split("\n");
+  const head = lines.findIndex((l) => /^(Turn \d+\. .*\n?)?\s*0123456789$/.test(l) || /0123456789$/.test(l));
+  if (head < 0) return text;
+  const legend = lines.findIndex((l, i) => i > head && l.startsWith("Legend:"));
+  for (let i = head; i < legend; i++) {
+    const l = lines[i]!;
+    if (i === head) lines[i] = l.replace(/0123456789$/, "0 1 2 3 4 5 6 7 8 9");
+    else lines[i] = `${l.slice(0, 2)}${[...l.slice(2)].join(" ")}`;
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The text map in symbols that are one token each to Haiku, alone and beside each other (checked
+ * with tok.ts: ASCII runs like "##########" merge to ~3 tokens; these stay at one a cell), so the
+ * model sees every cell without the extra tokens spacing costs.
+ */
+const GLYPHS: Record<string, string> = {
+  "@": "★", ".": "□", "#": "■", N: "人", D: "門", '"': "草", "~": "水", S: "木", o: "●", O: "石", "/": "△", "^": "山", _: "田", v: "v", "<": "←", ">": "→",
+};
+function glyphCells(text: string): string {
+  const lines = text.split("\n");
+  const head = lines.findIndex((l) => /0123456789$/.test(l));
+  if (head < 0) return text;
+  const legend = lines.findIndex((l, i) => i > head && l.startsWith("Legend:"));
+  if (legend < 0) return text;
+  for (let i = head + 1; i < legend; i++) {
+    const l = lines[i]!;
+    lines[i] = `${l.slice(0, 2)}${[...l.slice(2)].map((c) => GLYPHS[c] ?? c).join("")}`;
+  }
+  const [intro, rest] = [lines[legend]!.slice(0, "Legend: ".length), lines[legend]!.slice("Legend: ".length)];
+  const end = rest.indexOf(". You're");
+  const entries = rest.slice(0, end).split(", ").map((e) => `${GLYPHS[e[0]!] ?? e[0]}${e.slice(1)}`);
+  const swap = (t: string) => t.replace(/between \^ and/g, `between ${GLYPHS["^"]} and`).replace(/between _ and/g, `between ${GLYPHS["_"]} and`).replace(/stairs \/\)/g, `stairs ${GLYPHS["/"]})`);
+  lines[legend] = `${intro}${swap(entries.join(", "))}${rest.slice(end)}`;
+  for (let i = legend + 1; i < lines.length; i++) lines[i] = lines[i]!.replace("(D, under the @)", `(${GLYPHS["D"]}, under the ${GLYPHS["@"]})`);
+  return lines.join("\n");
+}
+
 /** The pieces a variant can switch on; each variant is its parent plus one more. */
 export interface Features {
   exitNote?: boolean;
@@ -123,6 +225,12 @@ export interface Features {
   fromEntry?: boolean;
   /** A fixed map of everything seen on this map so far. */
   exploredMap?: boolean;
+  /** Only the strips a walk revealed, in place of the full text map; "ground" adds one seen row/column. */
+  clip?: "plain" | "ground";
+  /** A space between the text map's cells, one token each. */
+  spaced?: boolean;
+  /** One-token symbols for the text map's cells. */
+  glyphs?: boolean;
 }
 
 function build(id: string, note: string, parent: string | null, f: Features): Variant {
@@ -138,7 +246,38 @@ function build(id: string, note: string, parent: string | null, f: Features): Va
   const extra = (sim: Sim, walk: WalkResult, before: { x: number; y: number; map: number }) =>
     // The exit note is in the text map itself now (textmap.ts underfoot), so only the rest is added.
     [f.netMove ? netMove(walk, before, sim) : null, tracking(sim)].filter(Boolean).join("\n") || null;
-  const tool = joystick({ ...(f.description && { description: f.description }), extra });
+  const base = joystick({ ...(f.description && { description: f.description }), extra });
+  const spaced: VariantTool = { ...base, run: (sim, input, turn) => {
+    const out = base.run(sim, input, turn);
+    return { ...out, text: spaceCells(out.text) };
+  } };
+  const glyphs: VariantTool = { ...base, run: (sim, input, turn) => {
+    const out = base.run(sim, input, turn);
+    return { ...out, text: glyphCells(out.text) };
+  } };
+  const tool: VariantTool = f.glyphs
+    ? glyphs
+    : f.spaced
+    ? spaced
+    : !f.clip
+    ? base
+    : {
+        ...base,
+        run(sim, input, turn) {
+          const out = base.run(sim, input, turn);
+          const clipped = out.walk ? clippedMap(sim, out.walk, f.clip === "ground") : null;
+          if (!clipped) return out;
+          // Swap the full map (header, nine rows, legend) for the strips; keep everything else.
+          const lines = out.text.replace(/^Turn \d+\. /, "").split("\n");
+          const head = lines.findIndex((l) => /^\s*0123456789$/.test(l));
+          const legend = lines.findIndex((l) => l.startsWith("Legend:"));
+          if (head < 0 || legend < 0) return out;
+          const prefix = lines.slice(0, head).join("\n");
+          const legendLine = lines[legend]!.replace(/You're at column \d+, row \d+, facing (\w+)/, "You're facing $1");
+          const text = [prefix, clipped, legendLine, ...lines.slice(legend + 1)].filter(Boolean).join("\n");
+          return { ...out, text: `Turn ${turn}. ${text}` };
+        },
+      };
   return {
     id,
     note,
@@ -147,7 +286,8 @@ function build(id: string, note: string, parent: string | null, f: Features): Va
     tools: { joystick: tool },
     opening: (sim) => {
       memory.set(sim, new Explored());
-      return withExtra(sim.opening(), tracking(sim));
+      const opening = withExtra(sim.opening(), tracking(sim));
+      return f.spaced ? spaceCells(opening) : f.glyphs ? glyphCells(opening) : opening;
     },
   };
 }
@@ -163,4 +303,8 @@ export const VARIANTS: Record<string, Variant> = {
   "exit-recentre": build("exit-recentre", "Description explains the map recentres on you each step, and how to turn a column and row into arrows.", "exit-note", { exitNote: true, description: RECENTRE }),
   "from-entry": build("from-entry", "Adds a line saying where you are from where you came into the map (a fixed origin).", "exit-note", { exitNote: true, fromEntry: true }),
   "explored-map": build("explored-map", "Adds a fixed map of everything seen on this map so far (E where you came in), with the from-entry line.", "from-entry", { exitNote: true, fromEntry: true, exploredMap: true }),
+  clipped: build("clipped", "Text map clipped to the strips a walk revealed (no repeats of tiles in the last view).", "from-entry", { exitNote: true, fromEntry: true, clip: "plain" }),
+  "clipped-ground": build("clipped-ground", "Clipped text map plus one already-seen row or column to line the new strips up against.", "from-entry", { exitNote: true, fromEntry: true, clip: "ground" }),
+  spaced: build("spaced", "A space between the text map's cells, so each cell is one token (run together, 10 cells are ~3 tokens).", "from-entry", { exitNote: true, fromEntry: true, spaced: true }),
+  glyphs: build("glyphs", "Text map cells in one-token symbols (□ floor, ■ wall, ★ you…), one token a cell without spaces.", "from-entry", { exitNote: true, fromEntry: true, glyphs: true }),
 };

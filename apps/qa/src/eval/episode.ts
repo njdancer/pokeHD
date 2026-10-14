@@ -74,7 +74,7 @@ export function openingText(scenario: Scenario, variant: Variant, sim: Sim): str
 
 export async function playEpisode(sim: Sim, scenario: Scenario, variant: Variant, opts: { model: string; rep: number }): Promise<EpisodeResult> {
   const started = Date.now();
-  sim.teleport(scenario.start, scenario.lastMap, { eventsDone: !!scenario.eventsDone });
+  sim.teleport(scenario.start, scenario.lastMap, { events: scenario.events ?? [] });
   const result: EpisodeResult = {
     scenario: scenario.id,
     variant: variant.id,
