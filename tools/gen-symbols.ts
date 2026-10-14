@@ -326,10 +326,8 @@ export const ALLOWLIST: readonly string[] = [
   "wTopMenuItemY",
   // Learning a fifth move (LearnMove, from a TM or a level): its questions, asked by the page,
   // told apart by their caller in LearnMove … LearnedMove1Text (QA bugs 47, 48)
-  "AbandonLearning",
   "HMMoves",
   "LearnMove",
-  "TryingToLearn",
   "LearnedMove1Text",
   "wLearnMoveMonName",
   "wMoveNum",
