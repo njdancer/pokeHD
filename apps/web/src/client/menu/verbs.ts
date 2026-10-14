@@ -6,7 +6,41 @@ import { niceItem, niceMon, type MenuEnv } from "./env.tsx";
 import type { Nav, Purpose } from "./nav.tsx";
 import type { VerbSpec } from "./ui.tsx";
 
-export const ID = { POKE_BALL: 4, TOWN_MAP: 5, BICYCLE: 6, ANTIDOTE: 0x0b, SUPER_POTION: 0x13, POTION: 0x14, ESCAPE_ROPE: 0x1d, REPEL: 0x1e, HM01: 0xc4 } as const;
+export const ID = {
+  POKE_BALL: 4,
+  TOWN_MAP: 5,
+  BICYCLE: 6,
+  ANTIDOTE: 0x0b,
+  SUPER_POTION: 0x13,
+  POTION: 0x14,
+  ESCAPE_ROPE: 0x1d,
+  REPEL: 0x1e,
+  POKE_DOLL: 0x33,
+  SUPER_REPEL: 0x38,
+  MAX_REPEL: 0x39,
+  COIN_CASE: 0x45,
+  ITEMFINDER: 0x47,
+  POKE_FLUTE: 0x49,
+  OLD_ROD: 0x4c,
+  GOOD_ROD: 0x4d,
+  SUPER_ROD: 0x4e,
+  HM01: 0xc4,
+} as const;
+
+const REPELS = new Set<number>([ID.REPEL, ID.SUPER_REPEL, ID.MAX_REPEL]);
+/**
+ * Field items whose ItemUsePtrTable routine works outside battle with no Pokémon to pick, beyond
+ * the ones with their own rules below (Repels, Escape Rope, Bicycle, Town Map). The ones in
+ * UsableItems_CloseMenu close the menu, so what they do is seen (QA bug 72: the rods had no Use).
+ */
+const FIELD_USE: Record<number, { label: string; note?: string; close: boolean }> = {
+  [ID.OLD_ROD]: { label: "Fish", note: "Face the water first", close: true },
+  [ID.GOOD_ROD]: { label: "Fish", note: "Face the water first", close: true },
+  [ID.SUPER_ROD]: { label: "Fish", note: "Face the water first", close: true },
+  [ID.ITEMFINDER]: { label: "Use it", note: "Looks for hidden items nearby", close: true },
+  [ID.POKE_FLUTE]: { label: "Play it", close: true },
+  [ID.COIN_CASE]: { label: "Count the coins", close: false },
+};
 
 export const heals = (it: Item) => it.kind === "Healing";
 /** Used on a Pokémon: medicine, and the boosts (stones, vitamins, RARE CANDY), which the game refuses in battle. */
@@ -60,7 +94,10 @@ export function monVerbs(env: MenuEnv, nav: Nav, i: number, purpose?: Purpose): 
 export function itemVerbs(env: MenuEnv, nav: Nav, it: Item, purpose?: Purpose, count = 1): VerbSpec[] {
   const { model, moment, actions } = env;
   const battle = inBattle(moment);
-  if (!it.count && it.kind !== "Key" && !isMachine(it)) return [];
+  // Run out of (the journal's past items, count 0). Not "no count": key items have none, and the
+  // ones shelved under Travel (BICYCLE, the rods, ITEMFINDER, POKé FLUTE) were taken for run out
+  // and offered nothing (QA bug 72).
+  if (it.count === 0 && !isMachine(it)) return [];
   if (moment === "shop" && nav.sheet)
     return it.kind === "Key" || !it.sell ? [{ label: "Can't sell this", off: "Important" }] : [{ label: `Sell ${count} for ₽${(it.sell * count).toLocaleString()}`, run: () => (done(env, nav, actions.sell(it.id, count)), nav.reset()) }];
   if (purpose && "giftTo" in purpose) {
@@ -75,7 +112,13 @@ export function itemVerbs(env: MenuEnv, nav: Nav, it: Item, purpose?: Purpose, c
   if (onMon(it)) return [{ label: "Use it on…", note: battle && !notNow(it, battle) ? "Uses your turn" : undefined, off: notNow(it, battle), run: () => nav.go({ k: "team", for: { use: it.id } }) }];
   if (it.kind === "Balls")
     return battle ? [{ label: "Throw it", note: moment === "trainer" ? "The trainer will block it" : "Uses your turn", run: () => done(env, nav, actions.throwBall(it.id), true) }] : [{ label: "Throw it", off: "In a wild battle" }];
-  if (it.id === ID.REPEL) return battle ? [{ label: "Use it", off: "Not in battle" }] : [{ label: model.repel ? `Use it (${model.repel} steps left)` : "Use it", run: () => done(env, nav, actions.useItem(it.id), true) }];
+  // The battle items (X ATTACK, GUARD SPEC., DIRE HIT, POKé DOLL…): the game says "not the time"
+  // outside one; in one, the battle's bag uses them, a turn's worth.
+  if (it.kind === "Battle")
+    return battle ? [{ label: "Use it", note: it.id === ID.POKE_DOLL && moment === "trainer" ? "Only gets you out of wild battles" : "Uses your turn", run: () => done(env, nav, actions.useItem(it.id), true) }] : [{ label: "Use it", off: "Only in battle" }];
+  const field = FIELD_USE[it.id];
+  if (field) return battle ? [{ label: field.label, off: "Not in battle" }] : [{ label: field.label, note: field.note, run: () => done(env, nav, actions.useItem(it.id), field.close) }];
+  if (REPELS.has(it.id)) return battle ? [{ label: "Use it", off: "Not in battle" }] : [{ label: model.repel ? `Use it (${model.repel} steps left)` : "Use it", run: () => done(env, nav, actions.useItem(it.id), true) }];
   // ItemUseEscapeRope: only where the map's tileset is in EscapeRopeTilesets (caves, forests,
   // buildings like Silph Co.), never in a battle or Agatha's room.
   if (it.id === ID.ESCAPE_ROPE)

@@ -47,7 +47,8 @@ describe("monVerbs after a pick from the bag", () => {
 // greyed out "Inside caves" in Mt. Moon, exactly where ItemUseEscapeRope lets it work).
 describe("itemVerbs for the field items", () => {
   const ROPE: Item = { id: ID.ESCAPE_ROPE, name: "ESCAPE ROPE", kind: "Travel", count: 1, text: "" };
-  const BIKE: Item = { id: ID.BICYCLE, name: "BICYCLE", kind: "Key", text: "" };
+  // A key item with no count, on the Travel shelf, as the live model has it (QA bug 72).
+  const BIKE: Item = { id: ID.BICYCLE, name: "BICYCLE", kind: "Travel", text: "" };
   function at(field: MenuModel["field"], moment: Moment = "explore", biking = false) {
     const s = setup(moment);
     Object.assign(s.env.model, { field, biking, bag: [ROPE, BIKE] });
@@ -120,5 +121,66 @@ describe("monVerbs for a Pokémon that knows CUT", () => {
     expect(actions.cut).toHaveBeenCalledWith(0);
     expect(env.toast).not.toHaveBeenCalledWith(expect.stringMatching(/nothing to cut/i));
     expect(nav.close).toHaveBeenCalled();
+  });
+});
+
+// QA bug 72: the OLD ROD's page had no Use, so fishing was impossible. Every item the start menu's
+// ITEM list uses outside battle with no Pokémon to pick goes through the game's own UseItem.
+describe("itemVerbs for the field items the game uses from its bag", () => {
+  const item = (id: number, name: string, kind: Item["kind"], count?: number): Item => ({ id, name, kind, count, text: "" });
+  const ROD = item(ID.OLD_ROD, "OLD ROD", "Travel");
+  function at(moment: Moment = "explore") {
+    const s = setup(moment);
+    Object.assign(s.env.model, { field: { escapeRope: false, bike: true }, biking: false, repel: 0 });
+    return { ...s, nav: { ...s.nav, sheet: moment !== "explore" } };
+  }
+
+  it("fishes with a rod through UseItem, closing the menu to show it", () => {
+    for (const id of [ID.OLD_ROD, ID.GOOD_ROD, ID.SUPER_ROD]) {
+      const { env, nav, actions } = at();
+      const [v] = itemVerbs(env, nav, { ...ROD, id });
+      expect(v).toMatchObject({ label: "Fish" });
+      expect(v!.off).toBeUndefined();
+      v!.run!();
+      expect(actions.useItem).toHaveBeenCalledWith(id);
+      expect(nav.close).toHaveBeenCalled();
+    }
+  });
+
+  it("uses the ITEMFINDER, POKé FLUTE, COIN CASE and every Repel", () => {
+    const cases: [Item, boolean][] = [
+      [item(ID.ITEMFINDER, "ITEMFINDER", "Travel"), true],
+      [item(ID.POKE_FLUTE, "POKé FLUTE", "Travel"), true],
+      [item(ID.COIN_CASE, "COIN CASE", "Key"), false],
+      [item(ID.REPEL, "REPEL", "Travel", 1), true],
+      [item(ID.SUPER_REPEL, "SUPER REPEL", "Travel", 1), true],
+      [item(ID.MAX_REPEL, "MAX REPEL", "Travel", 1), true],
+    ];
+    for (const [it, closes] of cases) {
+      const { env, nav, actions } = at();
+      const [v] = itemVerbs(env, nav, it);
+      expect(v?.off, it.name).toBeUndefined();
+      v!.run!();
+      expect(actions.useItem, it.name).toHaveBeenCalledWith(it.id);
+      expect(nav.close, it.name).toHaveBeenCalledTimes(closes ? 1 : 0);
+    }
+  });
+
+  it("offers nothing for an item run out of", () => {
+    const { env, nav } = at();
+    expect(itemVerbs(env, nav, { ...item(ID.SUPER_REPEL, "SUPER REPEL", "Travel"), count: 0, gone: "Used up" })).toEqual([]);
+  });
+
+  it("greys them out in battle, and the battle items outside one", () => {
+    const wild = at("wild");
+    expect(itemVerbs(wild.env, wild.nav, ROD)[0]!.off).toBe("Not in battle");
+    const town = at();
+    const xAttack = item(0x41, "X ATTACK", "Battle", 1);
+    expect(itemVerbs(town.env, town.nav, xAttack)[0]!.off).toBe("Only in battle");
+    const [use] = itemVerbs(wild.env, wild.nav, xAttack);
+    expect(use).toMatchObject({ label: "Use it", note: "Uses your turn" });
+    expect(use!.off).toBeUndefined();
+    use!.run!();
+    expect(wild.actions.useItem).toHaveBeenCalledWith(0x41);
   });
 });

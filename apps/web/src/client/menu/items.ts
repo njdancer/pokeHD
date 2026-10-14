@@ -93,7 +93,13 @@ const LINES: Record<number, string> = {
   0x3c: "Gives one Pokémon 50 HP back.",
   0x3d: "Gives one Pokémon 60 HP back.",
   0x3e: "Gives one Pokémon 80 HP back.",
+  0x45: "Holds the coins for the Game Corner's slots.",
   0x46: "A delivery for PROF. OAK.",
+  0x47: "Beeps when an item is hidden nearby.",
+  0x49: "A tune that wakes up a sleeping Pokémon.",
+  0x4c: "Fish where you face the water. Only MAGIKARP bite.",
+  0x4d: "Fish where you face the water. Better fish bite.",
+  0x4e: "Fish where you face the water. The best fish bite.",
 };
 
 /** A line about the item, or a shelf's line. */
