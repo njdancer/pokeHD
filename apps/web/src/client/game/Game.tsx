@@ -70,7 +70,7 @@ import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "..
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
 import {
-  BattleDexPage, BattleItemUse, BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen, partyScreenMessage, type BattleFrame,
+  BattleDexPage, BattleItemUse, dexMenuStart, BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen, partyScreenMessage, type BattleFrame,
 } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { BattleMenu, type BattleKey } from "./BattleMenu.tsx";
@@ -776,10 +776,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           if (menuRef.current && h) {
             dexHeldRef.current = true;
             if (opened.kind === "data" && latest?.mode === "battle") battleDexRef.current.opened();
-            const dexNo = opened.kind === "data" ? pokedexNumber(rom, opened.species) : 0;
             // The game waits on its page for A or B: backing out of the Pokémon's page shuts the
             // menu, so one tap goes on (to the nickname after a catch).
-            setMenuOpen({ tab: "dex", ...(dexNo ? { screen: { k: "entry", dex: dexNo }, backCloses: true } : {}) });
+            setMenuOpen(dexMenuStart(rom, opened));
             return;
           }
           if (!h || dexLookRef.current === "off") return h?.passDex();

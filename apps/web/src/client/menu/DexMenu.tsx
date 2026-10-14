@@ -5,7 +5,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import { Env, useEnv, type MenuEnv } from "./env.tsx";
 import { CloseIcon, TabIcon, type TabId } from "./icons.tsx";
-import { useFreshTapGuard } from "./fresh-tap.ts";
+import { DEX_MOTION, motionLength } from "@pokehd/engine/dex/motion";
+import { quietTapGuard, useFreshTapGuard } from "./fresh-tap.ts";
 import { NavContext, rootOf, TABS, withoutPicks, type Nav, type Screen } from "./nav.tsx";
 import type { Request } from "./model.ts";
 import { EntryScreen, PokemonScreen } from "./screens/Pokemon.tsx";
@@ -242,6 +243,12 @@ function useSideGrip(dexRef: RefObject<HTMLDivElement | null>, side: Side, setSi
   };
 }
 
+/**
+ * How long a Pokédex the game opened takes no taps (quietTapGuard): its flight in from the corner
+ * (motion.ts) and half a second more, the moment a player tapping through messages taps again.
+ */
+const GAME_OPEN_QUIET_MS = motionLength(DEX_MOTION) + 500;
+
 /** `closesAt`: the screen the menu opened on, when backing out of it shuts the menu. */
 type Place = { tab: TabId; stacks: Record<TabId, Screen[]>; motion: Motion; closesAt?: Screen };
 
@@ -258,6 +265,9 @@ function Dex({ open, onClose, place, layout: forced, side, setSide, floating, co
 }) {
   const [{ tab, stacks, motion, closesAt }, setState] = place;
   const stack = stacks[tab];
+  // Only the game opens it on a screen that closes it (a caught Pokémon's page): taps meant for
+  // the game's messages as it flies in don't land on it (QA bug 73).
+  const guard = useMemo(() => (open && closesAt && !copy ? quietTapGuard(GAME_OPEN_QUIET_MS) : null), [open, closesAt, copy]);
   const env = useEnv();
   const update = (t: TabId, next: Screen[], how: Motion) => setState((st) => ({ ...st, tab: t, stacks: { ...st.stacks, [t]: next }, motion: how }));
   const nav: Nav = {
@@ -284,7 +294,7 @@ function Dex({ open, onClose, place, layout: forced, side, setSide, floating, co
     return () => removeEventListener("keydown", key);
   }, [open, onClose, copy]);
   return (
-    <div ref={ref} className={`m-dex${floating ? " floating" : ""}${open ? " open" : ""}`} data-layout={layout} data-side={grip.side} data-dragging={grip.dragging || undefined} style={grip.style} role="dialog" aria-label="Pokédex" aria-hidden={!open || copy} inert={!open || copy}>
+    <div ref={ref} className={`m-dex${floating ? " floating" : ""}${open ? " open" : ""}`} data-layout={layout} data-side={grip.side} data-dragging={grip.dragging || undefined} style={grip.style} role="dialog" aria-label="Pokédex" aria-hidden={!open || copy} inert={!open || copy} {...guard}>
       <NavContext.Provider value={nav}>
         <div className={`m-screen m-${motion}`} key={`${tab} ${stack.length} ${top.k}`}>
           {render(top)}

@@ -294,6 +294,11 @@ export const ALLOWLIST: readonly string[] = [
   "UsableItems_PartyMenu",
   "MoveNames",
   "UseItem",
+  // The bag's item name for "<PLAYER> used OLD ROD!" (StartMenu_Item, QA bug 73)
+  "CopyToStringBuffer",
+  "DelayFrames",
+  "GetItemName",
+  "wNamedObjectIndex",
   "hSwapTemp",
   "hTextID",
   "wActionResultOrTookBattleTurn",
