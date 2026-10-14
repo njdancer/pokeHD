@@ -93,7 +93,7 @@ function walker(game: Game, burst: number, latency: number) {
   return async (legs: { direction: Direction; steps: number }[]) => {
     delete (globalThis as { __qaStickArmed?: boolean }).__qaStickArmed;
     const start = game.state;
-    expect(walkPath({ legs: legs.map((l) => ({ ...DIRS[l.direction], steps: l.steps })), centre, reach: 40, stall: stallFrames(8), idleMs: 5000 })).toBe(true);
+    expect(walkPath({ legs: legs.map((l) => ({ ...DIRS[l.direction], steps: l.steps })), centre, reach: 40, stall: stallFrames(8), idleMs: 5000, maxMs: 30_000 })).toBe(true);
     for (const fn of listeners) fn({ target: stick, pointerId: 3 }); // the touch on the stick's centre
     const result = await (globalThis as typeof globalThis & { __qaWalk: Promise<PathResult> }).__qaWalk;
     game.hold(0, latency * 2); // and its end

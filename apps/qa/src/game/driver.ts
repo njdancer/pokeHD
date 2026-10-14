@@ -57,6 +57,17 @@ const READY_TIMEOUT_MS = 120_000;
  * evolution or a long scene, after which the result says what the game was still doing.
  */
 const READY_MAX_MS = 15_000;
+/**
+ * The longest one action (a tap, a swipe, a walk) takes from the call to its result, whatever the
+ * game does: past it the harness lets go of the screen and says what's on it, with a note. Room
+ * for a wait before (READY_MAX_MS), a 40-step walk and a wait after. A walk in a dark cave once
+ * never ended (it took the cave's dim palette for a fade still under way) and the turn hung.
+ */
+export const ACTION_MAX_MS = 45_000;
+/** Kept back from an action's deadline to read and describe what's on screen. */
+const OUTCOME_MS = 6_000;
+/** The longest one look into the page may take (a page that stopped answering). */
+const EVAL_MAX_MS = 10_000;
 const SETTLE_CALM_MS = 500;
 /** Emulated frames the game must run unchanged to count as settled (a step is 16). */
 const SETTLE_CALM_FRAMES = 20;
@@ -70,6 +81,24 @@ const DEFAULT_ROM = fileURLToPath(new URL("../../../../rom/pokeblue.gb", import.
 const IGNORED_CONSOLE = [/Failed to load resource/, /\/api\/room/, /EventSource|\/events\b|:4545/];
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** `p`, or an error once `ms` has gone by without it. */
+export function within<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} didn't answer in ${Math.round(ms / 1000)} s`)), Math.max(0, ms));
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
+
+/** In the page: ends a walk `walkPath` is following, lifting the thumb (see walk.ts). */
+const stopWalk = () => void ((globalThis as typeof globalThis & { __qaWalkStop?: boolean }).__qaWalkStop = true);
+
+/** One action under way: when it must stop waiting, and whether the harness gave up on it (its touches then stop). */
+interface Call {
+  deadline: number;
+  dead: boolean;
+}
 
 interface Rom {
   world: WorldData;
@@ -179,7 +208,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
 
   async function read(): Promise<ScreenRead> {
     const frame = await gameFrame();
-    const r = await frame.evaluate(readScreen, { slowSince });
+    const r = await within(frame.evaluate(readScreen, { slowSince }), EVAL_MAX_MS, "The game's page");
     const newest = r.slow.at(-1);
     if (newest) slowSince = newest.at;
     feed(r);
@@ -220,7 +249,9 @@ export function createDriver(opts: DriverOptions): GameDriver {
     return { x: box.x + (x * box.width) / GAME_SIZE.width, y: box.y + (y * box.height) / GAME_SIZE.height };
   }
 
-  async function touch(type: "touchStart" | "touchMove" | "touchEnd", at?: { x: number; y: number }) {
+  async function touch(type: "touchStart" | "touchMove" | "touchEnd", at?: { x: number; y: number }, call?: Call) {
+    // An action the harness gave up on touches nothing more (the next one may have a finger down).
+    if (call?.dead) throw new Error("The action ran out of time");
     await need(input).send("Input.dispatchTouchEvent", {
       type,
       touchPoints: at ? [{ x: at.x, y: at.y, id: 1, radiusX: 8, radiusY: 8, force: 1 }] : [],
@@ -241,11 +272,12 @@ export function createDriver(opts: DriverOptions): GameDriver {
 
   /**
    * Waits until the game will take the player's next input (`readiness`: the page's word, no fade,
-   * no step) and the screen has stopped changing, or `maxMs`. `busy` says what the game was still
-   * doing if it ran out of time.
+   * no step) and the screen has stopped changing, or `maxMs` (or the action's `deadline`). `busy`
+   * says what the game was still doing if it ran out of time, after `ms`.
    */
-  async function settle(minMs = 250, maxMs = READY_MAX_MS, fromMap?: number): Promise<{ read: ScreenRead; busy: string | null }> {
+  async function settle(minMs = 250, maxMs = READY_MAX_MS, fromMap?: number, deadline = Infinity): Promise<Settled> {
     const start = Date.now();
+    const end = Math.min(start + maxMs, deadline);
     await sleep(minMs);
     let sig = "";
     let since = Date.now();
@@ -273,16 +305,20 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const quiet = ran && Date.now() - since >= SETTLE_CALM_MS;
       if (ready.ready && quiet) {
         stuck = null;
-        return { read: r, busy: null };
+        return { read: r, busy: null, ms: Date.now() - start };
       }
-      if (Date.now() - start > maxMs) {
+      if (Date.now() > end) {
         const busy = ready.ready ? "the screen still changing" : ready.why;
         stuck = stuckKey(r);
-        return { read: r, busy };
+        return { read: r, busy, ms: Date.now() - start };
       }
       await sleep(100);
     }
   }
+
+  type Settled = { read: ScreenRead; busy: string | null; ms: number };
+  type Waited = { busy: string; ms: number } | null;
+  const waited = (s: Settled): Waited => (s.busy ? { busy: s.busy, ms: s.ms } : null);
 
   const stuckKey = (r: ScreenRead) => JSON.stringify([signature(r), r.input]);
 
@@ -291,10 +327,10 @@ export function createDriver(opts: DriverOptions): GameDriver {
    * of time (then the action may be just what it's waiting for). What it was still busy with, if
    * it ran out of time again.
    */
-  async function untilReady(): Promise<string | null> {
+  async function untilReady(deadline: number): Promise<Waited> {
     const r = await read();
     if (readiness(r).ready || (stuck !== null && stuck === stuckKey(r))) return null;
-    return (await settle(0)).busy;
+    return waited(await settle(0, READY_MAX_MS, undefined, deadline));
   }
 
   /** The page's messages since it last told them (and none from before a reload). */
@@ -315,12 +351,49 @@ export function createDriver(opts: DriverOptions): GameDriver {
   }
 
   /** The result's notes on waiting: before the action, and after it. */
-  function waitNotes(before: string | null, after: string | null): string[] {
-    const secs = READY_MAX_MS / 1000;
+  function waitNotes(before: Waited, after: Waited): string[] {
+    const secs = (w: NonNullable<Waited>) => Math.round(w.ms / 1000);
     return [
-      before ? `(The game was still busy with ${before} after ${secs} s, so your action went in anyway.)` : "",
-      after ? `(The game was still busy with ${after} after ${secs} s. Your next action waits for it first.)` : "",
+      before ? `(The game was still busy with ${before.busy} after ${secs(before)} s, so your action went in anyway.)` : "",
+      after ? `(The game was still busy with ${after.busy} after ${secs(after)} s. Your next action waits for it first.)` : "",
     ].filter(Boolean);
+  }
+
+  /**
+   * Runs one action with a hard deadline (ACTION_MAX_MS). The action itself stops waiting at
+   * `call.deadline`; should it still not be done (a look into the page that never came back), the
+   * harness lets go of the screen and returns what's on it.
+   */
+  async function bounded(work: (call: Call) => Promise<Outcome>): Promise<Outcome> {
+    const call: Call = { deadline: Date.now() + ACTION_MAX_MS - OUTCOME_MS, dead: false };
+    const done = work(call);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<null>((r) => (timer = setTimeout(() => r(null), ACTION_MAX_MS)));
+    try {
+      const got = await Promise.race([done, late]);
+      if (got) return got;
+    } finally {
+      clearTimeout(timer);
+    }
+    call.dead = true;
+    done.catch(() => {});
+    return giveUp();
+  }
+
+  /** After an action ran out of time: lift every touch, stop any walk, and say what's on screen. */
+  async function giveUp(): Promise<Outcome> {
+    const secs = ACTION_MAX_MS / 1000;
+    logLine(`[qa] an action ran past ${secs} s; letting go`);
+    await within(touch("touchEnd"), 2000, "Lifting the touch").catch(() => {});
+    const frame = await within(gameFrame(), 3000, "The game's frame").catch(() => null);
+    if (frame) await within(frame.evaluate(stopWalk), 2000, "Stopping the walk").catch(() => {});
+    const r = await read().catch(() => null);
+    if (!r) return { text: `(The game's page didn't answer for ${secs} s, so the harness gave up and let go of the screen. It may be stuck: take a screenshot, and restart_game if it stays that way.)` };
+    stuck = stuckKey(r);
+    const ready = readiness(r);
+    const o = await within(outcome(null, r), 5000, "Reading the screen").catch(() => null);
+    const note = `(The game was still busy${ready.ready ? "" : ` with ${ready.why}`} after ${secs} s, so the harness stopped waiting and let go of the screen. This is what's on it now; your next action doesn't wait on the same again.)`;
+    return { text: [note, o?.text ?? ""].filter(Boolean).join("\n") };
   }
 
   /** Text boxes decoded from the Game Boy screen, for screens the page draws none of its own for. */
@@ -375,17 +448,19 @@ export function createDriver(opts: DriverOptions): GameDriver {
     return { text: parts.join("\n") };
   }
 
-  async function act(fn: () => Promise<void>, minMs = 250): Promise<Outcome> {
-    const waited = await untilReady();
-    const before = last ?? (await read());
-    const from = Date.now();
-    await fn();
-    const { read: after, busy } = await settle(minMs);
-    const result = await outcome(before, after);
-    const said = describeMessages(await newMessages(), messageText(after));
-    const log = await (await gameFrame()).evaluate(() => (window as unknown as { __qaLayouts?: LayoutEntry[] }).__qaLayouts ?? []).catch(() => []);
-    const screen = describeLayouts(log, from, Date.now());
-    return { text: [...waitNotes(waited, busy), said, result.text, screen ?? ""].filter(Boolean).join("\n") };
+  function act(fn: (call: Call) => Promise<void>, minMs = 250): Promise<Outcome> {
+    return bounded(async (call) => {
+      const before = await untilReady(call.deadline);
+      const prev = last ?? (await read());
+      const from = Date.now();
+      await fn(call);
+      const after = await settle(minMs, READY_MAX_MS, undefined, call.deadline);
+      const result = await outcome(prev, after.read);
+      const said = describeMessages(await newMessages(), messageText(after.read));
+      const log = await (await gameFrame()).evaluate(() => (window as unknown as { __qaLayouts?: LayoutEntry[] }).__qaLayouts ?? []).catch(() => []);
+      const screen = describeLayouts(log, from, Date.now());
+      return { text: [...waitNotes(before, waited(after)), said, result.text, screen ?? ""].filter(Boolean).join("\n") };
+    });
   }
 
   /** The message box's text on screen now. */
@@ -581,6 +656,102 @@ export function createDriver(opts: DriverOptions): GameDriver {
     });
   }
 
+  /** The joystick action's walk (see GameDriver.joystick), within `call`'s deadline. */
+  async function walk(moves: Move[], call: Call): Promise<Outcome> {
+    // A run leg ("↑*") goes until something stops it, at most 40 steps.
+    const runs = moves
+      .map((m) => ({ direction: m.direction, steps: m.run ? 40 : Math.max(1, Math.min(20, Math.round(m.tiles))), run: !!m.run }))
+      .filter((m) => m.direction in DIRS);
+    let total = runs.reduce((n, r) => n + (r.run ? 0 : r.steps), 0);
+    const waitedBefore = await untilReady(call.deadline);
+    const before = await read();
+    const stick = before.joystick;
+    if (!stick || !runs.length) {
+      const o = await outcome(before, before);
+      return { text: [...waitNotes(waitedBefore, null), stick ? "No moves given." : "The joystick isn't on screen right now.", o.text].join("\n") };
+    }
+    const layoutsFrom = Date.now();
+    const centre = { x: stick.x + stick.w / 2, y: stick.y + stick.h / 2 };
+    const p0 = await toPage(centre.x, centre.y);
+    const from = before.state;
+    if (from) entry.see(from);
+    const stepFrames = from?.player && (from.player as { transport?: string }).transport === "bike" ? 8 : 16;
+    // The thumb leans 55 px (page) from where it went down; in the game's own pixels for the page side.
+    const lean = 55;
+    const box = await gameBox();
+    const frame = await gameFrame();
+    // Armed before the touch goes down, so it sees the first step from its first frame.
+    const following = from
+      ? await frame
+          .evaluate(walkPath, {
+            legs: runs.map((r) => ({ ...DIRS[r.direction], steps: r.steps, run: r.run })),
+            centre,
+            reach: (lean * GAME_SIZE.width) / box.width,
+            stall: stallFrames(stepFrames),
+            idleMs: 5000,
+            // The rest of the action's time, less a wait after it.
+            maxMs: Math.max(1000, call.deadline - Date.now() - 4000),
+          })
+          .catch(() => false)
+      : false;
+    await touch("touchStart", p0, call);
+    // From here walkPath moves the thumb (leans, turns, lifts) in the page. The harness used to
+    // slide it toward the first leg through the browser too; on a busy machine that slide could
+    // land after walkPath's first turn and undo it, walking on the old way until a wall.
+    const seesTouch = following && (await frame.evaluate(() => (globalThis as typeof globalThis & { __qaStickPointer?: number }).__qaStickPointer !== undefined).catch(() => false));
+    if (!seesTouch) {
+      const { dx, dy } = DIRS[runs[0]!.direction];
+      for (const f of [0.3, 0.6, 1]) {
+        await sleep(16);
+        await touch("touchMove", { x: p0.x + dx * f * lean, y: p0.y + dy * f * lean }, call);
+      }
+    }
+    let result: PathResult | null = null;
+    if (following) {
+      // walkPath stops itself by the deadline; this is for a page that stopped answering.
+      const walking = frame.evaluate(() => (globalThis as typeof globalThis & { __qaWalk?: Promise<PathResult> }).__qaWalk ?? null);
+      result = await within(walking, Math.max(2000, call.deadline - Date.now()), "The walk").catch(() => null);
+      if (!result) await within(frame.evaluate(stopWalk), 2000, "Stopping the walk").catch(() => {});
+    } else {
+      // No decoded state to follow (shouldn't happen with the joystick up): hold for the steps.
+      await sleep(Math.min((total - 0.5) * ((stepFrames * 1000) / emuFps), call.deadline - Date.now()));
+    }
+    // walkPath already lifted the thumb in the page; this ends the touch itself.
+    await touch("touchEnd", undefined, call);
+    const stop: Stop | null = result && result.end !== "done" ? result.end : null;
+    const stoppedGoing: Direction = runs[Math.min(result?.leg ?? 0, runs.length - 1)]!.direction;
+    const seen: (StateLite | null)[] = [from, ...(result?.trail ?? [])];
+    const settled = await settle(150, READY_MAX_MS, from?.mapId, call.deadline);
+    const after = settled.read;
+    const o = await outcome(before, after);
+    const to = after.state;
+    seen.push(to);
+    // What the game did after the walk (a battle, text, a warp) says more than how the walk ended.
+    const why = from && to ? (interruption(from, to) ?? stop) : stop;
+    const blocker = why === "blocked" && rom && to ? blockerAt(rom.world, rom.stitched, to, DIRS[stoppedGoing]) : null;
+    const walked = countSteps(seen);
+    // Each run says how far it went and what stopped it; its steps count as asked for.
+    const runNotes = (result?.ran ?? []).map((r) => {
+      const dir = runs[r.leg]!.direction;
+      total += r.steps;
+      const what = rom && to ? blockerAt(rom.world, rom.stitched, { ...to, player: { ...to.player, x: r.x, y: r.y } }, DIRS[dir]) : null;
+      return `You ran ${r.steps} step${r.steps === 1 ? "" : "s"} ${dir}${what ? ` until ${what} was in the way` : ", until something stopped you"}.`;
+    });
+    // A run that ended the walk ended it as asked.
+    const lastRun = result?.ran?.at(-1);
+    if (lastRun && result?.end === "done" && lastRun.leg === runs.length - 1) total = walked;
+    const note = from ? [...runNotes, walkNote({ asked: total, walked, stop: why, direction: stoppedGoing, blocker })].filter(Boolean).join("\n") : "";
+    const debug = process.env["POKEHD_QA_DEBUG"] && from && to ? ` [debug: (${from.player.x},${from.player.y}) → (${to.player.x},${to.player.y}), ${walked} counted, stop ${why}]` : "";
+    const log = await (await gameFrame()).evaluate(() => (window as unknown as { __qaLayouts?: LayoutEntry[] }).__qaLayouts ?? []).catch(() => []);
+    const screen = describeLayouts(log, layoutsFrom, Date.now());
+    // After the text map, before the buttons: where the player is from where they came into the map.
+    const where = to && to.mode === "overworld" ? entry.line(to) : "";
+    const at = o.text.indexOf("\nButtons:");
+    const text = where && at >= 0 ? `${o.text.slice(0, at)}\n${where}${o.text.slice(at)}` : where ? `${o.text}\n${where}` : o.text;
+    const said = describeMessages(await newMessages(), messageText(after));
+    return { text: [...waitNotes(waitedBefore, waited(settled)), note || debug ? `${note}${debug}` : "", said, text, screen ?? ""].filter(Boolean).join("\n") };
+  }
+
   const driver: GameDriver = {
     size: GAME_SIZE,
 
@@ -661,125 +832,37 @@ export function createDriver(opts: DriverOptions): GameDriver {
     },
 
     tap(x, y) {
-      return act(async () => {
+      return act(async (call) => {
         const at = await toPage(x, y);
-        await touch("touchStart", at);
+        await touch("touchStart", at, call);
         await sleep(70);
-        await touch("touchEnd");
+        await touch("touchEnd", undefined, call);
       });
     },
 
     swipe(x1, y1, x2, y2, ms) {
-      return act(async () => {
+      return act(async (call) => {
         const from = await toPage(x1, y1);
         const to = await toPage(x2, y2);
         const steps = Math.max(4, Math.round(ms / 16));
-        await touch("touchStart", from);
+        await touch("touchStart", from, call);
         for (let i = 1; i <= steps; i++) {
           const t = i / steps;
-          await touch("touchMove", { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+          await touch("touchMove", { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t }, call);
           await sleep(ms / steps);
         }
         await sleep(40);
-        await touch("touchEnd");
+        await touch("touchEnd", undefined, call);
       });
     },
 
-    async joystick(moves: Move[]) {
-      // A run leg ("↑*") goes until something stops it, at most 40 steps.
-      const runs = moves
-        .map((m) => ({ direction: m.direction, steps: m.run ? 40 : Math.max(1, Math.min(20, Math.round(m.tiles))), run: !!m.run }))
-        .filter((m) => m.direction in DIRS);
-      let total = runs.reduce((n, r) => n + (r.run ? 0 : r.steps), 0);
-      const waited = await untilReady();
-      const before = await read();
-      const stick = before.joystick;
-      if (!stick || !runs.length) {
-        const o = await outcome(before, before);
-        return { text: [...waitNotes(waited, null), stick ? "No moves given." : "The joystick isn't on screen right now.", o.text].join("\n") };
-      }
-      const layoutsFrom = Date.now();
-      const centre = { x: stick.x + stick.w / 2, y: stick.y + stick.h / 2 };
-      const p0 = await toPage(centre.x, centre.y);
-      const from = before.state;
-      if (from) entry.see(from);
-      const stepFrames = from?.player && (from.player as { transport?: string }).transport === "bike" ? 8 : 16;
-      // The thumb leans 55 px (page) from where it went down; in the game's own pixels for the page side.
-      const lean = 55;
-      const box = await gameBox();
-      const frame = await gameFrame();
-      // Armed before the touch goes down, so it sees the first step from its first frame.
-      const following = from
-        ? await frame
-            .evaluate(walkPath, {
-              legs: runs.map((r) => ({ ...DIRS[r.direction], steps: r.steps, run: r.run })),
-              centre,
-              reach: (lean * GAME_SIZE.width) / box.width,
-              stall: stallFrames(stepFrames),
-              idleMs: 5000,
-            })
-            .catch(() => false)
-        : false;
-      await touch("touchStart", p0);
-      // From here walkPath moves the thumb (leans, turns, lifts) in the page. The harness used to
-      // slide it toward the first leg through the browser too; on a busy machine that slide could
-      // land after walkPath's first turn and undo it, walking on the old way until a wall.
-      const seesTouch = following && (await frame.evaluate(() => (globalThis as typeof globalThis & { __qaStickPointer?: number }).__qaStickPointer !== undefined).catch(() => false));
-      if (!seesTouch) {
-        const { dx, dy } = DIRS[runs[0]!.direction];
-        for (const f of [0.3, 0.6, 1]) {
-          await sleep(16);
-          await touch("touchMove", { x: p0.x + dx * f * lean, y: p0.y + dy * f * lean });
-        }
-      }
-      let result: PathResult | null = null;
-      if (following) {
-        result = await frame
-          .evaluate(() => (globalThis as typeof globalThis & { __qaWalk?: Promise<PathResult> }).__qaWalk ?? null)
-          .catch(() => null);
-      } else {
-        // No decoded state to follow (shouldn't happen with the joystick up): hold for the steps.
-        await sleep((total - 0.5) * ((stepFrames * 1000) / emuFps));
-      }
-      // walkPath already lifted the thumb in the page; this ends the touch itself.
-      await touch("touchEnd");
-      const stop: Stop | null = result && result.end !== "done" ? result.end : null;
-      const stoppedGoing: Direction = runs[Math.min(result?.leg ?? 0, runs.length - 1)]!.direction;
-      const seen: (StateLite | null)[] = [from, ...(result?.trail ?? [])];
-      const { read: after, busy } = await settle(150, READY_MAX_MS, from?.mapId);
-      const o = await outcome(before, after);
-      const to = after.state;
-      seen.push(to);
-      // What the game did after the walk (a battle, text, a warp) says more than how the walk ended.
-      const why = from && to ? (interruption(from, to) ?? stop) : stop;
-      const blocker = why === "blocked" && rom && to ? blockerAt(rom.world, rom.stitched, to, DIRS[stoppedGoing]) : null;
-      const walked = countSteps(seen);
-      // Each run says how far it went and what stopped it; its steps count as asked for.
-      const runNotes = (result?.ran ?? []).map((r) => {
-        const dir = runs[r.leg]!.direction;
-        total += r.steps;
-        const what = rom && to ? blockerAt(rom.world, rom.stitched, { ...to, player: { ...to.player, x: r.x, y: r.y } }, DIRS[dir]) : null;
-        return `You ran ${r.steps} step${r.steps === 1 ? "" : "s"} ${dir}${what ? ` until ${what} was in the way` : ", until something stopped you"}.`;
-      });
-      // A run that ended the walk ended it as asked.
-      const lastRun = result?.ran?.at(-1);
-      if (lastRun && result?.end === "done" && lastRun.leg === runs.length - 1) total = walked;
-      const note = from ? [...runNotes, walkNote({ asked: total, walked, stop: why, direction: stoppedGoing, blocker })].filter(Boolean).join("\n") : "";
-      const debug = process.env["POKEHD_QA_DEBUG"] && from && to ? ` [debug: (${from.player.x},${from.player.y}) → (${to.player.x},${to.player.y}), ${walked} counted, stop ${why}]` : "";
-      const log = await (await gameFrame()).evaluate(() => (window as unknown as { __qaLayouts?: LayoutEntry[] }).__qaLayouts ?? []).catch(() => []);
-      const screen = describeLayouts(log, layoutsFrom, Date.now());
-      // After the text map, before the buttons: where the player is from where they came into the map.
-      const where = to && to.mode === "overworld" ? entry.line(to) : "";
-      const at = o.text.indexOf("\nButtons:");
-      const text = where && at >= 0 ? `${o.text.slice(0, at)}\n${where}${o.text.slice(at)}` : where ? `${o.text}\n${where}` : o.text;
-      const said = describeMessages(await newMessages(), messageText(after));
-      return { text: [...waitNotes(waited, busy), note || debug ? `${note}${debug}` : "", said, text, screen ?? ""].filter(Boolean).join("\n") };
+    joystick(moves: Move[]) {
+      return bounded((call) => walk(moves, call));
     },
 
     wait(ms) {
-      return act(async () => void (await sleep(Math.max(0, ms))), 0);
+      return act(async (call) => void (await sleep(Math.max(0, Math.min(ms, call.deadline - Date.now())))), 0);
     },
-
     async screenshot() {
       busy++;
       try {

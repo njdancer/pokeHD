@@ -14,6 +14,8 @@ class Walker {
   y = 10;
   mapId = 59;
   mode: StateLite["mode"] = "overworld";
+  /** The palette's shade: a dark cave without Flash holds it two thirds down. */
+  fade = 0;
   frames = 0;
   #f = -1;
   #dir: Dir = { dx: 0, dy: 0 };
@@ -43,7 +45,7 @@ class Walker {
 
   get state(): StateLite {
     const step = this.#f >= 1 ? { ...this.#dir, progress: this.#f / 16 } : null;
-    return { mode: this.mode, mapId: this.mapId, fade: 0, player: { x: this.x, y: this.y, facing: "up", step }, npcs: [] };
+    return { mode: this.mode, mapId: this.mapId, fade: this.fade, player: { x: this.x, y: this.y, facing: "up", step }, npcs: [] };
   }
 }
 
@@ -91,7 +93,7 @@ function page(game: Walker, burst: number, latency: number, onFrame?: (g: Walker
   return {
     async walk(legs: PathArg["legs"]): Promise<PathResult> {
       delete (globalThis as { __qaStickArmed?: boolean }).__qaStickArmed; // a new fake document
-      expect(walkPath({ legs, centre, reach: 40, stall: stallFrames(16), idleMs: 2000 })).toBe(true);
+      expect(walkPath({ legs, centre, reach: 40, stall: stallFrames(16), idleMs: 2000, maxMs: 30_000 })).toBe(true);
       // The touch goes down on the stick's centre (walkPath leans it).
       for (const fn of listeners) fn({ target: stick, pointerId: 3 });
       const result = await (globalThis as typeof globalThis & { __qaWalk: Promise<PathResult> }).__qaWalk;
@@ -153,6 +155,26 @@ describe("walkPath", () => {
     const result = await page(game, 6, 4).walk([up(4)]);
     expect(result).toMatchObject({ end: "blocked", leg: 0 });
     expect([game.x, game.y]).toEqual([10, 9]);
+  });
+
+  it("stops at a wall in a dark cave, whose dim palette holds still (Rock Tunnel hang)", async () => {
+    for (const run of [false, true]) {
+      const game = new Walker();
+      game.fade = 2 / 3;
+      game.walls.add("10,8");
+      const result = await page(game, 6, 4).walk([{ ...up(run ? 40 : 4), run }]);
+      expect(result.end).toBe(run ? "done" : "blocked");
+      expect([game.x, game.y]).toEqual([10, 9]);
+    }
+  });
+
+  it("lets go when the harness says stop", async () => {
+    const game = new Walker();
+    const p = page(game, 1, 0, (g) => {
+      if (g.frames === 40) (globalThis as { __qaWalkStop?: boolean }).__qaWalkStop = true;
+    });
+    const result = await p.walk([up(20)]);
+    expect(result.end).toBe("stalled");
   });
 
   it("runs a leg until something stops it, then carries on with the next", async () => {
