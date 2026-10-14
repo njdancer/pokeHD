@@ -107,6 +107,46 @@ export function ItemIcon({ id, kind }: { id: number; kind: ItemKind }) {
         <path d="M7 19c3-1 4-5 8-5s5 4 9 2" fill="none" stroke="#5aa04a" strokeWidth="2" />
       </>
     );
+  else if (id >= 0x4c && id <= 0x4e)
+    // OLD, GOOD and SUPER ROD: a rod with its line and float, the rod's colour by which (QA bug 72:
+    // they fell back to the Repel's bottle).
+    body = (
+      <>
+        <path d="M5 27L24 5" {...s} strokeWidth={4.2} />
+        <path d="M5 27L24 5" stroke={id === 0x4c ? "#b07a45" : id === 0x4d ? "#3a79d6" : "#e8473b"} strokeWidth="2.2" strokeLinecap="round" />
+        <path d="M24 5c3 4 3 10 2 15" fill="none" stroke={INK} strokeWidth="1.2" />
+        <circle cx="26" cy="22.5" r="2.6" fill="#e8473b" {...s} strokeWidth={1.4} />
+        <circle cx="9" cy="22.5" r="2.4" fill="#fbfbfb" {...s} strokeWidth={1.6} />
+      </>
+    );
+  else if (id === 0x47)
+    // ITEMFINDER: a dowsing gadget with its two antennae.
+    body = (
+      <>
+        <rect x="9" y="12" width="14" height="15" rx="3" fill="#8fd0c8" {...s} />
+        <path d="M13 12L10 4M19 12l3-8" {...s} />
+        <circle cx="16" cy="19.5" r="3.2" fill="#e8473b" {...s} strokeWidth={1.6} />
+      </>
+    );
+  else if (id === 0x49)
+    // POKé FLUTE: a recorder with its holes.
+    body = (
+      <>
+        <path d="M7 27L24 6l3 2.5L10 29.5z" fill="#f4e3b5" {...s} />
+        <circle cx="15" cy="19" r="1.3" fill={INK} />
+        <circle cx="18" cy="15.3" r="1.3" fill={INK} />
+        <circle cx="21" cy="11.6" r="1.3" fill={INK} />
+      </>
+    );
+  else if (id === 0x45)
+    // COIN CASE: a purse with a coin.
+    body = (
+      <>
+        <rect x="5" y="11" width="22" height="15" rx="4" fill="#c46a3a" {...s} />
+        <path d="M5 16h22" {...s} strokeWidth={1.6} />
+        <circle cx="21" cy="9" r="4.5" fill="#f2c94c" {...s} strokeWidth={1.6} />
+      </>
+    );
   else if (kind === "Travel")
     body =
       id === 0x1d ? (
