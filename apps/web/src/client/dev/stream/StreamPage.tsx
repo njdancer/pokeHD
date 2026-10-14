@@ -50,6 +50,17 @@ export function StreamPage() {
   useLayoutEffect(() => {
     if (stage.current) trim(stage.current, settled === mode);
   });
+  // The bug tracker is as tall as its bugs; the player card takes the rest of the column.
+  useLayoutEffect(() => {
+    const qs = stage.current;
+    const bugs = qs?.querySelector<HTMLElement>(".qs-bugs");
+    if (!qs || !bugs) return;
+    const fit = () => qs.style.setProperty("--bugs-h", `${bugs.offsetHeight}px`);
+    fit();
+    const watch = new ResizeObserver(fit);
+    watch.observe(bugs);
+    return () => watch.disconnect();
+  }, []);
   useEffect(() => {
     if (!document.fonts) return;
     void document.fonts.ready.then(() => stage.current && trim(stage.current, true));
@@ -117,14 +128,9 @@ export function StreamPage() {
           <Chat chat={bus.chat} />
 
           <section className="qs-card qs-info">
-            <div className="qs-row">
-              <span className="qs-place">{map || "—"}</span>
-              <span className="qs-facts">
-                Play <b>{playTime || "0:00"}</b>
-              </span>
-            </div>
+            <span className="qs-place">{map || "—"}</span>
             <Badges rom={rom} badges={game?.badges ?? 0} known={!!game} />
-            <Stats game={game} />
+            <Stats game={game} playTime={playTime} />
             <Party rom={rom} team={game?.team ?? []} />
           </section>
 
@@ -335,7 +341,7 @@ function Badges({ rom, badges, known }: { rom: Uint8Array | null; badges: number
 /** Poké, Great, Ultra, Master and Safari Balls. */
 const BALLS = new Set([0x01, 0x02, 0x03, 0x04, 0x08]);
 
-function Stats({ game }: { game: GameSnapshot | null }) {
+function Stats({ game, playTime }: { game: GameSnapshot | null; playTime: string }) {
   const balls = game?.bag.reduce((n, b) => n + (BALLS.has(b.item) ? b.quantity : 0), 0) ?? 0;
   return (
     <div className="qs-stats">
@@ -343,11 +349,10 @@ function Stats({ game }: { game: GameSnapshot | null }) {
         <b>₽{game ? game.money.toLocaleString("en-US") : "–"}</b>
       </span>
       <span>
-        Dex <b>{game ? game.owned.size : "–"}</b>
-        <small>/{game ? game.seen.size : "–"} seen</small>
+        Balls <b>{game ? balls : "–"}</b>
       </span>
       <span>
-        Balls <b>{game ? balls : "–"}</b>
+        Play <b className="qs-time">{playTime || "0:00"}</b>
       </span>
     </div>
   );
