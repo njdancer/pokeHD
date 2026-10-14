@@ -124,6 +124,7 @@ export function StreamPage() {
               </span>
             </div>
             <Badges rom={rom} badges={game?.badges ?? 0} known={!!game} />
+            <Stats game={game} />
             <Party rom={rom} team={game?.team ?? []} />
           </section>
 
@@ -331,6 +332,27 @@ function Badges({ rom, badges, known }: { rom: Uint8Array | null; badges: number
   );
 }
 
+/** Poké, Great, Ultra, Master and Safari Balls. */
+const BALLS = new Set([0x01, 0x02, 0x03, 0x04, 0x08]);
+
+function Stats({ game }: { game: GameSnapshot | null }) {
+  const balls = game?.bag.reduce((n, b) => n + (BALLS.has(b.item) ? b.quantity : 0), 0) ?? 0;
+  return (
+    <div className="qs-stats">
+      <span>
+        <b>₽{game ? game.money.toLocaleString("en-US") : "–"}</b>
+      </span>
+      <span>
+        Dex <b>{game ? game.owned.size : "–"}</b>
+        <small>/{game ? game.seen.size : "–"} seen</small>
+      </span>
+      <span>
+        Balls <b>{game ? balls : "–"}</b>
+      </span>
+    </div>
+  );
+}
+
 function Party({ rom, team }: { rom: Uint8Array | null; team: TeamMon[] }) {
   return (
     <div className="qs-party">
@@ -360,41 +382,27 @@ function Party({ rom, team }: { rom: Uint8Array | null; team: TeamMon[] }) {
   );
 }
 
-const SEV: Record<Bug["severity"], string> = { high: "HIGH", med: "MED", low: "LOW" };
-
 function BugTracker({ bugs }: { bugs: Bug[] }) {
-  const count = (s: Bug["status"]) => bugs.filter((b) => b.status === s).length;
+  const real = bugs.filter((b) => b.status !== "wontfix");
+  const fixed = real.filter((b) => b.status === "fixed").length;
+  // The list is what's still to do; the strip's colour is its severity.
+  const open = real.filter((b) => b.status !== "fixed");
   return (
     <section className="qs-card qs-bugs">
       <span className="qs-ball qs-tr" />
       <div className="qs-labelrow">
         <span className="qs-label">Bug tracker</span>
-        <span className="qs-label">{bugs.length - count("wontfix")} found</span>
-      </div>
-      <div className="qs-counts">
-        <div className="qs-count qs-c-open">
-          <b>{count("open")}</b>
-          <span>open</span>
-        </div>
-        <div className="qs-count qs-c-fixing">
-          <b>{count("fixing")}</b>
-          <span>fixing</span>
-        </div>
-        <div className="qs-count qs-c-fixed">
-          <b>{count("fixed")}</b>
-          <span>fixed</span>
-        </div>
+        <span className="qs-label qs-tally">
+          <b>{fixed}</b>/{real.length} fixed
+        </span>
       </div>
       <ol className="qs-bl">
-        {bugs.length === 0 && <li className="qs-none">No bugs found yet.</li>}
-        {bugs.map((b) => (
-          <li key={b.id} className={`qs-bug${b.status === "fixed" || b.status === "wontfix" ? " qs-done" : ""}`} data-sev={b.severity}>
-            <div className="qs-btop">
-              <span className="qs-sev">{SEV[b.severity]}</span>
-              <span className="qs-id">#{b.id}</span>
-              <span className={`qs-st qs-s-${b.status}`}>{b.status === "wontfix" ? "won't fix" : b.status}</span>
+        {open.length === 0 && <li className="qs-none">{real.length ? "All fixed." : "No bugs found yet."}</li>}
+        {open.map((b) => (
+          <li key={b.id} className="qs-bug" data-sev={b.severity}>
+            <div className="qs-btitle">
+              <span className="qs-id">#{b.id}</span> {b.title}
             </div>
-            <div className="qs-btitle">{b.title}</div>
           </li>
         ))}
       </ol>
