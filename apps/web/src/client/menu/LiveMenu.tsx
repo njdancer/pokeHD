@@ -64,15 +64,27 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
   const reading = open || !!ask;
   const askId = ask?.id ?? null;
   const now = currentGame(ask, snapshot);
+  /** Bumped when one of the menu's actions ends: the game is read again at once. */
+  const [acted, setActed] = useState(0);
   const host = useRef<LiveHost>({ ...game, notice: () => {}, setApp, ...(sendGift ? { sendGift } : {}), game: now });
   useEffect(() => {
-    host.current = { ...game, notice: (text) => setNotice((n) => ({ text, n: (n?.n ?? 0) + 1 })), setApp, ...(sendGift ? { sendGift } : {}), game: now };
+    host.current = {
+      ...game,
+      // What the action changed (a TM used up, a Potion fewer) shows as soon as it's done, not at
+      // the next read a second on, which a quick look could miss (QA bug 47's TM01 ×1).
+      act: (action, signal) => game.act(action, signal).finally(() => setActed((n) => n + 1)),
+      notice: (text) => setNotice((n) => ({ text, n: (n?.n ?? 0) + 1 })),
+      setApp,
+      ...(sendGift ? { sendGift } : {}),
+      game: now,
+    };
   });
   const [actions] = useState(() => new LiveActions(rom, host));
   useEffect(() => bind(actions), [actions, bind]);
 
   // Read the game while anything is up; it keeps running behind the menu. Each read is tagged
-  // with the question up when it was asked for, so the newest wins (currentGame).
+  // with the question up when it was asked for, so the newest wins (currentGame). A question
+  // coming or going, or an action ending (`acted`), reads again straight away.
   useEffect(() => {
     if (!reading) return;
     let stopped = false;
@@ -86,7 +98,7 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
       stopped = true;
       clearInterval(timer);
     };
-  }, [reading, game, askId]);
+  }, [reading, game, askId, acted]);
 
   const asking = ask;
   const request = useMemo(() => (asking ? requestOf(rom, asking.ask) : null), [rom, asking]);
@@ -131,7 +143,8 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
       ) : (
         menu({})
       )}
-      {asking && !request && <AskSheet rom={rom} world={world} catalogue={catalogue} ask={asking.ask} game={now} answer={answerFallback} />}
+      {/* Keyed by the question: each one the game asks is a new sheet, with its own fresh-tap guard. */}
+      {asking && !request && <AskSheet key={asking.id} rom={rom} world={world} catalogue={catalogue} ask={asking.ask} game={now} answer={answerFallback} />}
     </>
   );
 }

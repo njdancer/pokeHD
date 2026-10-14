@@ -93,9 +93,14 @@ function learnsOf(rom: Uint8Array, cache: Map<number, Learns>, dex: number, spec
   return out;
 }
 
-function itemKind(rom: Uint8Array, item: number): ItemKind {
+/**
+ * The Inventory's filter for an item. What's left after our shelves and is used on a Pokémon
+ * (UsableItems_PartyMenu: the evolution stones, vitamins, RARE CANDY, PP UP) is a boost, not
+ * medicine (QA bug 50: MOON STONE was listed under Healing).
+ */
+export function itemKind(rom: Uint8Array, item: number): ItemKind {
   const s = shelf(rom, item);
-  if (s === "Other") return itemUse(rom, item).onMon ? "Healing" : isKeyItem(rom, item) ? "Key" : "Travel";
+  if (s === "Other") return itemUse(rom, item).onMon ? "Boosts" : isKeyItem(rom, item) ? "Key" : "Travel";
   return s;
 }
 
@@ -425,6 +430,8 @@ export class LiveActions implements MenuActions {
    */
   #shop = false;
   #shopQueue: { item: number; count: number }[] | "cancel" = [];
+  /** A TM or HM is being taught (its action hasn't ended). */
+  #teaching = false;
 
   constructor(rom: Uint8Array, host: { readonly current: LiveHost }) {
     this.#rom = rom;
@@ -558,7 +565,17 @@ export class LiveActions implements MenuActions {
     return "";
   }
   teach(item: number, mon: number): string {
-    return this.#do({ kind: "use-item", item, mon, answers: [true] });
+    // One machine at a time: a second tap while the game is still on the first (its questions
+    // may be up) would queue another round of them after it (QA bug 48).
+    if (this.#teaching) return "";
+    this.#teaching = true;
+    void this.#host.act({ kind: "use-item", item, mon, answers: [true] }).then((r) => {
+      this.#teaching = false;
+      const text = said(r);
+      if (text) this.#host.notice(text);
+    });
+    // Something at once: the game takes a moment to boot it up before any question (QA bug 47).
+    return `Booting up ${itemName(this.#rom, item)}…`;
   }
   deposit(mon: number): string {
     this.#answer({ index: mon });

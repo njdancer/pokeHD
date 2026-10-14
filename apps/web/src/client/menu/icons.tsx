@@ -76,6 +76,13 @@ export function ItemIcon({ id, kind }: { id: number; kind: ItemKind }) {
         <path d="M16 16.5v4M14 18.5h4" stroke="#e8473b" strokeWidth="1.8" strokeLinecap="round" />
       </>
     );
+  else if (kind === "Boosts")
+    body = (
+      <>
+        <path d="M16 4l9 8-9 16-9-16z" fill="#8fd0c8" {...s} />
+        <path d="M7 12h18M12 12l4-8 4 8-4 16z" fill="none" {...s} strokeWidth={1.4} />
+      </>
+    );
   else if (kind === "Machines")
     body = (
       <>

@@ -16,7 +16,7 @@
 import { isKeyItem, romOffset, SYMBOLS, type SymbolName } from "@pokehd/rom";
 import type { GameBoy } from "../core.ts";
 import { StandIn } from "../ffi.ts";
-import { textBoxText } from "./asks.ts";
+import { learnMoveCall, textBoxText } from "./asks.ts";
 import { saveGame } from "../gifts/gifts.ts";
 import { type Job, SafePoint, type Step } from "../gifts/safepoint.ts";
 import { acting } from "./acting.ts";
@@ -46,6 +46,8 @@ const MON_MOVES = 8;
 const MON_PP = 29;
 const NUM_MOVES = 4;
 const TWO_OPTION_MENU = 0x14;
+/** wStatusFlags5's BIT_NO_TEXT_DELAY: PrintLetterDelay returns at once. */
+const NO_TEXT_DELAY = 1 << 6;
 const CHOSE_FIRST_ITEM = 1;
 const CHOSE_SECOND_ITEM = 2;
 /** wActionResultOrTookBattleTurn after UseItem: 0 not used, 1 used, 2 "not now" with no menu. */
@@ -89,11 +91,7 @@ export class GameActions {
     this.#rom = options.rom;
     this.#safe = SafePoint.of(gb);
     const ours = () => this.#running !== null;
-    const keep = (g: GameBoy) => {
-      const text = textBoxText(g);
-      const messages = this.#running?.messages;
-      if (text && messages && messages.at(-1) !== text) messages.push(text);
-    };
+    const keep = (g: GameBoy) => this.#keep(g);
     this.#standIns = [
       // "Use on which Pokémon?": the party menu's outputs (HandlePartyMenuInput), or cancelled.
       new StandIn(gb, "DisplayPartyMenu", ours, (g) => {
@@ -106,8 +104,11 @@ export class GameActions {
         g.write(addr("wBattleMonSpecies2"), species);
         return { carry: false };
       }),
-      // A yes/no: "delete an older move?" and the like. Answered from the action, else no.
-      new StandIn(gb, "DisplayTextBoxID", (g) => ours() && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU, (g) => {
+      // A yes/no: a TM's "Teach … to a POKéMON?" and the like. Answered from the action, else no.
+      // LearnMove's ("Delete an older move…?", "Abandon learning…?") and its move list are the
+      // page's to ask (GameAsks): answering them ourselves went round and round (QA bug 48). What
+      // the action printed until then goes with the question, so the result starts afresh.
+      new StandIn(gb, "DisplayTextBoxID", (g) => ours() && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU && !this.#leftToPage(g), (g) => {
         keep(g);
         const yes = this.#running?.yesNo.shift() ?? false;
         g.write(addr("wCurrentMenuItem"), yes ? 0 : 1);
@@ -118,6 +119,25 @@ export class GameActions {
       new StandIn(gb, "WaitForTextScrollButtonPress", ours, (g) => (keep(g), {})),
       new StandIn(gb, "ManualTextScroll", ours, (g) => (keep(g), {})),
     ];
+  }
+
+  /** Keeps the text box's words for the result, unless it still shows the last kept. */
+  #keep(g: GameBoy): void {
+    // Without the ▼ the box shows while it waits, so the same words read the same after it.
+    const text = textBoxText(g)
+      .split("\n")
+      .map((l) => l.replace(/▼/g, "").trim())
+      .filter(Boolean)
+      .join("\n");
+    const messages = this.#running?.messages;
+    if (text && messages && messages.at(-1) !== text) messages.push(text);
+  }
+
+  /** LearnMove asks the page (GameAsks), not the action: true, with what was printed so far dropped. */
+  #leftToPage(g: GameBoy): boolean {
+    if (!learnMoveCall(g)) return false;
+    if (this.#running) this.#running.messages = [];
+    return true;
   }
 
   /** Whether one of the actions is running in the game right now (not just queued). */
@@ -167,15 +187,25 @@ export class GameActions {
       failed = reason;
       return { drop: reason };
     };
+    /** We set the game's "no text delay" flag (it wasn't set before): cleared again at the end. */
+    let quick = false;
     const finish = (completed: boolean) => {
       const messages = this.#running?.messages ?? [];
       this.#running = null;
       acting.delete(this.#gb);
+      if (quick) this.#gb.write(addr("wStatusFlags5"), this.#gb.read(addr("wStatusFlags5")) & ~NO_TEXT_DELAY);
+      quick = false;
       done(completed && !failed ? { ok: true, messages } : { ok: false, reason: failed ?? "not now", messages });
     };
     const begin = (mon?: number, answers: boolean[] = []) => {
       this.#running = { mon, yesNo: [...answers], messages: [] };
       acting.add(this.#gb);
+      // Nobody sees what the action prints (the menu reports it afterwards), so it prints with no
+      // letter delay, the game's own flag for that: a question it asks the page on the way
+      // (LearnMove's) comes up at once, not after seconds of unseen text (QA bug 47).
+      const flags = this.#gb.read(addr("wStatusFlags5"));
+      quick = !(flags & NO_TEXT_DELAY);
+      this.#gb.write(addr("wStatusFlags5"), flags | NO_TEXT_DELAY);
     };
     switch (action.kind) {
       case "use-item": {
@@ -213,6 +243,8 @@ export class GameActions {
                 g.write(addr("wPseudoItemID"), 0);
               },
               after: (g) => {
+                // Its last words may wait for no button ("… did not learn MEGA PUNCH!").
+                this.#keep(g);
                 const result = g.read(addr("wActionResultOrTookBattleTurn"));
                 if (result !== ITEM_USED) failed = this.#running?.messages.at(-1) ?? "it can't be used now";
               },

@@ -1,0 +1,187 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { StateLite } from "./screen-read.ts";
+import { countSteps, stallFrames, walkNote, walkPath, type PathArg, type PathResult } from "./walk.ts";
+
+type Dir = { dx: number; dy: number };
+
+/**
+ * The game's walking, frame by frame: a step takes 16 frames; on the frame one ends (and when
+ * standing) the game looks at the pad and, with a direction held, starts the next. The
+ * coordinates change on a step's last frame, and the decoder shows no step on its first.
+ */
+class Walker {
+  x = 10;
+  y = 10;
+  mapId = 59;
+  mode: StateLite["mode"] = "overworld";
+  frames = 0;
+  #f = -1;
+  #dir: Dir = { dx: 0, dy: 0 };
+  #held: Dir | null = null;
+  #queue: { at: number; held: Dir | null }[] = [];
+  walls = new Set<string>();
+
+  /** The pad as the emulator will see it `latency` frames from now. */
+  hold(held: Dir | null, latency: number) {
+    this.#queue.push({ at: this.frames + latency, held });
+  }
+
+  tick() {
+    this.frames++;
+    while (this.#queue[0] && this.#queue[0].at <= this.frames) this.#held = this.#queue.shift()!.held;
+    if (this.#f >= 0 && ++this.#f >= 16) {
+      this.x += this.#dir.dx;
+      this.y += this.#dir.dy;
+      this.#f = -1;
+    }
+    const h = this.#held;
+    if (this.#f < 0 && h && !this.walls.has(`${this.x + h.dx},${this.y + h.dy}`)) {
+      this.#dir = h;
+      this.#f = 0;
+    }
+  }
+
+  get state(): StateLite {
+    const step = this.#f >= 1 ? { ...this.#dir, progress: this.#f / 16 } : null;
+    return { mode: this.mode, mapId: this.mapId, fade: 0, player: { x: this.x, y: this.y, facing: "up", step }, npcs: [] };
+  }
+}
+
+/**
+ * A busy page: its main thread sees the game's state only every `burst` frames, and a move of the
+ * thumb reaches the emulator `latency` frames later.
+ */
+function page(game: Walker, burst: number, latency: number, onFrame?: (g: Walker) => void) {
+  const centre = { x: 100, y: 100 };
+  const listeners: ((e: { target: unknown; pointerId: number }) => void)[] = [];
+  const stick = {
+    contains: () => true,
+    dispatchEvent(e: { type: string; clientX: number; clientY: number }) {
+      const dir = e.type === "pointerup" ? null : { dx: Math.sign(e.clientX - centre.x), dy: Math.sign(e.clientY - centre.y) };
+      game.hold(dir && (dir.dx || dir.dy) ? dir : null, latency);
+      return true;
+    },
+  };
+  vi.stubGlobal("document", { querySelector: () => stick, addEventListener: (_: string, fn: (typeof listeners)[number]) => listeners.push(fn) });
+  vi.stubGlobal(
+    "PointerEvent",
+    class {
+      readonly type: string;
+      constructor(type: string, init: object) {
+        this.type = type;
+        Object.assign(this, init);
+      }
+    },
+  );
+  vi.stubGlobal("__pokehd", {
+    get state() {
+      for (let i = 0; i < burst; i++) {
+        game.tick();
+        onFrame?.(game);
+      }
+      return game.state;
+    },
+    get frames() {
+      return game.frames;
+    },
+  });
+  return {
+    async walk(legs: PathArg["legs"]): Promise<PathResult> {
+      expect(walkPath({ legs, centre, reach: 40, stall: stallFrames(16), idleMs: 2000 })).toBe(true);
+      // The touch goes down and leans toward the first leg, through the browser (slower).
+      for (const fn of listeners) fn({ target: stick, pointerId: 3 });
+      game.hold(legs[0]!, latency * 2);
+      const result = await (globalThis as typeof globalThis & { __qaWalk: Promise<PathResult> }).__qaWalk;
+      for (let i = 0; i < 64; i++) game.tick(); // whatever the game does next on its own
+      return result;
+    },
+  };
+}
+
+const up = (steps: number) => ({ dx: 0, dy: -1, steps });
+const left = (steps: number) => ({ dx: -1, dy: 0, steps });
+
+describe("walkPath", () => {
+  beforeEach(() => {
+    delete (globalThis as { __qaStickArmed?: boolean }).__qaStickArmed;
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("takes exactly the steps asked for, on a page that sees the game only every few frames", async () => {
+    for (const steps of [1, 2, 5, 8]) {
+      for (const [burst, latency] of [
+        [1, 0],
+        [6, 4],
+        [8, 6],
+      ] as const) {
+        const game = new Walker();
+        const result = await page(game, burst, latency).walk([up(steps)]);
+        expect(result.end).toBe("done");
+        expect([game.x, game.y, steps, burst]).toEqual([10, 10 - steps, steps, burst]);
+        expect(countSteps([...result.trail, game.state])).toBe(steps);
+      }
+    }
+  });
+
+  it("turns between legs without a step too many or too few", async () => {
+    const game = new Walker();
+    const result = await page(game, 6, 4).walk([up(3), left(2), up(1)]);
+    expect(result).toMatchObject({ end: "done", leg: 3 });
+    expect([game.x, game.y]).toEqual([8, 6]);
+    expect(countSteps([...result.trail, game.state])).toBe(6);
+  });
+
+  it("stops at a wall, after the game has run a while without a step", async () => {
+    const game = new Walker();
+    game.walls.add("10,8");
+    const result = await page(game, 6, 4).walk([up(4)]);
+    expect(result).toMatchObject({ end: "blocked", leg: 0 });
+    expect([game.x, game.y]).toEqual([10, 9]);
+  });
+
+  it("lets go when a battle starts", async () => {
+    const game = new Walker();
+    const result = await page(game, 3, 2, (g) => {
+      if (g.y === 8) g.mode = "battle";
+    }).walk([up(5)]);
+    expect(result.end).toBe("battle");
+  });
+});
+
+const at = (x: number, y: number, step: { dx: number; dy: number; progress: number } | null = null, more: Partial<StateLite> = {}): StateLite => ({
+  mode: "overworld",
+  mapId: 59,
+  fade: 0,
+  player: { x, y, facing: "up", step },
+  npcs: [],
+  ...more,
+});
+
+describe("countSteps", () => {
+  it("counts every cell however few samples there were", () => {
+    expect(countSteps([at(5, 10), at(5, 8, { dx: 0, dy: -1, progress: 0.5 }), at(4, 7)])).toBe(4);
+  });
+  it("stops at a map change and skips missing samples", () => {
+    expect(countSteps([at(5, 10), null, at(5, 9), at(1, 1, null, { mapId: 60 })])).toBe(1);
+  });
+});
+
+describe("walkNote", () => {
+  const note = (walked: number, stop: Parameters<typeof walkNote>[0]["stop"], blocker: string | null = null) => walkNote({ asked: 4, walked, stop, direction: "up", blocker });
+  it("says nothing when the walk went as asked", () => {
+    expect(note(4, null)).toBe("");
+    expect(note(4, "battle")).toBe("");
+  });
+  it("gives the reason a walk was short", () => {
+    expect(note(0, "blocked", "a wall")).toBe("You didn't move: a wall is in the way going up.");
+    expect(note(2, "battle")).toBe("You moved 2 of 4 steps: a battle started.");
+    expect(note(1, "text")).toBe("You moved 1 of 4 steps: text came up.");
+    expect(note(3, "map")).toBe("You moved 3 of 4 steps: the map changed.");
+    expect(note(2, "blocked")).toBe("You moved 2 of 4 steps; something stopped you going up.");
+  });
+  it("owns up to going too far", () => {
+    expect(note(5, null)).toBe("You moved 5 steps (you asked for 4).");
+  });
+});

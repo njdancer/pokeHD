@@ -6,7 +6,7 @@ import { describeLayouts } from "./layout-log.ts";
 import { continueButton, describeButtons, describeGameBoyText, mapName, startingUp } from "./outcome.ts";
 import { pickFrames } from "./recorder.ts";
 import type { Panel, ScreenButton, StateLite } from "./screen-read.ts";
-import { buildTextMap } from "./textmap.ts";
+import { blockerAt, buildTextMap } from "./textmap.ts";
 
 // A tiny world: blocks are one tile throughout (0 floor, 1 wall, 2 grass, 3 water).
 const FLOOR = 0x01;
@@ -62,20 +62,30 @@ const state = (x: number, y: number, npcs: StateLite["npcs"] = []): StateLite =>
   npcs,
 });
 
+/** The map's rows without the numbers: between the column header and the legend, past "N ". */
+const grid = (text: string) =>
+  text
+    .split("\n")
+    .slice(1, -1)
+    .map((l) => l.slice(2));
+
 describe("buildTextMap", () => {
   it("draws the steps around the player, the edge of the map as blocked", () => {
     const text = buildTextMap(world, null, state(2, 3, [{ x: 3, y: 3, facing: "up", step: null, visible: true, pictureId: 1 }]), { left: 3, right: 4, up: 3, down: 3 });
-    const [rows, legend] = [text.split("\n").slice(0, 7), text.split("\n")[7]];
-    expect(rows).toEqual([
-      "########",
-      "###D####",
-      "#.....S#",
-      "#..@N..#",
-      '#""..~~#',
-      '#""..~~#',
-      "########",
+    const lines = text.split("\n");
+    expect(lines.slice(0, 8)).toEqual([
+      "  01234567",
+      "0 ########",
+      "1 ###D####",
+      "2 #.....S#",
+      "3 #..@N..#",
+      '4 #""..~~#',
+      '5 #""..~~#',
+      "6 ########",
     ]);
-    expect(legend).toBe('Legend: @ you, . walkable, # blocked, " tall grass, ~ water, D door/stairs/exit, N person, S sign. You face down; north is up.');
+    expect(lines[8]).toBe(
+      `Legend: @ you, . walkable, # blocked, " tall grass, ~ water, D door/stairs/exit, N person, S sign. You're at column 3, row 3, facing down; north is up.`,
+    );
   });
 
   it("leaves out people who aren't there and marks balls", () => {
@@ -89,8 +99,39 @@ describe("buildTextMap", () => {
       ]),
       { left: 1, right: 1, up: 0, down: 0 },
     );
-    expect(text.split("\n")[0]).toBe("o@.");
+    expect(grid(text)[0]).toBe("o@.");
     expect(text).toContain("o ball on the ground");
+  });
+});
+
+describe("the text map's window", () => {
+  it("is the Game Boy's own view by default: 10 steps wide, 9 tall, the player 5th across and down", () => {
+    const text = buildTextMap(world, null, state(2, 3));
+    const rows = grid(text);
+    expect(rows).toHaveLength(9);
+    expect(rows.every((r) => r.length === 10)).toBe(true);
+    expect(rows[4]!.indexOf("@")).toBe(4);
+    expect(text).toContain("You're at column 4, row 4");
+  });
+
+  it("numbers columns 0–9 across the top and rows 0–8 down the side", () => {
+    const lines = buildTextMap(world, null, state(2, 3)).split("\n");
+    expect(lines[0]).toBe("  0123456789");
+    expect(lines.slice(1, 10).map((l) => l.slice(0, 2))).toEqual(["0 ", "1 ", "2 ", "3 ", "4 ", "5 ", "6 ", "7 ", "8 "]);
+  });
+});
+
+describe("blockerAt", () => {
+  const dir = (dx: number, dy: number) => ({ dx, dy });
+  it("names what the text map shows in the way", () => {
+    expect(blockerAt(world, null, state(1, 2), dir(0, -1))).toBe("a wall");
+    expect(blockerAt(world, null, state(0, 2), dir(-1, 0))).toBe("a wall"); // the edge of the world
+    expect(blockerAt(world, null, state(4, 3), dir(0, 1))).toBe("water");
+    expect(blockerAt(world, null, state(4, 2), dir(1, 0))).toBe("a sign");
+    expect(blockerAt(world, null, state(2, 3, [{ x: 3, y: 3, facing: "up", step: null, visible: true, pictureId: 1 }]), dir(1, 0))).toBe("someone");
+  });
+  it("says nothing when the way looks open", () => {
+    expect(blockerAt(world, null, state(2, 3), dir(-1, 0))).toBeNull();
   });
 });
 
@@ -104,14 +145,19 @@ describe.skipIf(!existsSync(ROM_PATH))("buildTextMap on the ROM's caves", () => 
     // 1F's west strip is light floor (0x05) beside dark floor (0x20): CAVERN $20,$05 in
     // TilePairCollisionsLand, so stepping west from (2,3) doesn't move you.
     const text = buildTextMap(rom!, null, at("MT_MOON_1F", 2, 3), { left: 1, right: 1, up: 1, down: 1 });
-    expect(text.split("\n").slice(0, 3)).toEqual(["^..", "^@.", "^.."]);
+    expect(grid(text)).toEqual(["^..", "^@.", "^.."]);
     expect(text).toContain("^ raised floor (no step straight between ^ and the lower floor");
   });
 
   it("marks the stone steps that join the two heights (Mt Moon B2F)", () => {
     const text = buildTextMap(rom!, null, at("MT_MOON_B2F", 28, 8), { left: 1, right: 1, up: 2, down: 0 });
-    expect(text.split("\n").slice(0, 3)).toEqual(["^^^", "#//", ".@."]);
+    expect(grid(text)).toEqual(["^^^", "#//", ".@."]);
     expect(text).toContain("/ stairs between floor heights");
+  });
+
+  it("says when a step would drop between floor heights, but not onto the stairs", () => {
+    expect(blockerAt(rom!, null, at("MT_MOON_1F", 2, 3), { dx: -1, dy: 0 })).toBe("a drop between floor heights (use the stairs /)");
+    expect(blockerAt(rom!, null, at("MT_MOON_B2F", 28, 8), { dx: 0, dy: -1 })).toBeNull();
   });
 });
 

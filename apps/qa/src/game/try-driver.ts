@@ -25,7 +25,7 @@ const driver = createDriver({
   ...(flag("--stream") ? {} : { streamPath: "game" }),
   runDir,
   headless: !flag("--headed"),
-  ...(flag("--no-render") ? { gameQuery: "stats&qa&render=0" } : {}),
+  ...(flag("--no-render") ? { gameQuery: "stats&qa&maxfps=60&render=0" } : {}),
 });
 
 let turn = 0;

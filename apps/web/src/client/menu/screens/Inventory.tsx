@@ -7,7 +7,7 @@ import { BallMark, ItemIcon } from "../icons.tsx";
 import { useNav, type Purpose } from "../nav.tsx";
 import { inBattle, ITEM_KINDS, type Item, type ItemKind, type Mon } from "../model.ts";
 import { HpBar, Page, Pixel, ReadButton, Row, Section, SortList, StatusPill, Switch, Types, Verbs } from "../ui.tsx";
-import { canLearn, heals, itemVerbs, monVerbs } from "../verbs.ts";
+import { canLearn, itemVerbs, monVerbs, onMon } from "../verbs.ts";
 
 type Kind = "all" | "Pokémon" | ItemKind;
 
@@ -167,7 +167,7 @@ export function MonScreen({ i, purpose }: { i: number; purpose?: Purpose }) {
   const nav = useNav();
   const m = env.model.team[i];
   if (!m) return null;
-  const e = env.catalogue.entries[m.dex - 1]!;
+  const e = env.catalogue.entries[m.dex - 1];
   const battle = inBattle(env.moment);
   return (
     <Page title={niceMon(m.name)} meta={`Lv ${m.level}`} banner={purposeLine(env, purpose) ?? (battle && nav.sheet && i > 0 ? "Sending it out uses your turn" : undefined)}>
@@ -182,7 +182,7 @@ export function MonScreen({ i, purpose }: { i: number; purpose?: Purpose }) {
             HP {m.hp} of {m.maxHp} <StatusPill status={m.status} />
           </span>
           <HpBar mon={m} big />
-          <Types types={e.types} />
+          {e && <Types types={e.types} />}
         </div>
       </div>
       <Verbs verbs={monVerbs(env, nav, i, purpose)} />
@@ -202,7 +202,7 @@ export function MonScreen({ i, purpose }: { i: number; purpose?: Purpose }) {
               </div>
             )}
           />
-          <Row title="Pokédex page" sub={`${e.category.charAt(0) + e.category.slice(1).toLowerCase()} Pokémon`} onClick={() => nav.tab("dex", { k: "entry", dex: m.dex })} />
+          {e && <Row title="Pokédex page" sub={`${e.category.charAt(0) + e.category.slice(1).toLowerCase()} Pokémon`} onClick={() => nav.tab("dex", { k: "entry", dex: m.dex })} />}
         </>
       )}
     </Page>
@@ -296,7 +296,7 @@ export function BagPick({ purpose }: { purpose?: Purpose }) {
   const nav = useNav();
   const { model, moment } = env;
   let items = model.bag;
-  if (purpose && "onMon" in purpose) items = items.filter(heals);
+  if (purpose && "onMon" in purpose) items = items.filter(onMon);
   if (purpose && "giftTo" in purpose) items = items.filter((b) => b.kind !== "Key" && b.kind !== "Machines");
   if (moment === "wild") items = [...items].sort((a, b) => Number(b.kind === "Balls") - Number(a.kind === "Balls"));
   if (inBattle(moment) && nav.sheet) items = items.filter((b) => b.kind === "Healing" || b.kind === "Balls" || b.kind === "Battle");

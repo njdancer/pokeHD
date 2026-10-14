@@ -92,6 +92,7 @@ import { DexJournal } from "../dex/journal.ts";
 import type { DexMenuProps } from "../menu/DexMenu.tsx";
 import type { LiveActions } from "../menu/live.ts";
 import { LiveMenu } from "../menu/LiveMenu.tsx";
+import { MenuBoundary } from "../menu/MenuBoundary.tsx";
 import type { AppOptions } from "../menu/model.ts";
 import { PlayJournal } from "../menu/journal.ts";
 import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
@@ -250,16 +251,17 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const [ask, setAskState] = useState<{ id: number; ask: GameAsk; game: GameSnapshot | null } | null>(null);
   /** While either is up, the player's buttons are the menu's, not the game's. */
   const menuUpRef = useRef(false);
-  const menuStateRef = useRef({ open: false, ask: false });
+  /** `ask`: the kind of question the sheet is asking, if one is up. */
+  const menuStateRef = useRef<{ open: boolean; ask: GameAsk["kind"] | null }>({ open: false, ask: null });
   const setMenuOpen = (next: DexMenuProps["start"] | null) => {
     menuStateRef.current.open = !!next;
-    menuUpRef.current = menuStateRef.current.open || menuStateRef.current.ask;
+    menuUpRef.current = menuStateRef.current.open || !!menuStateRef.current.ask;
     if (menuUpRef.current) hostRef.current?.setButtons(0);
     setMenuOpenState(next);
   };
   const setAsk = (next: { id: number; ask: GameAsk; game: GameSnapshot | null } | null) => {
-    menuStateRef.current.ask = !!next;
-    menuUpRef.current = menuStateRef.current.open || menuStateRef.current.ask;
+    menuStateRef.current.ask = next?.ask.kind ?? null;
+    menuUpRef.current = menuStateRef.current.open || !!menuStateRef.current.ask;
     if (menuUpRef.current) hostRef.current?.setButtons(0);
     setAskState(next);
   };
@@ -673,7 +675,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           }
           // The HD battle menu stands in for the battle's menus: the Game Boy's are masked out
           // while the game asks, and while it draws them either side of asking.
-          const choosing = BATTLE_MENUS && !!battleScreen && fight?.state?.type !== "link" && (!!battleAskRef.current || battleMenuShown(onScreen));
+          // LearnMove's list at a level up draws its Game Boy box before the sheet asks which move
+          // to forget: masked the same way (QA bug 48).
+          const choosing =
+            (BATTLE_MENUS && !!battleScreen && fight?.state?.type !== "link" && (!!battleAskRef.current || battleMenuShown(onScreen))) ||
+            (!!battleScreen && menuStateRef.current.ask === "forget-move");
           // A Pokédex menu action running the game's routine (a POTION from the Inventory tab): what
           // it draws (the party menu ItemUseMedicine redraws, "recovered by 20!") is the menu's to
           // report, in its own words once the action is done, so neither the HD text layer nor the
@@ -1433,40 +1439,42 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         />
       )}
       {menu && world && catalogue && (
-        <LiveMenu
-          rom={rom}
-          world={world}
-          catalogue={catalogue}
-          game={liveGame}
-          bind={bindLive}
-          ask={ask}
-          onAskDone={() => setAsk(null)}
-          open={!!menuOpen}
-          // The modelled dex is the button: shut in the corner, it opens with the menu on its screen.
-          onOpen={() => setMenuOpen({ tab: "dex" })}
-          away={!ready || !!ask || !!onboarding || !!nameAsk}
-          {...(menuOpen ? { start: menuOpen } : {})}
-          onClose={closeMenu}
-          journal={playJournal}
-          friends={menuFriends}
-          savedAt={savedAt}
-          app={appOptions}
-          setApp={setApp}
-          sendGift={gifts && room?.status === "open" ? sendGift : undefined}
-          grownUps={
-            <div className="game-settings">
-              {(resumed || cloudNewer) && (
-                <div className="game-menu-notes">
-                  {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
-                  {cloudNewer && <p>There's a newer save in the cloud. Load it below.</p>}
-                </div>
-              )}
-              {admin && <AdminTools />}
-              {input && <KeyBindingsPanel input={input} />}
-              {grownUpControls}
-            </div>
-          }
-        />
+        <MenuBoundary>
+          <LiveMenu
+            rom={rom}
+            world={world}
+            catalogue={catalogue}
+            game={liveGame}
+            bind={bindLive}
+            ask={ask}
+            onAskDone={() => setAsk(null)}
+            open={!!menuOpen}
+            // The modelled dex is the button: shut in the corner, it opens with the menu on its screen.
+            onOpen={() => setMenuOpen({ tab: "dex" })}
+            away={!ready || !!ask || !!onboarding || !!nameAsk}
+            {...(menuOpen ? { start: menuOpen } : {})}
+            onClose={closeMenu}
+            journal={playJournal}
+            friends={menuFriends}
+            savedAt={savedAt}
+            app={appOptions}
+            setApp={setApp}
+            sendGift={gifts && room?.status === "open" ? sendGift : undefined}
+            grownUps={
+              <div className="game-settings">
+                {(resumed || cloudNewer) && (
+                  <div className="game-menu-notes">
+                    {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
+                    {cloudNewer && <p>There's a newer save in the cloud. Load it below.</p>}
+                  </div>
+                )}
+                {admin && <AdminTools />}
+                {input && <KeyBindingsPanel input={input} />}
+                {grownUpControls}
+              </div>
+            }
+          />
+        </MenuBoundary>
       )}
       {savedAt > 0 && <SavedToast shownAt={savedAt} />}
       {erasing && <EraseConfirm old={erasing.old} onAnswer={answerErase} />}

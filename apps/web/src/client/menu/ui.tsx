@@ -169,7 +169,7 @@ export function Switch({ on, label, sub, onChange }: { on: boolean; label: React
 
 /** A crisp pixel picture from the ROM. */
 export function Pixel({ src, alt = "", className = "", style }: { src: string; alt?: string; className?: string; style?: CSSProperties }) {
-  return <img className={`m-pixel ${className}`} src={src} alt={alt} draggable={false} style={style} />;
+  return <img className={`m-pixel ${className}`} src={src || undefined} alt={alt} draggable={false} style={style} />;
 }
 
 /**

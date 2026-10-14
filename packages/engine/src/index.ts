@@ -13,6 +13,7 @@ import { NEUTRAL_TINT, normTint } from "./look/grade.ts";
 import { createPost } from "./look/post.ts";
 import { alignedPixelRatio, defaultQuality, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
 import { createGovernor, RUNGS } from "./look/governor.ts";
+import { createFrameCap } from "./frame-cap.ts";
 import { castsMovingShadow, installCachedShadow } from "./look/cached-shadow.ts";
 import { createRig } from "./look/rig.ts";
 import { webgpuViewsWork } from "./webgpu-probe.ts";
@@ -156,6 +157,12 @@ export interface EngineOptions {
    * isn't redrawn. Defaults to `?ambient=`, else 3, about the rate the original animates water.
    */
   ambientRate?: number;
+  /**
+   * Most frames drawn per second; ticks in between are skipped, their time carried into the next
+   * drawn frame. Uncapped (the display's rate) when 0 or unset. Defaults to `?maxfps=`. The QA
+   * harness caps at 60 so a 120 Hz display leaves its stream encoder room.
+   */
+  maxFps?: number;
 }
 
 // The newest engine created on a canvas owns it. React StrictMode mounts, unmounts and
@@ -332,6 +339,8 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const frameHooks: { before?: () => void; after?: () => void } = {};
 
   const ambientRate = options.ambientRate ?? (Number(query.get("ambient")) || 3);
+  const maxFps = options.maxFps ?? (Number(query.get("maxfps")) || 0);
+  const frameCap = maxFps > 0 ? createFrameCap(maxFps) : null;
   const watch = createChangeWatch();
   const watched: number[] = [];
 
@@ -413,6 +422,8 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   /** Ambient time: the frame loop's clock, and where its last step landed. */
   let ambientClock = 0;
   let ambientAt = 0;
+  /** Time from ticks the frame cap skipped, owed to the next drawn frame. */
+  let carried = 0;
   renderer.setAnimationLoop((t) => {
     if (superseded()) return renderer.setAnimationLoop(null);
     timer.update(t);
@@ -429,10 +440,18 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       if (dofChanged) reapply();
       else resize();
     }
+    // Over the frame cap: nothing advances or draws, and the governor doesn't sample the next
+    // tick (nothing was drawn on this one), so it only ever judges the interval after a draw.
+    if (frameCap && !frameCap.allows(t)) {
+      carried += Math.max(delta, 0);
+      drewLast = false;
+      return;
+    }
     frameHooks.before?.();
     // The first delta can be negative (rAF time vs. the timer's clock); clamp long stalls too.
     warmup.beforeFrame();
-    const dt = Math.min(Math.max(delta, 0), 0.1);
+    const dt = Math.min(Math.max(delta, 0) + carried, 0.1);
+    carried = 0;
     ambientClock += dt;
     let ambientDt = 0;
     if (Math.floor(ambientClock * ambientRate) !== Math.floor(ambientAt * ambientRate)) {
@@ -441,6 +460,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     }
     const rendered = renderFrame(dt, ambientDt, false);
     drewLast = rendered;
+    if (rendered) frameCap?.drew(t);
     warmup.afterFrame(rendered);
     // Ready on the frame after one drawn whole: by then that one has reached the screen.
     if (readyFrame) markReady();
