@@ -70,7 +70,7 @@ import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "..
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
 import {
-  BattleItemUse, BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen, partyScreenMessage, type BattleFrame,
+  BattleDexPage, BattleItemUse, BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen, partyScreenMessage, type BattleFrame,
 } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { BattleMenu, type BattleKey } from "./BattleMenu.tsx";
@@ -274,6 +274,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const lastAskRef = useRef<{ id: number; ask: GameAsk } | null>(null);
   /** An item used in a battle: its party screen stays behind the HD battle (QA bug 55). */
   const battleItemRef = useRef(new BattleItemUse());
+  /** The Pokédex page after a catch: it stays behind the HD battle while the HD Pokédex shows it (QA bug 68). */
+  const battleDexRef = useRef(new BattleDexPage());
   const setAsk = (next: { id: number; ask: GameAsk; game: GameSnapshot | null } | null) => {
     menuStateRef.current.ask = next?.ask.kind ?? null;
     menuUpRef.current = menuStateRef.current.open || !!menuStateRef.current.ask;
@@ -661,11 +663,15 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           const fight = battles?.frame(watched);
           const actual = hd && inWorld ? fight?.scene : undefined;
           const textBytes = bytes as unknown as TextWatched;
-          // An item used in the battle (a POTION): what the game draws for it stays behind the HD
-          // battle as it last was, and only its message shows (BattleItemUse, QA bug 55).
+          // An item used in the battle (a POTION), or the Pokédex page after a catch: what the game
+          // draws for it stays behind the HD battle as it last was, and only its message shows
+          // (BattleItemUse, QA bug 55; BattleDexPage, QA bug 68).
           const item = battleItemRef.current;
-          const wholeText = actual && fight && item.active ? textDecoder.decode(textBytes) : null;
-          const itemUse = !!wholeText && item.using(fight!, wholeText, !!battleAskRef.current);
+          const dexPage = battleDexRef.current;
+          const wholeText = actual && fight && (item.active || dexPage.active) ? textDecoder.decode(textBytes) : null;
+          const using = !!wholeText && item.using(fight!, wholeText, !!battleAskRef.current);
+          const paging = !!wholeText && dexPage.showing(fight!, wholeText, !!battleAskRef.current || !!menuStateRef.current.ask);
+          const itemUse = using || paging;
           const battle = itemUse ? "scene" : actual;
           if (actual === "scene" && fight?.view) lastBattle = { view: fight.view, huds: fight.huds };
           live!.setBattle(battle ? ((itemUse ? lastBattle?.view : fight?.view) ?? null) : null);
@@ -682,7 +688,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           // screen only its text and menu cells are read (the HUDs and pictures are drawn in HD).
           const onScreen = wholeText ?? textDecoder.decode(battleScreen ? battleText(textBytes, battleScreen) : textBytes);
           // On the battle screen, less the move's TYPE box: under "No PP left!" only the message shows.
-          const text = itemUse ? partyScreenMessage(onScreen) : battleScreen ? battleTextShown(onScreen) : onScreen;
+          // The Pokédex page itself has nothing to read: the HD Pokédex shows the Pokémon.
+          const text = itemUse ? partyScreenMessage(dexPage.onPage ? { ...onScreen, dialog: null } : onScreen) : battleScreen ? battleTextShown(onScreen) : onScreen;
           if (talking) {
             const d = text.dialog;
             if (!d) {
@@ -767,11 +774,15 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           // The Pokédex menu shows instead, on the Pokémon's page if the game opened its data.
           if (menuRef.current && h) {
             dexHeldRef.current = true;
+            if (opened.kind === "data" && latest?.mode === "battle") battleDexRef.current.opened();
             const dexNo = opened.kind === "data" ? pokedexNumber(rom, opened.species) : 0;
-            setMenuOpen({ tab: "dex", ...(dexNo ? { screen: { k: "entry", dex: dexNo } } : {}) });
+            // The game waits on its page for A or B: backing out of the Pokémon's page shuts the
+            // menu, so one tap goes on (to the nickname after a catch).
+            setMenuOpen({ tab: "dex", ...(dexNo ? { screen: { k: "entry", dex: dexNo }, backCloses: true } : {}) });
             return;
           }
           if (!h || dexLookRef.current === "off") return h?.passDex();
+          if (opened.kind === "data" && latest?.mode === "battle") battleDexRef.current.opened();
           void h
             .read([
               [SYMBOLS.wPokedexOwned.address, 19],
@@ -791,6 +802,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
               setDex({ progress: { ...journal.progress(flags.seen, flags.owned, decodeText(rival!)), onShow: flags.onShow }, openOn: dexNo || undefined });
             });
         },
+        onDexClosed: () => battleDexRef.current.closed(),
         onTalk: (map, npc) => {
           journal?.met(map, npc);
           playJournalRef.current?.met(map, npc);

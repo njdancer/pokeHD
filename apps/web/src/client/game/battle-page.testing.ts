@@ -4,15 +4,17 @@
 // frames late as across the emulator worker, and each frame's Game Boy screen masked the way Game
 // masks it: what's left of it is what the player would see over the HD battle. The game's questions
 // go through the menu's LiveActions first, as in Game: one it was told the answer to up front (the
-// bag's "Use POTION on GEODUDE": the party question after the bag's) never reaches a sheet.
+// bag's "Use POTION on GEODUDE": the party question after the bag's) never reaches a sheet. The
+// game's Pokédex page (after a catch) is the page's to show, over the game's held by DexGuard, as
+// in Game with the HD Pokédex on: a tap shuts it.
 import {
-  BATTLE_WATCHES, BattleMenus, Button, Controls, GameAsks, GameBoy, gameInputWait, OVERWORLD_WATCHES, ScreenTextDecoder, TEXT_WATCHES,
-  type AskAnswer, type BattleAnswer, type BattleAsk, type GameAsk, type ScreenText, type TextWatched, type Watch,
+  BATTLE_WATCHES, BattleMenus, Button, Controls, DexGuard, GameAsks, GameBoy, gameInputWait, OVERWORLD_WATCHES, ScreenTextDecoder, TEXT_WATCHES,
+  type AskAnswer, type BattleAnswer, type BattleAsk, type DexOpened, type GameAsk, type ScreenText, type TextWatched, type Watch,
 } from "@pokehd/emu";
 import { readGlyphs } from "@pokehd/rom";
 import { LiveActions, type LiveHost } from "../menu/live.ts";
 import {
-  BattleItemUse, BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen, partyScreenMessage,
+  BattleDexPage, BattleItemUse, BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen, partyScreenMessage,
 } from "./battle.ts";
 import { battleTextFits } from "./hd-text.ts";
 import { newScriptView, scriptTap, scriptView, withScriptState, type ScriptView } from "./script-view.ts";
@@ -47,6 +49,13 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
   gb.loadState(state);
   const menus = new BattleMenus(gb, { rom, onAsk: () => {} });
   const itemUse = new BattleItemUse();
+  const dexPage = new BattleDexPage();
+  /** The Pokédex pages the game opened, which the page showed in HD (Game's onDexOpen). */
+  const dexOpened: DexOpened[] = [];
+  /** The HD Pokédex is up. */
+  let dexUp = false;
+  /** The game's questions before the Pokédex opened: one since is a sheet up over the game. */
+  let asksAtOpen = 0;
   /** The game's questions for the sheets, as the page has them. */
   const sheets: { id: number; ask: GameAsk }[] = [];
   /** Every question the game asked, sheet or not. */
@@ -80,8 +89,19 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
     },
   });
   const script: { current: ScriptView | null } = { current: null };
+  // The page's taps reach the game through the Pokédex guard, as in the emulator worker.
+  const dex = new DexGuard(gb, {
+    rom,
+    onOpen: (opened) => {
+      dexOpened.push(opened);
+      dexUp = true;
+      asksAtOpen = gameAsks.length;
+      if (opened.kind === "data") dexPage.opened();
+    },
+    onClosed: () => dexPage.closed(),
+  });
   const controls: Controls = new Controls(gb, {
-    setButtons: (m) => gb.setButtons(m),
+    setButtons: (m) => dex.setButtons(m),
     script: {
       message: ({ id, message, letterFrames }) => {
         script.current = newScriptView(id, message, letterFrames);
@@ -126,6 +146,7 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
    */
   const step = () => {
     controls.frame();
+    dex.frame();
     gb.runFrame();
     if (sending && --sending.in < 0) {
       menus.answer(sending.id, sending.answer);
@@ -154,17 +175,20 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
     hd = null;
     more = false;
     scriptShown = false;
-    // An item used in the battle: its party screen stays behind the HD battle, but its message.
+    // An item used in the battle, or the Pokédex page after a catch: what the game draws for it
+    // stays behind the HD battle, but its message.
     const whole = decoder.decode(watched as unknown as TextWatched);
-    if (itemUse.using(fight, whole, !!asked)) {
-      const text = partyScreenMessage(whole);
+    const using = itemUse.using(fight, whole, !!asked);
+    const page = dexPage.showing(fight, whole, !!asked || gameAsks.length > asksAtOpen);
+    if (using || page) {
+      const text = partyScreenMessage(dexPage.onPage ? { ...whole, dialog: null } : whole);
       const fits = battleTextFits(text);
       const view = scriptView(script, text, fits, (id) => controls.releaseMessage(id));
       hd = view ? (view.lines ?? []).join(" / ") : fits ? text.boxes.flatMap((b) => b.lines.map((l) => l.text)).join(" / ") : null;
       more = (view ? withScriptState(text, script.current) : fits ? text : null)?.dialog?.state === "waiting";
       scriptShown = !!view;
       observe(text, view);
-      return { visible: 0, read: "item" };
+      return { visible: 0, read: using ? "item" : "dex" };
     }
     const screen = fight.scene === "scene" ? fight.screen : null;
     if (!screen) {
@@ -193,6 +217,12 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
 
   /** A tap on the HD message box (Game's textActions.press("A")). */
   const tapMessage = () => {
+    // The HD Pokédex shuts, and the game leaves its own page.
+    if (dexUp) {
+      dexUp = false;
+      dex.close();
+      return "dex";
+    }
     const s = scriptShown ? script.current : null;
     const tap = scriptTap(s);
     if (tap === "next" && s!.index === s!.boxes.length - 1) controls.readOn(s!.id);
@@ -217,10 +247,11 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
       const now = `${hd}#${more}#${script.current?.id}`;
       still = now === last ? still + 1 : 0;
       last = now;
-      reading = hd && !asked && (more || !cue) ? reading + 1 : 0;
+      // The HD Pokédex up over the game's page is read like a message, and shut with a tap.
+      reading = dexUp || (hd && !asked && (more || !cue)) ? reading + 1 : 0;
       const tap = cue ? reading === CUE_FRAMES || (!!hd && !asked && !more && still === STILL_FRAMES) : reading === READ_FRAMES;
       if (tap) {
-        shown.taps.push({ hd: hd!, message: scriptShown ? (script.current?.id ?? null) : null, more, tap: tapMessage() });
+        shown.taps.push({ hd: dexUp ? "(Pokédex)" : hd!, message: scriptShown ? (script.current?.id ?? null) : null, more, tap: tapMessage() });
         reading = 0;
         still = 0;
       }
@@ -248,5 +279,5 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
   /** Who has the next input, as Game tells ?stats (qa-signals.ts). */
   const input = () =>
     pageInput({ mode: "battle", inWorld: true, ...box, pageHolds: scriptShown && !!script.current && !script.current.ended, game: gameInputWait(gb), battleAsk: !!asked, sheet: false, acting: false });
-  return { gb, play, answer, asked: () => asked, gameAsks, step, tapMessage, send, input, log, hd: () => hd, more: () => more };
+  return { gb, play, dexOpened, dexUp: () => dexUp, answer, asked: () => asked, gameAsks, step, tapMessage, send, input, log, hd: () => hd, more: () => more };
 }

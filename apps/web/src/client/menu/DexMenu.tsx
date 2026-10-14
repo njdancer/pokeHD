@@ -48,8 +48,11 @@ export interface DexMenuProps {
   env: Omit<MenuEnv, "toast">;
   open: boolean;
   onClose(): void;
-  /** Where to open (a tab, or a screen in it). */
-  start?: { tab: TabId; screen?: Screen };
+  /**
+   * Where to open (a tab, or a screen in it). `backCloses`: backing out of that screen shuts the
+   * menu rather than going to the tab's start (a Pokémon's page the game opened and waits on).
+   */
+  start?: { tab: TabId; screen?: Screen; backCloses?: boolean };
   /** A game request: shown as a sheet instead of the dex. */
   request?: Request | null;
   /** Called when the request ends (answered or cancelled). */
@@ -110,7 +113,8 @@ export function DexMenu({ env: base, open, onClose, start, request, onRequestDon
   const place = useState(() => {
     const s = Object.fromEntries(TABS.map((t) => [t.id, [rootOf(t.id)]])) as Record<TabId, Screen[]>;
     if (start?.screen) s[start.tab] = [rootOf(start.tab), start.screen];
-    return { tab: start?.tab ?? ("dex" as TabId), stacks: s, motion: "none" as Motion };
+    const closesAt = start?.backCloses ? start.screen : undefined;
+    return { tab: start?.tab ?? ("dex" as TabId), stacks: s, motion: "none" as Motion, ...(closesAt ? { closesAt } : {}) };
   });
   // Each tab keeps its place when the dex shuts, but not a one-off pick ("Teach it to which
   // Pokémon?", "Use it on…", a gift): it reopens on the screen the pick started from (QA bug 54).
@@ -238,7 +242,8 @@ function useSideGrip(dexRef: RefObject<HTMLDivElement | null>, side: Side, setSi
   };
 }
 
-type Place = { tab: TabId; stacks: Record<TabId, Screen[]>; motion: Motion };
+/** `closesAt`: the screen the menu opened on, when backing out of it shuts the menu. */
+type Place = { tab: TabId; stacks: Record<TabId, Screen[]>; motion: Motion; closesAt?: Screen };
 
 function Dex({ open, onClose, place, layout: forced, side, setSide, floating, copy }: {
   open: boolean;
@@ -251,20 +256,21 @@ function Dex({ open, onClose, place, layout: forced, side, setSide, floating, co
   /** The extra copy drawn while the dex turns: looks the same, can't be used. */
   copy?: boolean;
 }) {
-  const [{ tab, stacks, motion }, setState] = place;
+  const [{ tab, stacks, motion, closesAt }, setState] = place;
   const stack = stacks[tab];
   const env = useEnv();
-  const update = (t: TabId, next: Screen[], how: Motion) => setState((st) => ({ tab: t, stacks: { ...st.stacks, [t]: next }, motion: how }));
+  const update = (t: TabId, next: Screen[], how: Motion) => setState((st) => ({ ...st, tab: t, stacks: { ...st.stacks, [t]: next }, motion: how }));
   const nav: Nav = {
     depth: stack.length,
     sheet: false,
     go: (s) => update(tab, [...stack, s], "push"),
     back: () => {
-      if (stack.length > 1) update(tab, stack.slice(0, -1), "pop");
+      if (stack.length === 2 && stack[1] === closesAt) onClose();
+      else if (stack.length > 1) update(tab, stack.slice(0, -1), "pop");
     },
     replace: (s) => update(tab, [...stack.slice(0, -1), s], "none"),
     reset: (s) => update(tab, s ? [rootOf(tab), s] : [rootOf(tab)], "pop"),
-    tab: (t, s) => setState((st) => ({ tab: t, stacks: s ? { ...st.stacks, [t]: s.k === t ? [s] : [rootOf(t), s] } : st.stacks, motion: "tab" })),
+    tab: (t, s) => setState((st) => ({ ...st, tab: t, stacks: s ? { ...st.stacks, [t]: s.k === t ? [s] : [rootOf(t), s] } : st.stacks, motion: "tab" })),
     close: onClose,
   };
   const top = stack[stack.length - 1]!;
