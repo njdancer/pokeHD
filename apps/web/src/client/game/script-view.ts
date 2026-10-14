@@ -71,17 +71,47 @@ export function scriptTap(script: ScriptView | null): "next" | "close" | "wait" 
   return "close";
 }
 
+/**
+ * A tap on the message reads on (`scriptTap` says "next" or "close"): its box shows the ▼. Not
+ * while the game would still be printing it, nor once it's read and the game only keeps it up
+ * (a trainer sliding in under "RED defeated BLUE!", a move's animation under "used EMBER!"):
+ * a tap then does nothing, and without the ▼ the box looked like the same message again on every
+ * tap (QA bug 56).
+ */
+export function scriptReady(script: ScriptView | null): boolean {
+  return !!script && !script.ended && !script.closed && script.shown >= script.readyAt;
+}
+
+/**
+ * The screen's text with the message box's state as the page shows a whole message: waiting (the
+ * ▼) only when a tap reads on (`scriptReady`), printing while the game would still be printing it,
+ * and idle once it's read and only kept up.
+ */
+export function withScriptState(text: ScreenText, script: ScriptView | null): ScreenText {
+  if (!text.dialog) return text;
+  const state = scriptReady(script) ? "waiting" : script && !script.closed && !script.ended ? "printing" : "idle";
+  return text.dialog.state === state ? text : { ...text, dialog: { ...text.dialog, state } };
+}
+
 /** Frames the HD text may not show a message before it goes back to the game's own text. */
 export const SCRIPT_UNFIT_FRAMES = 10;
 
 /**
  * Whether a line in the game's box is one of the message's. The ▼ sits in the box's last
  * column, over the 18th letter of a full second line, so that line reads one letter short.
+ *
+ * The game also wipes its box from the left, and a frame can land partway through: "AAAJJJJ sent"
+ * reads "sent", "BUG CATCHER sent" reads "R sent". That's still this message going, not other
+ * words: taken for other words, the HD box dropped the message for the game's own half-wiped
+ * line, and showed "R sent / out WEEDLE!" (QA bug 17).
  */
 function isOurs(script: ScriptView, line: string): boolean {
   const l = line.trim();
   if (!l || script.lines.has(l)) return true;
-  for (const s of script.lines) if (s.length === l.length + 1 && s.startsWith(l)) return true;
+  for (const s of script.lines) {
+    if (s.length === l.length + 1 && s.startsWith(l)) return true;
+    if (s.endsWith(l)) return true;
+  }
   return false;
 }
 

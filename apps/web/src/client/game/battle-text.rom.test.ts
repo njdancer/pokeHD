@@ -2,13 +2,15 @@
 // handling (scriptView, scriptTap) over the real game: in the first rival battle, the rival's
 // Pokémon faints to one hit and a second one is sent out. A tap that lands on "Enemy BULBASAUR
 // fainted!" before the player could have read it doesn't close it; the stats box after "SQUIRTLE
-// grew to level 6!" waits for a tap of its own; and every message shows. Skips without the ROM.
+// grew to level 6!" waits for a tap of its own; and every message shows. The rival's name stays
+// whole in "BLUE sent out BULBASAUR!" while the game wipes its box for the next message (QA bug
+// 17). Skips without the ROM.
 import { existsSync, readFileSync } from "node:fs";
 import {
   BATTLE_WATCHES, Button, Controls, GameBoy, OVERWORLD_WATCHES, ScreenTextDecoder, TEXT_WATCHES,
   type ScreenText, type TextWatched, type Watch,
 } from "@pokehd/emu";
-import { FONT_CHARS, readGlyphs, SYMBOLS } from "@pokehd/rom";
+import { decodeText, FONT_CHARS, readGlyphs, SYMBOLS } from "@pokehd/rom";
 import { describe, expect, it } from "vitest";
 import { playToRivalBattle } from "../../../../../packages/emu/src/testing.ts";
 import { BattleTracker, battleText } from "./battle.ts";
@@ -19,6 +21,8 @@ const ROM_PATH = new URL("../../../../../rom/pokeblue.gb", import.meta.url);
 const WASM_PATH = new URL("../../../../../packages/emu/src/generated/sameboy.wasm", import.meta.url);
 /** party_struct (PARTYMON_STRUCT_LENGTH). */
 const PARTY_MON_LENGTH = 44;
+/** NAME_LENGTH: a name and its terminator. */
+const NAME_LENGTH = 11;
 
 describe.skipIf(!existsSync(ROM_PATH))("battle messages in HD", () => {
   it("shows each message until the player could have read it, and the stats box until tapped (QA bug 26)", { timeout: 120_000 }, async () => {
@@ -94,6 +98,10 @@ describe.skipIf(!existsSync(ROM_PATH))("battle messages in HD", () => {
 
     // Through "RIVAL wants to fight!" and the send-outs, to the battle menu.
     play(menuUp);
+    // The game wipes its box from the left before "Go! SQUIRTLE!", and a frame lands partway
+    // through ("sent" with the name gone): the HD box keeps the whole message (QA bug 17).
+    const rival = decodeText(gb.readBytes(SYMBOLS.wRivalName.address, NAME_LENGTH));
+    expect(seen.map((s) => s.lines).filter((l) => /sent out/.test(l))).toEqual([`${rival} sent out BULBASAUR!`]);
     // One hit from SQUIRTLE takes the rival's BULBASAUR down, and a second BULBASAUR follows it.
     gb.write(SYMBOLS.wEnemyMonHP.address, 0);
     gb.write(SYMBOLS.wEnemyMonHP.address + 1, 1);
@@ -155,14 +163,14 @@ describe.skipIf(!existsSync(ROM_PATH))("battle messages in HD", () => {
     // The rival's next BULBASAUR comes out under its own message, up as long as the game shows it.
     play(menuUp);
     const after = seen.slice(seen.findIndex((s) => s.lines === "SQUIRTLE grew to level 6!"));
-    expect(after.find((s) => / sent out BULBASAUR!$/.test(s.lines))?.frames).toBeGreaterThan(30);
+    expect(after.find((s) => s.lines === `${rival} sent out BULBASAUR!`)?.frames).toBeGreaterThan(30);
     // Every message, in the game's order.
     const order = seen.map((s) => s.lines).filter((l) => /fainted|EXP|grew|sent out/.test(l));
     expect(order.slice(-4)).toEqual([
       "Enemy BULBASAUR fainted!",
       expect.stringMatching(/^SQUIRTLE gained \d+ EXP\. Points!/),
       "SQUIRTLE grew to level 6!",
-      expect.stringMatching(/ sent out BULBASAUR!$/),
+      `${rival} sent out BULBASAUR!`,
     ]);
   });
 });

@@ -12,10 +12,14 @@ import {
   BattleItemUse, BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen, partyScreenMessage,
 } from "./battle.ts";
 import { battleTextFits } from "./hd-text.ts";
-import { newScriptView, scriptTap, scriptView, type ScriptView } from "./script-view.ts";
+import { newScriptView, scriptTap, scriptView, withScriptState, type ScriptView } from "./script-view.ts";
 
 /** Frames between the player's taps on a message: a person reading, not mashing. */
 const READ_FRAMES = 40;
+/** Frames from a message's ▼ to the tap of a player who waits for it. */
+const CUE_FRAMES = 10;
+/** Frames a player who waits for the ▼ waits with none before tapping anyway. */
+const STILL_FRAMES = 120;
 
 export interface BattlePageOptions {
   rom: Uint8Array;
@@ -69,6 +73,10 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
   const answered = new Set<number>();
   /** What the HD message box shows. */
   let hd: string | null = null;
+  /** The HD message box shows its ▼ (Game's withScriptState): a tap reads on. */
+  let more = false;
+  /** The HD message box shows the whole message (Game's scriptShownRef). */
+  let scriptShown = false;
 
   /**
    * One frame as Game shows it: the Game Boy pixels left over the HD battle (-1 for the Game Boy
@@ -96,6 +104,8 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
     const watched = Object.fromEntries(Object.entries(watches).map(([k, [a, n]]) => [k, gb.readBytes(a, n)]));
     const fight = battles.frame(watched);
     hd = null;
+    more = false;
+    scriptShown = false;
     // An item used in the battle: its party screen stays behind the HD battle, but its message.
     const whole = decoder.decode(watched as unknown as TextWatched);
     if (itemUse.using(fight, whole, !!asked)) {
@@ -103,6 +113,8 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
       const fits = battleTextFits(text);
       const view = scriptView(script, text, fits, (id) => controls.releaseMessage(id));
       hd = view ? (view.lines ?? []).join(" / ") : fits ? text.boxes.flatMap((b) => b.lines.map((l) => l.text)).join(" / ") : null;
+      more = (view ? withScriptState(text, script.current) : fits ? text : null)?.dialog?.state === "waiting";
+      scriptShown = !!view;
       return { visible: 0, read: "item" };
     }
     const screen = fight.scene === "scene" ? fight.screen : null;
@@ -122,47 +134,57 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
     for (let i = 3; i < data.length; i += 4) if (data[i]) visible++;
     const view = scriptView(script, text, fits, (id) => controls.releaseMessage(id));
     hd = view ? (view.lines ?? []).join(" / ") : fits ? text.boxes.flatMap((b) => b.lines.map((l) => l.text)).join(" / ") : null;
+    more = (view ? withScriptState(text, script.current) : fits ? text : null)?.dialog?.state === "waiting";
+    scriptShown = !!view;
     const read = JSON.stringify({ boxes: onScreen.boxes.map((b) => [b.x, b.y, b.width, b.height, b.lines.map((l) => l.text).join("|")]), loose: onScreen.loose.map((l) => l.text) });
     return { visible, read };
   };
 
   /** A tap on the HD message box (Game's textActions.press("A")). */
   const tapMessage = () => {
-    const s = script.current;
+    const s = scriptShown ? script.current : null;
     const tap = scriptTap(s);
     if (tap === "next" && s!.index === s!.boxes.length - 1) controls.readOn(s!.id);
     if (tap === "close") controls.closeMessage(s!.id);
     if (tap === "none") controls.tap(Button.A);
+    return tap;
   };
 
   /**
    * Plays on, the player tapping each HD message a while after it shows, until `done`: what
-   * showed meanwhile.
+   * showed meanwhile, and each tap with what it did. `cue`: the player taps a little after the
+   * box shows its ▼, and otherwise only once nothing has changed for a while (the game's own
+   * waits with no ▼, as under the stats box after a level), rather than every so often.
    */
-  const play = (done: () => boolean) => {
-    const shown = { leaks: [] as string[], hd: [] as string[] };
-    for (let f = 0, reading = 0; !done(); f++) {
+  const play = (done: () => boolean, { cue = false } = {}) => {
+    const shown = { leaks: [] as string[], hd: [] as string[], taps: [] as { hd: string; message: number | null; more: boolean; tap: string }[] };
+    for (let f = 0, reading = 0, still = 0, last = ""; !done(); f++) {
       if (f > 3000) throw new Error(`Stuck: ${shown.hd.join(" | ")}`);
       const s = step();
       if (s.visible) shown.leaks.push(`frame ${f}: ${s.read}`);
       if (hd && shown.hd.at(-1) !== hd) shown.hd.push(hd);
-      reading = hd && !asked ? reading + 1 : 0;
-      if (reading === READ_FRAMES) {
-        tapMessage();
+      const now = `${hd}#${more}#${script.current?.id}`;
+      still = now === last ? still + 1 : 0;
+      last = now;
+      reading = hd && !asked && (more || !cue) ? reading + 1 : 0;
+      const tap = cue ? reading === CUE_FRAMES || (!!hd && !asked && !more && still === STILL_FRAMES) : reading === READ_FRAMES;
+      if (tap) {
+        shown.taps.push({ hd: hd!, message: scriptShown ? (script.current?.id ?? null) : null, more, tap: tapMessage() });
         reading = 0;
+        still = 0;
       }
     }
     return shown;
   };
 
   /** Answers the HD battle menu's question (the page drops its menu at once), then plays on to the next. */
-  const answer = (a: BattleAnswer, done: () => boolean = () => asked !== null) => {
+  const answer = (a: BattleAnswer, done: () => boolean = () => asked !== null, options: { cue?: boolean } = {}) => {
     const id = asked!.id;
     asked = null;
     answered.add(id);
     sending = { id, answer: a, in: lag };
     cover.answered();
-    return play(done);
+    return play(done, options);
   };
   return { gb, play, answer, asked: () => asked };
 }

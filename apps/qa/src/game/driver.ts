@@ -647,11 +647,16 @@ export function createDriver(opts: DriverOptions): GameDriver {
             .catch(() => false)
         : false;
       await touch("touchStart", p0);
-      // The thumb slides to the first direction; walkPath turns it and lifts it from there.
-      const { dx, dy } = DIRS[runs[0]!.direction];
-      for (const f of [0.3, 0.6, 1]) {
-        await sleep(16);
-        await touch("touchMove", { x: p0.x + dx * f * lean, y: p0.y + dy * f * lean });
+      // From here walkPath moves the thumb (leans, turns, lifts) in the page. The harness used to
+      // slide it toward the first leg through the browser too; on a busy machine that slide could
+      // land after walkPath's first turn and undo it, walking on the old way until a wall.
+      const seesTouch = following && (await frame.evaluate(() => (globalThis as typeof globalThis & { __qaStickPointer?: number }).__qaStickPointer !== undefined).catch(() => false));
+      if (!seesTouch) {
+        const { dx, dy } = DIRS[runs[0]!.direction];
+        for (const f of [0.3, 0.6, 1]) {
+          await sleep(16);
+          await touch("touchMove", { x: p0.x + dx * f * lean, y: p0.y + dy * f * lean });
+        }
       }
       let result: PathResult | null = null;
       if (following) {

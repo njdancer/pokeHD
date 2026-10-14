@@ -1,7 +1,7 @@
 import type { ScreenText } from "@pokehd/emu";
 import type { Message } from "@pokehd/rom";
 import { describe, expect, it } from "vitest";
-import { newScriptView, SCRIPT_MIN_SHOWN_FRAMES, SCRIPT_UNFIT_FRAMES, scriptTap, scriptView, type ScriptView } from "./script-view.ts";
+import { newScriptView, SCRIPT_MIN_SHOWN_FRAMES, SCRIPT_UNFIT_FRAMES, scriptReady, scriptTap, scriptView, withScriptState, type ScriptView } from "./script-view.ts";
 
 const box = { x: 0, y: 12, width: 20, height: 6, lines: [] };
 const screen = (lines: [string, string]) => ({ dialog: { box, lines, state: "waiting" }, menus: [], boxes: [box] }) as unknown as ScreenText;
@@ -44,6 +44,18 @@ describe("scriptView", () => {
     expect(scriptView(ref, other, true, (id) => released.push(id))).toBeNull();
     expect(released).toEqual([25]);
     expect(ref.current).toBeNull();
+  });
+
+  // TrainerSentOutText, then the game's TextBoxBorder wiping the box from the left for "Go!
+  // SQUIRTLE!", caught partway through by a frame.
+  it("keeps a message whole while the game wipes its box from the left (QA bug 17)", () => {
+    const sent: Message = { pages: [{ lines: ["BUG CATCHER sent", "out WEEDLE!"], wait: "end" }], ending: "done" };
+    const ref: { current: ScriptView | null } = { current: newScriptView(9, sent) };
+    const lines = ["BUG CATCHER sent", "out WEEDLE!"];
+    expect(scriptView(ref, screen(["BUG CATCHER sent", "out WEEDLE!"]), true, () => {})).toEqual({ lines });
+    expect(scriptView(ref, screen(["R sent", "out WEEDLE!"]), true, () => {})).toEqual({ lines });
+    expect(scriptView(ref, screen(["", "WEEDLE!"]), true, () => {})).toEqual({ lines });
+    expect(ref.current?.unfit).toBe(0);
   });
 
   // The nurse (DisplayPokemonCenterDialogue_): "OK. We'll need your POKéMON." ends with no wait of
@@ -117,5 +129,22 @@ describe("scriptTap", () => {
     expect(ref.current!.readyAt).toBe(second!.join("").length);
     expect(scriptTap(ref.current)).toBe("wait");
     expect(ref.current!.index).toBe(1);
+  });
+});
+
+describe("withScriptState", () => {
+  it("shows the ▼ only when a tap reads on (QA bug 56)", () => {
+    const defeated: Message = { pages: [{ lines: ["RED defeated", "BLUE!"], wait: "end" }], ending: "done" };
+    const script = newScriptView(9, defeated, 3);
+    const text = screen(["RED defeated", "BLUE!"]);
+    // While the game would still be printing it.
+    expect(withScriptState(text, script).dialog?.state).toBe("printing");
+    script.shown = script.readyAt;
+    expect(scriptReady(script)).toBe(true);
+    expect(withScriptState(text, script)).toBe(text);
+    // Read: the game keeps it up while the rival slides back in, and a tap does nothing.
+    expect(scriptTap(script)).toBe("close");
+    expect(withScriptState(text, script).dialog?.state).toBe("idle");
+    expect(scriptTap(script)).toBe("wait");
   });
 });
