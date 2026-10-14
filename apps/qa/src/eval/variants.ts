@@ -330,4 +330,13 @@ export const VARIANTS: Record<string, Variant> = {
   spaced: build("spaced", "A space between the text map's cells, so each cell is one token (run together, 10 cells are ~3 tokens).", "from-entry", { exitNote: true, fromEntry: true, spaced: true }),
   glyphs: build("glyphs", "Text map cells in one-token symbols (□ floor, ■ wall, ★ you…), one token a cell without spaces.", "from-entry", { exitNote: true, fromEntry: true, glyphs: true }),
   "from-entry-notebook": build("from-entry-notebook", "The position line plus the live notebook tool (for the Mt Moon experiments).", "from-entry", { exitNote: true, fromEntry: true, notebook: true }),
+  // Sonnet got through Viridian Forest 2 of 2 by asking for more steps than it could see and
+  // letting walls stop it (54% of its walks ended blocked, Haiku's 17%); Haiku took short, careful
+  // walks. This tells Haiku the technique.
+  "overshoot": build("overshoot", "Description suggests running a corridor to its end: ask for more steps than you need and let the wall stop you.", "from-entry", {
+    exitNote: true,
+    fromEntry: true,
+    description:
+      'Walk with the on-screen joystick: one arrow per step, in order, e.g. "↑↑↑→→" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Stops early if something interrupts you (a wall, a door, someone talking, a battle), and says what stopped you. To explore, run a corridor to its end: ask for more steps than you can see (say 12 ↑) and the wall stops you there, then look at the new map and turn. Returns what\'s on screen afterwards.',
+  }),
 };
