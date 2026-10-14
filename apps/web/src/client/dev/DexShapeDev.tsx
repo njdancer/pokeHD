@@ -37,6 +37,7 @@ const ACTIONS: MenuActions = {
   sendOut: () => "Go!",
   throwBall: () => "Shoot! It was so close too!",
   teach: () => "Learned it!",
+  cut: () => "Hacked away with CUT!",
   deposit: () => "In the PC now",
   withdraw: () => "Joined your team",
   buy: () => "Bought it",

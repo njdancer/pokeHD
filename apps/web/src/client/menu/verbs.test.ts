@@ -11,7 +11,7 @@ const TM34: Item = { id: 0xc9 + 33, name: "TM34", kind: "Machines", count: 1, te
 const mon: Mon = { key: "a", dex: 5, name: "CHARMELEON", level: 17, hp: 13, maxHp: 52, moves: [] };
 
 function setup(moment: Moment = "explore") {
-  const actions = { useItem: vi.fn(() => ""), teach: vi.fn(() => "") } as unknown as MenuActions;
+  const actions = { useItem: vi.fn(() => ""), teach: vi.fn(() => ""), cut: vi.fn(() => "") } as unknown as MenuActions;
   const model = { team: [mon], bag: [POTION, TM34] } as unknown as MenuModel;
   const env = { model, moment, actions, toast: vi.fn() } as unknown as MenuEnv;
   const nav: Nav = { depth: 4, sheet: false, go: vi.fn(), back: vi.fn(), replace: vi.fn(), reset: vi.fn(), tab: vi.fn(), close: vi.fn() };
@@ -107,5 +107,18 @@ describe("itemVerbs for a boost (MOON STONE)", () => {
   it("is greyed out in battle, as the game refuses it there", () => {
     const { env, nav } = setup("wild");
     expect(itemVerbs(env, { ...nav, sheet: true }, MOON_STONE, { onMon: 0 })[0]!.off).toBe("Not in battle");
+  });
+});
+
+// QA bug 69: "Use CUT" only ever said there was nothing to cut, without asking the game.
+describe("monVerbs for a Pokémon that knows CUT", () => {
+  it("asks the game to CUT, then closes so the tree is seen to go", () => {
+    const { env, nav, actions } = setup();
+    env.model.team[0] = { ...mon, moves: [{ name: "CUT", type: "NORMAL", pp: 30, maxPp: 30 }] };
+    const cut = monVerbs(env, nav, 0).find((v) => v.label === "Use CUT")!;
+    cut.run!();
+    expect(actions.cut).toHaveBeenCalledWith(0);
+    expect(env.toast).not.toHaveBeenCalledWith(expect.stringMatching(/nothing to cut/i));
+    expect(nav.close).toHaveBeenCalled();
   });
 });

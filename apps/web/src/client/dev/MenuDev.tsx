@@ -229,6 +229,10 @@ export function MenuDev() {
         say(`Teach CUT to ${name(mon)}`, `wCurItem ← HM01; call UseItem → ItemUseTMHM. Our DisplayPartyMenu hook answers wWhichPokemon ← ${mon}; LearnMove asks which move to forget through the same kind of hook.`);
         return `${name(mon)} learned CUT!`;
       },
+      cut(mon) {
+        say(`${name(mon)} uses CUT`, `At the overworld safe point: GetTileAndCoordsInFrontOfPlayer (as pressing START does), then UsedCut with wWhichPokemon ← ${mon}. It cuts only a tree tile ($3D) or grass in front.`);
+        return `${name(mon)} hacked away with CUT!`;
+      },
       deposit(i) {
         upd((m) => ({ ...m, team: m.team.filter((_, j) => j !== i), box: [m.team[i]!, ...m.box] }));
         setRequest(null);
