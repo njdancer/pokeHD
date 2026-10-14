@@ -324,6 +324,7 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
     app,
     repel: game.repelSteps,
     biking: game.transport === "bike",
+    ...(typeof game.battleMon === "number" ? { battleMon: game.battleMon } : {}),
     field: fieldOf(rom, world, game),
     layers: {
       encounters,

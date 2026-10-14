@@ -2,6 +2,7 @@
 import type { GameAsk, GameSnapshot } from "@pokehd/emu";
 import { describe, expect, it } from "vitest";
 import { currentGame, momentOf, requestOf } from "./live.ts";
+import { battleMonOf, type MenuModel } from "./model.ts";
 
 const game = (money: number) => ({ money }) as GameSnapshot;
 
@@ -42,5 +43,19 @@ describe("momentOf and requestOf for a bag ask", () => {
     expect(momentOf(walking, bag(false, true))).toBe("shop");
     expect(requestOf(rom, bag(false, true))).toEqual({ kind: "sell" });
     expect(momentOf(walking, bag(false, false))).toBe("explore");
+  });
+});
+
+// QA bug 58: a benched Pokémon sent out and fainted; "Who's next?" named the leader.
+describe("battleMonOf", () => {
+  const team = [{ name: "GEODUDE" }, { name: "PIDGEY" }, { name: "PARAS" }] as MenuModel["team"];
+
+  it("is the game's own index of the one out, not the leader", () => {
+    expect(battleMonOf({ team, battleMon: 2 })).toBe(2);
+  });
+
+  it("falls back to the leader when the game hasn't said, or names no one in the team", () => {
+    expect(battleMonOf({ team })).toBe(0);
+    expect(battleMonOf({ team, battleMon: 5 })).toBe(0);
   });
 });

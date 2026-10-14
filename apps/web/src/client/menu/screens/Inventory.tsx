@@ -5,7 +5,7 @@ import { useState } from "react";
 import { monPic, niceItem, niceMon, useEnv } from "../env.tsx";
 import { BallMark, ItemIcon } from "../icons.tsx";
 import { useNav, type Purpose } from "../nav.tsx";
-import { inBattle, ITEM_KINDS, type Item, type ItemKind, type Mon } from "../model.ts";
+import { battleMonOf, inBattle, ITEM_KINDS, type Item, type ItemKind, type Mon } from "../model.ts";
 import { HpBar, Page, Pixel, ReadButton, Row, Section, SortList, StatusPill, Switch, Types, Verbs } from "../ui.tsx";
 import { canLearn, itemVerbs, monVerbs, onMon } from "../verbs.ts";
 
@@ -286,14 +286,16 @@ export function TeamPick({ purpose, title = "Your team" }: { purpose?: Purpose; 
     purpose && "teach" in purpose && !canLearn(env, m, purpose.teach)
       ? { line: `Can't learn ${move}`, said: `${niceMon(m.name)} is not compatible with ${move}. It can't learn ${move}.` }
       : undefined;
+  // The one out in battle: after a switch it isn't the leader (switching keeps the party's order).
+  const out = battleMonOf(model);
   const banner =
     purposeLine(env, purpose) ??
-    (moment === "fainted" ? `${niceMon(model.team[0]!.name)} fainted! Who's next?` : moment === "pc" ? "Put which Pokémon in the PC?" : inBattle(moment) ? "Sending one out uses your turn" : undefined);
+    (moment === "fainted" ? `${niceMon(model.team[out]!.name)} fainted! Who's next?` : moment === "pc" ? "Put which Pokémon in the PC?" : inBattle(moment) ? "Sending one out uses your turn" : undefined);
   return (
     <Page title={title} meta={`${model.team.length} of 6`} banner={banner}>
       <div className="m-list">
         {model.team.map((m, i) => (
-          <MonRow key={m.key} m={m} i={i} off={offFor(m)} why={whyFor(m)} active={inBattle(moment) && moment !== "fainted" && i === 0} onClick={() => nav.go({ k: "mon", i, for: purpose })} />
+          <MonRow key={m.key} m={m} i={i} off={offFor(m)} why={whyFor(m)} active={inBattle(moment) && moment !== "fainted" && i === out} onClick={() => nav.go({ k: "mon", i, for: purpose })} />
         ))}
       </div>
       {it && <p className="m-foot">{niceItem(it.name)}: {it.text}</p>}
