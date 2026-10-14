@@ -228,9 +228,12 @@ export class Sim {
    * last step begins, as walkPath does in the page; stops when the game takes over (text, a new
    * map), or when no step starts for `stallFrames`. Then settles and describes the screen.
    */
-  joystick(moves: Move[]): WalkResult {
-    const runs = moves.map((m) => ({ direction: m.direction, steps: Math.max(1, Math.min(20, Math.round(m.tiles))) }));
-    const total = runs.reduce((n, r) => n + r.steps, 0);
+  joystick(moves: (Move & { run?: boolean })[]): WalkResult {
+    // A run leg ("↑*") keeps going until something stops it (at most 40 steps), then the walk
+    // carries on with the next leg from wherever it stopped.
+    const runs = moves.map((m) => ({ direction: m.direction, steps: m.run ? 40 : Math.max(1, Math.min(20, Math.round(m.tiles))), run: !!m.run }));
+    const ran: { direction: Direction; steps: number; stopper: string | null }[] = [];
+    let total = runs.reduce((n, r) => n + (r.run ? 0 : r.steps), 0);
     const first = this.state();
     const startFrames = this.frames;
     const stepFrames = (first.player as { transport?: string }).transport === "bike" ? 8 : 16;
@@ -286,6 +289,19 @@ export class Sim {
         continue;
       }
       if (this.frames - lastActive > stall) {
+        const r = runs[leg]!;
+        if (r.run) {
+          ran.push({ direction: r.direction, steps: best, stopper: blockerAt(this.rom.world, this.rom.stitched, s, DIRS[r.direction]) });
+          total += best;
+          leg++;
+          const next = runs[leg];
+          if (!next) break;
+          held = BUTTON[next.direction];
+          base = h;
+          best = 0;
+          lastActive = this.frames;
+          continue;
+        }
         end = "blocked";
         break;
       }
@@ -312,7 +328,8 @@ export class Sim {
     const blocker = why === "blocked" ? blockerAt(this.rom.world, this.rom.stitched, to, DIRS[stoppedGoing]) : null;
     const walked = countSteps(trail);
     const note = walkNote({ asked: total, walked, stop: why, direction: stoppedGoing, blocker });
-    const parts = [note];
+    const runNotes = ran.map((r) => `You ran ${r.steps} step${r.steps === 1 ? "" : "s"} ${r.direction} until ${r.stopper ?? "something stopped you"}${r.stopper ? " was in the way" : ""}.`);
+    const parts = [...runNotes, note];
     if (to.mapId !== first.mapId) parts.push(`You're now in ${mapName(to.mapId)}.`);
     if (fought) parts.push("(A battle started, and the harness fought it for you: this drill is only about walking.)");
     if (textSeen) parts.push(`${textSeen}\n(The text was closed for you.)`);
