@@ -430,6 +430,8 @@ export class LiveActions implements MenuActions {
    */
   #shop = false;
   #shopQueue: { item: number; count: number }[] | "cancel" = [];
+  /** A TM or HM is being taught (its action hasn't ended). */
+  #teaching = false;
 
   constructor(rom: Uint8Array, host: { readonly current: LiveHost }) {
     this.#rom = rom;
@@ -563,7 +565,17 @@ export class LiveActions implements MenuActions {
     return "";
   }
   teach(item: number, mon: number): string {
-    return this.#do({ kind: "use-item", item, mon, answers: [true] });
+    // One machine at a time: a second tap while the game is still on the first (its questions
+    // may be up) would queue another round of them after it (QA bug 48).
+    if (this.#teaching) return "";
+    this.#teaching = true;
+    void this.#host.act({ kind: "use-item", item, mon, answers: [true] }).then((r) => {
+      this.#teaching = false;
+      const text = said(r);
+      if (text) this.#host.notice(text);
+    });
+    // Something at once: the game takes a moment to boot it up before any question (QA bug 47).
+    return `Booting up ${itemName(this.#rom, item)}…`;
   }
   deposit(mon: number): string {
     this.#answer({ index: mon });

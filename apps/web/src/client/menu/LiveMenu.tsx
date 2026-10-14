@@ -131,7 +131,8 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
       ) : (
         menu({})
       )}
-      {asking && !request && <AskSheet rom={rom} world={world} catalogue={catalogue} ask={asking.ask} game={now} answer={answerFallback} />}
+      {/* Keyed by the question: each one the game asks is a new sheet, with its own fresh-tap guard. */}
+      {asking && !request && <AskSheet key={asking.id} rom={rom} world={world} catalogue={catalogue} ask={asking.ask} game={now} answer={answerFallback} />}
     </>
   );
 }

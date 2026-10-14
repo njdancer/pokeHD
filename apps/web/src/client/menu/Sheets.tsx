@@ -45,7 +45,10 @@ export function AskSheet({ rom, world, catalogue, ask, game, answer }: AskSheetP
   const ctx = { rom, world, catalogue, game } as MenuContext;
   return (
     <Menu.Provider value={ctx}>
-      <div className="dm-sheet-shade" {...guard} onClick={(e) => e.target === e.currentTarget && cancel()}>
+      {/* A tap beside a yes or no isn't an answer: "no" isn't always the way out (LearnMove's no to
+          "Delete an older move?" asks "Abandon learning?", and no to that asks again), so taps
+          meant for the world behind went round its questions (QA bug 48). */}
+      <div className="dm-sheet-shade" {...guard} onClick={(e) => e.target === e.currentTarget && ask.kind !== "yes-no" && cancel()}>
         <section className="dm-sheet" role="dialog" aria-modal aria-label={titleOf(ask)}>
           {cancellable && ask.kind !== "yes-no" && (
             <button type="button" className="dm-sheet-close" aria-label="Cancel" onClick={cancel}>

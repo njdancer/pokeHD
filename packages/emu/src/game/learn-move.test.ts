@@ -1,16 +1,15 @@
 // ROM test for a fifth move (QA bugs 47, 48): a TM or a Rare Candy on a Pokémon that knows four
-// moves. From the Pokédex menu (GameActions) the action answers LearnMove itself, no to "Delete an
-// older move…?" and yes to "Abandon learning…?", and always ends, asking the page nothing. When
-// the game teaches outside the menu's actions (a level up in battle), LearnMove's questions
-// ("Delete…?", the move to forget, "Abandon…?") come to the page as GameAsks, each once.
-// Skips without the dev ROM.
+// moves, from the Pokédex menu (GameActions) and from the game's own UseItem (as LearnMove runs at
+// a level up in battle). LearnMove's questions ("Delete an older move…?", the move to forget,
+// "Abandon learning…?") come to the page as GameAsks, each once, and promptly: the menu's action
+// prints with no letter delay, since nobody sees it. Skips without the dev ROM.
 import { existsSync, readFileSync } from "node:fs";
 import { SYMBOLS, type SymbolName } from "@pokehd/rom";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Button, GameBoy } from "../core.ts";
 import { SafePoint } from "../gifts/safepoint.ts";
 import { playIntro, setBag, setParty } from "../testing.ts";
-import { GameActions, type ActionResult } from "./actions.ts";
+import { GameActions, type ActionResult, type GameAction } from "./actions.ts";
 import { GameAsks, type AskAnswer, type GameAsk } from "./asks.ts";
 
 const ROM_PATH = new URL("../../../../rom/pokeblue.gb", import.meta.url);
@@ -29,13 +28,14 @@ const TACKLE = 0x21;
 const EMBER = 0x34;
 const CUT = 0x0f;
 const PARTYMON = 44;
+/** wStatusFlags5's BIT_NO_TEXT_DELAY. */
+const NO_TEXT_DELAY = 1 << 6;
+/** The menu's question comes up within this many frames of the action starting (QA bug 47). */
+const PROMPT_FRAMES = 150;
 
 const addr = (name: SymbolName) => SYMBOLS[name].address;
 const moves = (gb: GameBoy, slot = 0) => [...gb.readBytes(addr("wPartyMons") + slot * PARTYMON + 8, 4)];
 const bag = (gb: GameBoy) => Array.from({ length: gb.read(addr("wNumBagItems")) }, (_, i) => gb.read(addr("wNumBagItems") + 1 + i * 2));
-const frames = (gb: GameBoy, n: number) => {
-  for (let i = 0; i < n; i++) gb.runFrame();
-};
 
 describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
   let rom: Uint8Array;
@@ -61,53 +61,107 @@ describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
     const actions = new GameActions(gb, { rom });
     const asked: { id: number; ask: GameAsk }[] = [];
     const asks = new GameAsks(gb, { rom, busy: () => actions.pending > 0 && SafePoint.of(gb).calling, onAsk: (id, ask) => asked.push({ id, ask }) });
-    return { gb, actions, asks, asked };
-  }
-
-  /** The menu's action, run to its end: it must end by itself, asking the page nothing. */
-  function act(g: Awaited<ReturnType<typeof game>>, item: number, answers?: boolean[]) {
     let result: ActionResult | undefined;
-    g.actions.run({ kind: "use-item", item, mon: 0, ...(answers ? { answers } : {}) }, (res) => (result = res));
-    for (let i = 0; i < 3000 && !result; i++) g.gb.runFrame();
-    expect(result).toBeDefined();
-    expect(g.asked).toEqual([]);
-    expect(g.actions.pending).toBe(0);
-    return result!;
+    const run = (action: GameAction) => actions.run(action, (res) => (result = res));
+    /** Runs until the game asks the page something (or the action ends). */
+    const next = (limit = 3000): GameAsk | null => {
+      const before = asked.length;
+      for (let i = 0; i < limit && asked.length === before && !result; i++) {
+        gb.runFrame();
+        // Nothing the Game Boy draws shows while the action runs (QA bug 28): the page keeps
+        // its screen down only while it says so.
+        if (gb.read(0xffb0) < 0x90) expect(actions.running).toBe(true);
+      }
+      return asked.length > before ? asked.at(-1)!.ask : null;
+    };
+    const answer = (a: AskAnswer) => asks.answer(asked.at(-1)!.id, a);
+    const finish = () => {
+      for (let i = 0; i < 3000 && !result; i++) gb.runFrame();
+      expect(result).toBeDefined();
+      // The game's letter delay is back as it was.
+      expect(gb.read(addr("wStatusFlags5")) & NO_TEXT_DELAY).toBe(0);
+      return result!;
+    };
+    return { gb, run, next, answer, finish, asked, asks, actions };
   }
 
-  it("from the menu, a TM on a Pokémon with four moves ends with \"did not learn\" and keeps the TM", async () => {
+  it("from the menu, asks to delete a move at once, then which one, and teaches MEGA PUNCH in its place", async () => {
+    const { gb, run, next, answer, finish } = await game(12, [SCRATCH, GROWL, EMBER, LEER]);
+    run({ kind: "use-item", item: TM01, mon: 0, answers: [true] });
+    const del = next(PROMPT_FRAMES);
+    expect(del?.kind).toBe("yes-no");
+    if (del?.kind !== "yes-no") return;
+    // The player saw none of the action's words: the question carries all of the message.
+    expect(del.text).toMatch(/CHARMANDER is\s+trying to learn\s+MEGA PUNCH!/);
+    expect(del.text).toMatch(/Delete an older\s+move/);
+    answer({ yes: true });
+    const which = next(PROMPT_FRAMES);
+    expect(which).toMatchObject({ kind: "forget-move", mon: "CHARMANDER", move: MEGA_PUNCH, moves: [SCRATCH, GROWL, EMBER, LEER], hm: [false, false, false, false] });
+    answer({ index: 1 });
+    const result = finish();
+    expect(result.ok, JSON.stringify(result)).toBe(true);
+    expect(result.messages.join(" ")).toMatch(/forgot\s+GROWL/);
+    expect(result.messages.join(" ")).toMatch(/learned\s+MEGA PUNCH/);
+    expect(moves(gb)).toEqual([SCRATCH, MEGA_PUNCH, EMBER, LEER]);
+    expect(bag(gb)).not.toContain(TM01);
+  }, 60_000);
+
+  it("from the menu, asks to abandon learning after a no, and keeps the TM on a yes, then lets the player walk", async () => {
     const g = await game(12, [SCRATCH, GROWL, EMBER, LEER]);
-    const result = act(g, TM01, [true]);
+    const { gb, run, next, answer, finish, asked, asks, actions } = g;
+    run({ kind: "use-item", item: TM01, mon: 0, answers: [true] });
+    expect(next()?.kind).toBe("yes-no");
+    answer({ yes: false });
+    const abandon = next();
+    expect(abandon?.kind === "yes-no" && abandon.text).toMatch(/Abandon learning\s+MEGA PUNCH\?/);
+    answer({ yes: true });
+    const result = finish();
     expect(result.messages.join(" ")).toMatch(/did not learn/);
-    expect(moves(g.gb)).toEqual([SCRATCH, GROWL, EMBER, LEER]);
-    expect(bag(g.gb)).toContain(TM01);
-    // And the player walks on: nothing is left queued or waiting (QA bug 48's trap).
-    frames(g.gb, 30);
-    const at = [g.gb.read(addr("wXCoord")), g.gb.read(addr("wYCoord"))];
+    expect(moves(gb)).toEqual([SCRATCH, GROWL, EMBER, LEER]);
+    expect(bag(gb)).toContain(TM01);
+    // Nothing left queued or asking: walking asks nothing more (QA bug 48's trap).
+    const count = asked.length;
     for (const b of [Button.Left, Button.Right, Button.Down, Button.Up]) {
-      g.gb.setButtons(b);
-      frames(g.gb, 20);
-      g.gb.setButtons(0);
-      frames(g.gb, 20);
+      gb.setButtons(b);
+      for (let i = 0; i < 20; i++) gb.runFrame();
+      gb.setButtons(0);
+      for (let i = 0; i < 20; i++) gb.runFrame();
     }
-    expect(g.asked).toEqual([]);
-    expect(g.asks.asking).toBeNull();
-    void at;
+    expect(asked.length).toBe(count);
+    expect(asks.asking).toBeNull();
+    expect(actions.pending).toBe(0);
   }, 60_000);
 
-  it("from the menu, a Rare Candy levels up and skips the move it has no room for", async () => {
+  it("from the menu, goes back to the delete question after cancelling the list and not abandoning", async () => {
+    const { gb, run, next, answer, finish } = await game(12, [CUT, GROWL, EMBER, LEER]);
+    run({ kind: "use-item", item: TM01, mon: 0, answers: [true] });
+    expect(next()?.kind).toBe("yes-no");
+    answer({ yes: true });
+    // CUT is an HM: the game won't delete it, and the page is told so.
+    expect(next()).toMatchObject({ kind: "forget-move", hm: [true, false, false, false] });
+    answer(null);
+    expect(next()).toMatchObject({ kind: "yes-no", text: expect.stringMatching(/Abandon/) });
+    answer({ yes: false });
+    expect(next()).toMatchObject({ kind: "yes-no", text: expect.stringMatching(/Delete an older\s+move/) });
+    answer({ yes: true });
+    expect(next()?.kind).toBe("forget-move");
+    answer({ index: 3 });
+    expect(finish().ok).toBe(true);
+    expect(moves(gb)).toEqual([CUT, GROWL, EMBER, MEGA_PUNCH]);
+  }, 60_000);
+
+  it("from the menu, asks the same at a level up from a Rare Candy", async () => {
     // Charmander learns EMBER at level 9.
-    const g = await game(8, [SCRATCH, GROWL, LEER, TACKLE]);
-    act(g, RARE_CANDY);
-    expect(g.gb.read(addr("wPartyMons") + 33)).toBe(9);
-    expect(moves(g.gb)).toEqual([SCRATCH, GROWL, LEER, TACKLE]);
-  }, 60_000);
-
-  it("from the menu, a TM on a Pokémon with room teaches it", async () => {
-    const g = await game(12, [SCRATCH, GROWL, EMBER, 0]);
-    expect(act(g, TM01, [true]).ok).toBe(true);
-    expect(moves(g.gb)).toEqual([SCRATCH, GROWL, EMBER, MEGA_PUNCH]);
-    expect(bag(g.gb)).not.toContain(TM01);
+    const { gb, run, next, answer, finish } = await game(8, [SCRATCH, GROWL, LEER, TACKLE]);
+    run({ kind: "use-item", item: RARE_CANDY, mon: 0 });
+    const del = next(PROMPT_FRAMES * 2);
+    expect(del?.kind === "yes-no" && del.text).toMatch(/trying to learn\s+EMBER!/);
+    answer({ yes: true });
+    expect(next()).toMatchObject({ kind: "forget-move", move: EMBER, moves: [SCRATCH, GROWL, LEER, TACKLE] });
+    answer({ index: 3 });
+    expect(finish().ok).toBe(true);
+    expect(moves(gb)).toEqual([SCRATCH, GROWL, LEER, EMBER]);
+    expect(gb.read(addr("wPartyMons") + 33)).toBe(9);
   }, 60_000);
 
   /**
@@ -115,8 +169,7 @@ describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
    * every question goes to the page. A is pressed for the message waits in between.
    */
   async function teachByGame(known: number[], answers: (ask: GameAsk) => AskAnswer) {
-    const g = await game(12, known);
-    const { gb, asks, asked } = g;
+    const { gb, asks, asked } = await game(12, known);
     let done = false;
     SafePoint.of(gb).enqueue({
       scratch: [],
@@ -154,17 +207,7 @@ describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
     );
     expect(asked.map((a) => a.kind)).toEqual(["yes-no", "party", "yes-no", "forget-move"]);
     expect(asked[2]).toMatchObject({ kind: "yes-no", text: expect.stringMatching(/Delete an older\s+move/) });
-    expect(asked[3]).toMatchObject({ kind: "forget-move", mon: "CHARMANDER", move: MEGA_PUNCH, moves: [SCRATCH, GROWL, EMBER, LEER], hm: [false, false, false, false] });
+    expect(asked[3]).toMatchObject({ kind: "forget-move", mon: "CHARMANDER", move: MEGA_PUNCH, moves: [SCRATCH, GROWL, EMBER, LEER] });
     expect(moves(gb)).toEqual([SCRATCH, MEGA_PUNCH, EMBER, LEER]);
-  }, 60_000);
-
-  it("outside the menu's actions, cancelling the list asks to abandon, with HMs locked", async () => {
-    const { gb, asked } = await teachByGame([CUT, GROWL, EMBER, LEER], (ask) =>
-      ask.kind === "party" ? { index: 0 } : ask.kind === "forget-move" ? null : { yes: true },
-    );
-    expect(asked.map((a) => a.kind)).toEqual(["yes-no", "party", "yes-no", "forget-move", "yes-no"]);
-    expect(asked[3]).toMatchObject({ hm: [true, false, false, false] });
-    expect(asked[4]).toMatchObject({ kind: "yes-no", text: expect.stringMatching(/Abandon learning\s+MEGA PUNCH\?/) });
-    expect(moves(gb)).toEqual([CUT, GROWL, EMBER, LEER]);
   }, 60_000);
 });

@@ -3,7 +3,6 @@
 import type { RomSymbol } from "../symbols.ts";
 
 export const SYMBOLS = {
-  AbandonLearning: { bank: 0x01, address: 0x6eda },
   AddBCDPredefPredef: { bank: 0x13, address: 0x7e9a },
   AddEnemyMonToPlayerParty: { bank: 0x00, address: 0x3a53 },
   AddItemToInventory: { bank: 0x00, address: 0x2bcf },
@@ -138,7 +137,6 @@ export const SYMBOLS = {
   TossItem_: { bank: 0x03, address: 0x66f1 },
   TrainerNames: { bank: 0x0e, address: 0x59ff },
   TrainerPicAndMoneyPointers: { bank: 0x0e, address: 0x5914 },
-  TryingToLearn: { bank: 0x01, address: 0x6f07 },
   TwoOptionMenuStrings: { bank: 0x01, address: 0x7671 },
   TypeNames: { bank: 0x09, address: 0x7dae },
   UsableItems_PartyMenu: { bank: 0x04, address: 0x7434 },
