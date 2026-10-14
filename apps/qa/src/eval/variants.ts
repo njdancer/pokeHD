@@ -4,6 +4,7 @@
 // it beats the variant it was built on by more than the noise.
 import { z } from "zod";
 import { parseMoves, TOOLS } from "../toolbox.ts";
+import type { Move } from "../game/types.ts";
 import type { WalkResult } from "./sim.ts";
 import type { Sim } from "./sim.ts";
 
@@ -31,13 +32,35 @@ export interface Variant {
   opening(sim: Sim): string;
 }
 
+/** Arrows as parseMoves reads them, plus "*" after an arrow: run that way until something stops you. */
+function parseRunMoves(raw: string): (Move & { run?: boolean })[] | string {
+  const parts = raw.split(/(?<=\*)/);
+  const out: (Move & { run?: boolean })[] = [];
+  for (const part of parts) {
+    const run = part.endsWith("*");
+    const body = run ? part.slice(0, -1) : part;
+    if (!body.trim()) {
+      if (run) return "A * goes right after an arrow, e.g. ↑*.";
+      continue;
+    }
+    const moves = parseMoves(body);
+    if (typeof moves === "string") return moves.replace("(↑↓←→) or U/D/L/R", "(↑↓←→), U/D/L/R or * after an arrow");
+    if (run) {
+      const last = moves.at(-1)!;
+      if (last.tiles > 1) moves.splice(moves.length - 1, 1, { ...last, tiles: last.tiles - 1 }, { direction: last.direction, tiles: 1 });
+      out.push(...moves.slice(0, -1), { ...moves.at(-1)!, run: true });
+    } else out.push(...moves);
+  }
+  return out.length ? out : "moves needs at least one arrow.";
+}
+
 /** The live joystick, with an optional extra line put in before the buttons. */
-function joystick(opts: { description?: string; extra?: (sim: Sim, walk: WalkResult, before: { x: number; y: number; map: number }) => string | null } = {}): VariantTool {
+function joystick(opts: { description?: string; run?: boolean; extra?: (sim: Sim, walk: WalkResult, before: { x: number; y: number; map: number }) => string | null } = {}): VariantTool {
   return {
     description: opts.description ?? TOOLS.joystick.description,
     shape: TOOLS.joystick.shape,
     run(sim, input, turn) {
-      const moves = parseMoves(String(input["moves"] ?? ""));
+      const moves = opts.run ? parseRunMoves(String(input["moves"] ?? "")) : parseMoves(String(input["moves"] ?? ""));
       if (typeof moves === "string") return { text: `Turn ${turn}. ${moves}`, isError: true };
       const s0 = sim.state();
       const walk = sim.joystick(moves);
@@ -231,6 +254,10 @@ export interface Features {
   spaced?: boolean;
   /** One-token symbols for the text map's cells. */
   glyphs?: boolean;
+  /** The live player's notebook tool alongside the joystick (kept for the episode only). */
+  notebook?: boolean;
+  /** "↑*" runs that way until something stops you. */
+  run?: boolean;
 }
 
 function build(id: string, note: string, parent: string | null, f: Features): Variant {
@@ -246,7 +273,7 @@ function build(id: string, note: string, parent: string | null, f: Features): Va
   const extra = (sim: Sim, walk: WalkResult, before: { x: number; y: number; map: number }) =>
     // The exit note is in the text map itself now (textmap.ts underfoot), so only the rest is added.
     [f.netMove ? netMove(walk, before, sim) : null, tracking(sim)].filter(Boolean).join("\n") || null;
-  const base = joystick({ ...(f.description && { description: f.description }), extra });
+  const base = joystick({ ...(f.description && { description: f.description }), ...(f.run && { run: true }), extra });
   const spaced: VariantTool = { ...base, run: (sim, input, turn) => {
     const out = base.run(sim, input, turn);
     return { ...out, text: spaceCells(out.text) };
@@ -278,13 +305,33 @@ function build(id: string, note: string, parent: string | null, f: Features): Va
           return { ...out, text: `Turn ${turn}. ${text}` };
         },
       };
+  const notes = new WeakMap<Sim, string[]>();
+  const notebook: VariantTool = {
+    description: TOOLS.notebook.description,
+    shape: TOOLS.notebook.shape,
+    run(sim, input, turn) {
+      const book = notes.get(sim) ?? [];
+      notes.set(sim, book);
+      const value = String(input["text"] ?? "").trim();
+      if (input["action"] === "append" && value) {
+        book.push(value);
+        return { text: `Turn ${turn}. Noted.` };
+      }
+      if (input["action"] === "replace") {
+        book.splice(0, book.length, value);
+        return { text: `Turn ${turn}. Notebook rewritten.` };
+      }
+      return { text: `Turn ${turn}. ${book.length ? `Your notebook:\n${book.join("\n")}` : "Your notebook is empty."}` };
+    },
+  };
   return {
     id,
     note,
     parent,
     features: f,
-    tools: { joystick: tool },
+    tools: f.notebook ? { joystick: tool, notebook } : { joystick: tool },
     opening: (sim) => {
+      notes.set(sim, []);
       memory.set(sim, new Explored());
       const opening = withExtra(sim.opening(), tracking(sim));
       return f.spaced ? spaceCells(opening) : f.glyphs ? glyphCells(opening) : opening;
@@ -307,4 +354,22 @@ export const VARIANTS: Record<string, Variant> = {
   "clipped-ground": build("clipped-ground", "Clipped text map plus one already-seen row or column to line the new strips up against.", "from-entry", { exitNote: true, fromEntry: true, clip: "ground" }),
   spaced: build("spaced", "A space between the text map's cells, so each cell is one token (run together, 10 cells are ~3 tokens).", "from-entry", { exitNote: true, fromEntry: true, spaced: true }),
   glyphs: build("glyphs", "Text map cells in one-token symbols (□ floor, ■ wall, ★ you…), one token a cell without spaces.", "from-entry", { exitNote: true, fromEntry: true, glyphs: true }),
+  "from-entry-notebook": build("from-entry-notebook", "The position line plus the live notebook tool (for the Mt Moon experiments).", "from-entry", { exitNote: true, fromEntry: true, notebook: true }),
+  // Sonnet got through Viridian Forest 2 of 2 by asking for more steps than it could see and
+  // letting walls stop it (54% of its walks ended blocked, Haiku's 17%); Haiku took short, careful
+  // walks. This tells Haiku the technique.
+  "overshoot": build("overshoot", "Description suggests running a corridor to its end: ask for more steps than you need and let the wall stop you.", "from-entry", {
+    exitNote: true,
+    fromEntry: true,
+    description:
+      'Walk with the on-screen joystick: one arrow per step, in order, e.g. "↑↑↑→→" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Stops early if something interrupts you (a wall, a door, someone talking, a battle), and says what stopped you. To explore, run a corridor to its end: ask for more steps than you can see (say 12 ↑) and the wall stops you there, then look at the new map and turn. Returns what\'s on screen afterwards.',
+  }),
+  // Nick's version of overshoot: offer a way to run, don't tell it to.
+  run: build("run", "A run marker: an arrow followed by * keeps going that way until something stops you (offered, not urged).", "from-entry", {
+    exitNote: true,
+    fromEntry: true,
+    run: true,
+    description:
+      'Walk with the on-screen joystick: one arrow per step, in order, e.g. "↑↑↑→→" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Put * after an arrow to keep going that way until something stops you, e.g. "↑*" or "→→↑*". Stops early if something interrupts you (a wall, a door, someone talking, a battle). Usually stay within about one screen\'s worth of steps so you can see where you\'re going; longer routes are allowed when you\'re sure. Returns what\'s on screen afterwards.',
+  }),
 };

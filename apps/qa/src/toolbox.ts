@@ -43,7 +43,10 @@ export const TOOLS = {
   },
   joystick: {
     description:
-      "Walk with the on-screen joystick: one arrow per step, in order, e.g. \"↑↑↑→→\" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Stops early if something interrupts you (a wall, a door, someone talking, a battle). Usually stay within about one screen's worth of steps so you can see where you're going; longer routes are allowed when you're sure. Returns what's on screen afterwards.",
+      // The movement eval's "overshoot" wording: Sonnet ran corridors to their ends and got through
+      // Viridian Forest where Haiku wandered; told how, Haiku reached more multi-turn goals (88% to 93%)
+      // in fewer turns, confirmed on the held-out set.
+      "Walk with the on-screen joystick: one arrow per step, in order, e.g. \"↑↑↑→→\" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Stops early if something interrupts you (a wall, a door, someone talking, a battle), and says what stopped you. To explore, run a corridor to its end: ask for more steps than you can see (say 12 ↑) and the wall stops you there, then look at the new map and turn. Returns what's on screen afterwards.",
     shape: { moves: z.string().describe(`Arrows in order, e.g. "↑↑→→→↓". At most ${MAX_STEPS} steps.`) },
   },
   wait: {
