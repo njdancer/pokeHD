@@ -203,6 +203,11 @@ export class Toolbox {
     }
   }
 
+  /** Developer messages waiting for the next tool result, for the context viewer (not consumed). */
+  waitingMail(): string[] {
+    return this.#inbox.map(describeChat);
+  }
+
   /** Developer messages that arrived while the player was busy. */
   mail(): string | null {
     const mail = this.#inbox.splice(0);

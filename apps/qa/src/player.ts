@@ -16,6 +16,7 @@ import { appendFileSync, existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import { ContextLog, type ContextSnapshot } from "./context.ts";
 import type { Outcome } from "./game/types.ts";
 import { systemPrompt, TOOLS, type Part, type ToolName, Toolbox, type ToolOutput } from "./toolbox.ts";
 
@@ -40,6 +41,8 @@ export class Player {
   readonly #backend: Backend;
   readonly #model: string;
   readonly #maxTurns: number;
+  /** What the model sees in the current chapter, for the bus's context viewer. A copy: nothing sent depends on it. */
+  readonly context = new ContextLog(CHAPTER_TOKENS);
   #stopped = false;
   #onStop: (() => void) | null = null;
 
@@ -48,6 +51,8 @@ export class Player {
     this.#backend = opts.backend ?? "claude";
     this.#model = opts.model ?? DEFAULT_MODEL;
     this.#maxTurns = opts.maxTurns ?? Infinity;
+    this.context.pending = () => this.#box.waitingMail();
+    this.#box.bus.setContext(this.context);
   }
 
   stop(): void {
@@ -101,6 +106,12 @@ export class Player {
     }
   }
 
+  /** The handoff a Claude Code chapter leaves: the notebook, rewritten. */
+  #notebook(): string {
+    const path = this.#box.bus.notebookPath;
+    return existsSync(path) ? readFileSync(path, "utf8").trim() : "";
+  }
+
   /** One Claude Code conversation. Returns the next chapter's opening, or null when the run is over. */
   async #chapterClaude(opening: string, env: Record<string, string | undefined>): Promise<string | null> {
     const box = this.#box;
@@ -146,6 +157,7 @@ export class Player {
     let wake: (() => void) | null = null;
     const say = (text: string) => {
       inbox.push({ type: "user", message: { role: "user", content: text }, parent_tool_use_id: null, origin: { kind: "human" } });
+      this.context.add("user", text);
       wake?.();
     };
     const ended = () => this.#done || handoffDone;
@@ -160,13 +172,15 @@ export class Player {
       wake?.();
       void session?.interrupt().catch(() => {});
     };
+    const system = systemPrompt();
+    this.context.startChapter(system, toolList("mcp__game__"), this.context.chapter > 0 ? this.#notebook() : undefined);
     say(opening);
 
     session = query({
       prompt: prompt(),
       options: {
         model: this.#model,
-        systemPrompt: systemPrompt(),
+        systemPrompt: system,
         tools: [],
         mcpServers: { game: server },
         allowedTools: Object.keys(TOOLS).map((name) => `mcp__game__${name}`),
@@ -201,8 +215,12 @@ export class Player {
           }
           retries = 0;
           const usage = message.message.usage;
+          this.context.add("assistant", message.message.content, { id: message.message.id, usage });
           promptTokens = usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
           this.#thoughts(message.message.content);
+        } else if (message.type === "user" && !message.parent_tool_use_id && !("isReplay" in message && message.isReplay)) {
+          // The tool results as Claude Code put them in the conversation.
+          this.context.add("user", message.message.content);
         } else if (message.type === "result") {
           this.#log({ result: message.subtype, ...(message.subtype !== "success" && { errors: message.errors }) });
           if (ended()) break;
@@ -229,6 +247,8 @@ export class Player {
     let messages: Message[] = [user(opening)];
     let system = systemPrompt();
     this.#box.promptChanged = false;
+    this.context.startChapter(system, toolList(""));
+    this.context.add("user", messages[0]!.content);
     let systemTurns = true;
 
     const request = async (extra: Partial<Anthropic.Beta.MessageCreateParamsNonStreaming> = {}): Promise<Anthropic.Beta.BetaMessage> => {
@@ -240,6 +260,7 @@ export class Player {
           if (error instanceof Anthropic.BadRequestError && systemTurns && /role.*system/i.test(error.message)) {
             systemTurns = false;
             messages = messages.map((m) => (m.role === "system" ? user(`[${typeof m.content === "string" ? m.content : ""}]`) : m));
+            this.context.replace(messages);
             continue;
           }
           if (error instanceof Anthropic.APIError && (error.status === undefined || error.status >= 500 || error.status === 429) && attempt < 6) {
@@ -254,6 +275,7 @@ export class Player {
     while (!this.#done) {
       const response = await request();
       messages.push({ role: "assistant", content: response.content as Block[] });
+      this.context.add("assistant", response.content, { usage: response.usage });
       this.#log({ role: "assistant", content: response.content, usage: response.usage });
       this.#thoughts(response.content);
 
@@ -264,24 +286,32 @@ export class Player {
       }
       if (!results.length) {
         messages.push(user(KEEP_PLAYING));
+        this.context.add("user", KEEP_PLAYING);
         continue;
       }
+      const before = messages.length;
       const mail = this.#box.mail();
       if (mail) results.push({ type: "text", text: mail });
       messages.push({ role: "user", content: results });
       const note = this.#box.glitchNote();
       if (note && systemTurns) messages.push({ role: "system", content: note });
       else if (note) results.push({ type: "text", text: `[${note}]` });
+      for (const m of messages.slice(before)) this.context.add(m.role, m.content);
 
       const usage = response.usage;
       const prompt = usage.input_tokens + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
       if (prompt <= CHAPTER_TOKENS && !this.#box.promptChanged) continue;
       // A new chapter: the player's handoff, then a fresh conversation on the prompt as it is now.
       messages.push(user("This conversation is about to be reset, to save memory or because your instructions changed. Write a handoff for yourself: where you are, what you're doing and why, what you've learned about the controls, anything you were checking. Plain text, no tools."));
-      const handoff = (await request({ tool_choice: { type: "none" } })).content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n").trim();
+      this.context.add("user", messages.at(-1)!.content);
+      const reply = await request({ tool_choice: { type: "none" } });
+      this.context.add("assistant", reply.content, { usage: reply.usage });
+      const handoff = reply.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n").trim();
       system = systemPrompt();
       this.#box.promptChanged = false;
       messages = [user(this.#box.opening(`${NEW_CHAPTER}\n\nHandoff from before the reset:\n${handoff}\n\nThe screen now: ${(await this.#box.driver.wait(500)).text}`))];
+      this.context.startChapter(system, toolList(""), handoff);
+      this.context.add("user", messages[0]!.content);
       this.#log({ chapter: messages[0] });
     }
   }
@@ -300,6 +330,11 @@ const MAX_TOKENS = 8_000;
 function inputSchema(shape: z.ZodRawShape): Anthropic.Beta.BetaTool.InputSchema {
   const { $schema: _, ...schema } = z.toJSONSchema(z.object(shape));
   return schema as Anthropic.Beta.BetaTool.InputSchema;
+}
+
+/** The tools as the model is told about them (Claude Code names them mcp__game__<name>). */
+function toolList(prefix: string): ContextSnapshot["tools"] {
+  return (Object.keys(TOOLS) as ToolName[]).map((name) => ({ name: prefix + name, description: TOOLS[name].description, inputSchema: inputSchema(TOOLS[name].shape) }));
 }
 
 function user(text: string): Message {

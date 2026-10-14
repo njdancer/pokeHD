@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { ContextLog } from "./context.ts";
 import { byPriority, type Bug, type BugStatus, type ChatEvent, type ChatTag, type GlitchEvent, type QaEvent, type Snapshot, type StatusEvent } from "./events.ts";
 
 /** Distributes `Omit` over a union, so each event keeps its own fields. */
@@ -30,6 +31,7 @@ export class Bus {
   #listeners = new Set<(e: QaEvent) => void>();
   #server: Server | null = null;
   #live: ((listener: (jpeg: Buffer) => void) => () => void) | null = null;
+  #context: ContextLog | null = null;
   /** The stream page sending the window as video (WebRTC), and viewers' offers waiting on its answers. */
   #broadcaster: ServerResponse | null = null;
   #offers = new Map<number, (answer: string | null) => void>();
@@ -152,6 +154,11 @@ export class Bus {
     this.#live = subscribe;
   }
 
+  /** Where /context gets the player's model context from. */
+  setContext(context: ContextLog): void {
+    this.#context = context;
+  }
+
   on(listener: (e: QaEvent) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -161,6 +168,8 @@ export class Bus {
    * Serves the stream page and the developer CLI on localhost:
    * GET /snapshot, GET /events (SSE), GET /bugs/:id, POST /chat {text, tag?, bug?} (the developer
    * talking), POST /bugs/:id {status}, and the live view: GET /watch (a page) and /live.mjpeg.
+   * The player's model context: GET /context[?after=N] (the current chapter as JSON, messages from
+   * the Nth on), /context/image/<ref> (its images) and /context/view (a page that renders it).
    * `host` 0.0.0.0 makes it reachable from other devices on the network.
    */
   listen(port: number, host = "127.0.0.1"): Promise<number> {
@@ -183,6 +192,17 @@ export class Bus {
     const url = new URL(req.url ?? "/", "http://localhost");
     const bugMatch = /^\/bugs\/(\d+)$/.exec(url.pathname);
     if (req.method === "GET" && url.pathname === "/snapshot") return send(res, 200, this.snapshot());
+    if (req.method === "GET" && url.pathname === "/context/view") return void res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(CONTEXT_PAGE);
+    if (req.method === "GET" && url.pathname === "/context") {
+      if (!this.#context) return send(res, 503, { error: "the player isn't running yet" });
+      return send(res, 200, this.#context.snapshot(Number(url.searchParams.get("after")) || 0));
+    }
+    const imageMatch = /^\/context\/image\/(\d+)$/.exec(url.pathname);
+    if (req.method === "GET" && imageMatch) {
+      const image = this.#context?.image(Number(imageMatch[1]));
+      if (!image) return send(res, 404, { error: "no such image (it may be from an earlier chapter)" });
+      return void res.writeHead(200, { "content-type": image.mime, "cache-control": "private, max-age=86400" }).end(image.data);
+    }
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/watch")) return void res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(WATCH_PAGE);
     // WebRTC signalling, WHEP-like and without trickle ICE: a viewer posts its whole offer and
     // gets the whole answer back; the stream page (?broadcast) hears offers on /rtc/broadcaster
@@ -310,6 +330,149 @@ async function connect() {
 }
 sound.onclick = () => { video.muted = false; video.play(); sound.hidden = true; };
 connect().catch(fallback);
+</script>
+</body></html>`;
+
+// The player's model context as a chat log (GET /context/view). Polls /context for messages past
+// the last one it has (re-fetching that one too, since a reply arrives a block at a time), and
+// starts over when a new chapter begins. Stays at the bottom unless the reader scrolled up.
+const CONTEXT_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Player context</title>
+<style>
+:root{--bg:#121316;--panel:#1c1e23;--line:#2c2f36;--text:#e7e8ea;--muted:#9a9ea8;--user:#7fb4ff;--asst:#f0a35e;--sys:#c792ea;--err:#ff6b6b;--ok:#6fd08c}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,sans-serif}
+header{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:10px 16px}
+header h1{font-size:16px;margin:0 0 6px}
+.meter{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:6px}
+.meter div{height:100%;background:var(--ok)}
+.muted{color:var(--muted);font-size:13px}
+main{padding:12px 16px 80px;max-width:980px;margin:0 auto}
+details.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;margin:0 0 10px;padding:8px 12px}
+details.box>summary{cursor:pointer;font-weight:600}
+.msg{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:8px;margin:0 0 10px;padding:8px 12px}
+.msg.user{border-left-color:var(--user)}.msg.assistant{border-left-color:var(--asst)}.msg.system{border-left-color:var(--sys)}
+.who{font-weight:700;font-size:13px;display:flex;gap:8px;flex-wrap:wrap;align-items:baseline}
+.user .who b{color:var(--user)}.assistant .who b{color:var(--asst)}.system .who b{color:var(--sys)}
+.text{white-space:pre-wrap;word-break:break-word;margin:6px 0}
+pre,.mono{font:12.5px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word;margin:6px 0}
+.user .text,.system .text{font:12.5px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace}
+.call{font:12.5px ui-monospace,Menlo,monospace;color:var(--asst);margin:6px 0;white-space:pre-wrap;word-break:break-word}
+details.result{border:1px solid var(--line);border-radius:6px;padding:4px 8px;margin:6px 0}
+details.result>summary{cursor:pointer;font:12.5px ui-monospace,Menlo,monospace;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+details.result.error>summary{color:var(--err)}
+details.think>summary{cursor:pointer;color:var(--muted);font-size:13px}
+img{display:block;max-width:100%;image-rendering:pixelated;border-radius:4px;margin:6px 0}
+#pending{display:none;background:#3a2d12;border:1px solid #6b5220;border-radius:8px;padding:8px 12px;margin:0 0 10px;white-space:pre-wrap}
+#down{position:fixed;right:16px;bottom:16px;display:none;padding:10px 16px;border-radius:999px;border:0;background:var(--asst);color:#111;font:600 14px system-ui}
+#err{color:var(--err)}
+</style>
+</head><body>
+<header><h1 id="title">Player context</h1><div class="muted" id="stats">Loading…</div><div class="meter"><div id="bar" style="width:0"></div></div><div id="err" class="muted"></div></header>
+<main>
+<div id="handoffs"></div>
+<details class="box"><summary>System prompt</summary><pre id="system" style="white-space:pre-wrap"></pre></details>
+<details class="box"><summary id="toolsTitle">Tools</summary><div id="tools"></div></details>
+<div id="log"></div>
+<div id="pending"></div>
+</main>
+<button id="down">New messages ↓</button>
+<script>
+const $ = (id) => document.getElementById(id);
+const log = $("log");
+let chapter = null, last = 0, handoffCount = -1;
+const els = new Map();
+const k = (n) => n >= 10000 ? (n / 1000).toFixed(0) + "k" : n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n);
+const time = (at) => new Date(at).toTimeString().slice(0, 8);
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function nearBottom() { return document.documentElement.scrollHeight - window.scrollY - window.innerHeight < 120; }
+function firstLine(blocks) {
+  for (const b of blocks) if (b.type === "text" && b.text.trim()) return b.text.trim().split("\\n")[0];
+  return blocks.some((b) => b.type === "image") ? "(image)" : "(empty)";
+}
+function renderBlock(b, role) {
+  if (b.type === "text") return el("div", "text", b.text);
+  if (b.type === "thinking") { const d = el("details", "think"); d.append(el("summary", null, b.text ? "thinking" : "thinking (hidden)")); if (b.text) d.append(el("div", "text", b.text)); return d; }
+  if (b.type === "image") { const i = el("img"); i.loading = "lazy"; i.src = "/context/image/" + b.ref; i.alt = "image the model saw"; return i; }
+  if (b.type === "tool_use") return el("div", "call", "→ " + b.name + " " + JSON.stringify(b.input));
+  if (b.type === "tool_result") {
+    const d = el("details", "result" + (b.isError ? " error" : ""));
+    d.dataset.key = b.toolUseId;
+    const imgs = b.content.filter((c) => c.type === "image").length;
+    d.append(el("summary", null, (b.isError ? "✗ " : "← ") + firstLine(b.content) + (imgs ? "  [+" + imgs + " image" + (imgs > 1 ? "s" : "") + "]" : "")));
+    for (const c of b.content) { const e = renderBlock(c, role); if (c.type === "text") e.className = "mono"; d.append(e); }
+    return d;
+  }
+  return el("div", "muted", "[" + b.kind + " block]");
+}
+function renderMessage(m, openResults) {
+  const box = el("div", "msg " + m.role);
+  const who = el("div", "who");
+  who.append(el("b", null, m.role === "assistant" ? "Player (model)" : m.role === "system" ? "System" : m.blocks.some((b) => b.type === "tool_result") ? "Tool results" : "User"));
+  who.append(el("span", "muted", "#" + m.n + " · " + time(m.at)));
+  if (m.usage) { const u = m.usage; who.append(el("span", "muted", "prompt " + k(u.prompt) + " (cache read " + k(u.cacheRead) + ", write " + k(u.cacheWrite) + ", new " + k(u.input) + ") · out " + k(u.output))); }
+  box.append(who);
+  for (const b of m.blocks) { const e = renderBlock(b, m.role); if (b.type === "tool_result" && openResults.has(b.toolUseId)) e.open = true; box.append(e); }
+  return box;
+}
+function header(s) {
+  $("title").textContent = "Player context · chapter " + s.chapter;
+  const pct = Math.min(100, (s.contextTokens / s.limit) * 100);
+  $("stats").textContent = "Started " + time(s.startedAt) + " · context " + k(s.contextTokens) + " / " + k(s.limit) + " (" + pct.toFixed(0) + "%) · output " + k(s.outputTokens) + " · " + s.total + " messages";
+  $("bar").style.width = pct + "%";
+  $("bar").style.background = pct > 90 ? "var(--err)" : pct > 70 ? "var(--asst)" : "var(--ok)";
+  const p = $("pending");
+  p.style.display = s.pending.length ? "block" : "none";
+  p.textContent = s.pending.length ? "Developer messages waiting for the next tool result:\\n" + s.pending.join("\\n") : "";
+  if (s.handoffs.length !== handoffCount) {
+    handoffCount = s.handoffs.length;
+    const h = $("handoffs"); h.replaceChildren();
+    for (const x of s.handoffs) { const d = el("details", "box"); d.append(el("summary", null, "Chapter " + x.chapter + " handoff · " + time(x.at))); d.append(el("div", "text", x.text || "(empty)")); h.append(d); }
+  }
+}
+function newChapter(s) {
+  chapter = s.chapter; last = 0; els.clear(); log.replaceChildren();
+  $("system").textContent = s.system;
+  $("toolsTitle").textContent = "Tools (" + s.tools.length + ")";
+  const t = $("tools"); t.replaceChildren();
+  for (const tool of s.tools) { const d = el("details", "result"); d.append(el("summary", null, tool.name)); d.append(el("div", "text", tool.description)); d.append(el("pre", null, JSON.stringify(tool.inputSchema, null, 2))); t.append(d); }
+}
+async function poll() {
+  try {
+    let res = await fetch("/context?after=" + last, { cache: "no-store" });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    let s = await res.json();
+    if (s.chapter !== chapter) {
+      if (last > 0) { res = await fetch("/context", { cache: "no-store" }); s = await res.json(); }
+      newChapter(s);
+    }
+    $("err").textContent = "";
+    const stick = nearBottom();
+    const before = last;
+    header(s);
+    for (const m of s.messages) {
+      const old = els.get(m.n);
+      const json = JSON.stringify(m);
+      if (old && old.dataset.json === json) continue;
+      const open = new Set();
+      if (old) old.querySelectorAll("details.result[open]").forEach((d) => open.add(d.dataset.key));
+      const e = renderMessage(m, open);
+      e.dataset.json = json;
+      if (old) old.replaceWith(e); else log.append(e);
+      els.set(m.n, e);
+      last = Math.max(last, m.n);
+    }
+    if (stick && s.messages.length) window.scrollTo(0, document.documentElement.scrollHeight);
+    else if (!stick && last > before) $("down").style.display = "block";
+  } catch (e) {
+    $("err").textContent = "Can't reach the harness (" + e.message + "); retrying…";
+  }
+  setTimeout(poll, 2000);
+}
+window.addEventListener("scroll", () => { if (nearBottom()) $("down").style.display = "none"; });
+$("down").onclick = () => { window.scrollTo(0, document.documentElement.scrollHeight); $("down").style.display = "none"; };
+poll().then(() => window.scrollTo(0, document.documentElement.scrollHeight));
 </script>
 </body></html>`;
 

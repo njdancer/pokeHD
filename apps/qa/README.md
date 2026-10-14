@@ -19,7 +19,12 @@ talk.
    an empty Claude config, so it never sees the account's email (Claude Code adds it otherwise).
    `--turns 20` for a trial, `--game` for the bare game page, `--model` to try another player.
    `--lan` also serves the live view to the network: it prints `http://<mac's address>:4545/watch`,
-   video with sound in any browser (a phone included; tap for sound).
+   video with sound in any browser (a phone included; tap for sound), and
+   `http://<mac's address>:4545/context/view`: exactly what the player's model sees in the current
+   chapter (system prompt, tools, every message, tool results with their text maps and images,
+   tokens per reply against the chapter limit, earlier chapters' handoffs), live. Without `--lan`
+   it's at `http://127.0.0.1:4545/context/view`. With Claude Code the messages are as Claude Code
+   reports them; any wrapping it adds of its own isn't visible from here.
 3. In OBS, add a Browser source (1920×1080, "Control audio via OBS") on
    `http://localhost:5173/dev/watch?bus=http://127.0.0.1:4545`. That page shows the stream page's
    live picture and sound (the stream page broadcasts itself over WebRTC) and a "be right back"
