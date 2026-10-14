@@ -120,10 +120,12 @@ export function buildTextMap(world: WorldData, stitched: StitchedWorld | null, s
   if (!map) return "(no map to show)";
   const { x: px, y: py } = state.player;
   const people = peopleAt(state);
-  const rows: string[] = [];
+  // Columns numbered across the top and rows down the side (last digit), from the window's
+  // top-left, to line the map up with a screenshot.
+  const rows: string[] = [`  ${Array.from({ length: view.left + view.right + 1 }, (_, i) => i % 10).join("")}`];
   const used = new Set<string>();
   for (let dy = -view.up; dy <= view.down; dy++) {
-    let row = "";
+    let row = `${(dy + view.up) % 10} `;
     for (let dx = -view.left; dx <= view.right; dx++) {
       const x = px + dx;
       const y = py + dy;
@@ -137,7 +139,7 @@ export function buildTextMap(world: WorldData, stitched: StitchedWorld | null, s
     .filter(([c]) => used.has(c))
     .map(([c, what]) => `${c} ${what}`)
     .join(", ");
-  return `${rows.join("\n")}\nLegend: ${legend}. You face ${state.player.facing}; north is up.`;
+  return `${rows.join("\n")}\nLegend: ${legend}. You're at column ${view.left}, row ${view.up}, facing ${state.player.facing}; north is up.`;
 }
 
 const BLOCKERS: Record<string, string> = {

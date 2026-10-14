@@ -1,10 +1,14 @@
-// Following a joystick walk step by step from the decoded state, so the driver knows when to let
-// go (the game reads the pad only between steps) and can say afterwards how far the player got
-// and, when it was short, why. Pure: the driver feeds it samples; the tests feed it made-up ones.
+// Following a joystick walk step by step from the decoded state, so the thumb turns or lets go at
+// the right moment, and saying afterwards how far the player got and, when it was short, why.
 //
-// Timing is in emulated frames (`__pokehd.frames`), never wall time: on a busy machine the page's
-// reads lag and the emulator runs unevenly, and a wall clock then mistakes a slow game for a
-// stopped player.
+// The game decides whether to take another step on the frame a step ends: if a direction is held
+// then, the next step starts. So to take exactly N steps, the thumb must come off (or turn) after
+// the Nth step has begun and before it ends: a window of one step, 16 emulated frames (8 on the
+// bike), about a quarter of a second. Watching from the harness (a read across Playwright, then a
+// touch back through the browser) costs two trips through a busy machine, often more than that
+// window, so the walk overshot. `walkPath` runs in the game's page instead: it checks every state
+// the emulator posts and moves the thumb in the same tick, by pointer events on the joystick, the
+// same events the touch itself makes. Timing is in emulated frames, never wall time.
 import type { StateLite } from "./screen-read.ts";
 import type { Direction } from "./types.ts";
 
@@ -37,60 +41,122 @@ export function interruption(start: StateLite, s: StateLite): Stop | null {
   return null;
 }
 
-/** One leg of a walk: `steps` steps toward `direction`, counted from the cell the player is headed for at the start. */
-export class Leg {
-  readonly direction: Direction;
-  readonly steps: number;
-  readonly start: StateLite;
-  readonly stepFrames: number;
-  /** Where the leg counts from: the start's heading, unless the last leg was let go of by the clock. */
-  readonly base: { x: number; y: number };
-  readonly dir: { dx: number; dy: number };
-  /** Steps of this leg under way or done. */
-  progress = 0;
-  #lastActive: number;
+export interface PathArg {
+  /** Each leg: a direction and how many steps. */
+  legs: { dx: number; dy: number; steps: number }[];
+  /** The joystick's centre, where the touch went down, and how far the thumb leans (frame CSS px). */
+  centre: { x: number; y: number };
+  reach: number;
+  /** See `stallFrames`. */
+  stall: number;
+  /** Wall time with no emulated frame at all before giving up (the game stopped running). */
+  idleMs: number;
+}
 
-  constructor(direction: Direction, steps: number, start: StateLite, frames: number, stepFrames: number, base = heading(start)) {
-    this.direction = direction;
-    this.steps = steps;
-    this.start = start;
-    this.stepFrames = stepFrames;
-    this.base = base;
-    this.dir = DIRS[direction];
-    this.#lastActive = frames;
-  }
+export interface PathResult {
+  end: "done" | Stop;
+  /** The leg it ended on. */
+  leg: number;
+  /** The player's state each time the cell they're headed for changed (and the first and last). */
+  trail: StateLite[];
+}
 
-  /** "hold" the stick, "done" (the leg's last step is under way: move on), or why it stopped. */
-  sample(s: StateLite | null, frames: number): "hold" | "done" | Stop {
-    if (!s) return "hold";
-    const why = interruption(this.start, s);
-    if (why) return why;
-    const at = heading(s);
-    const progress = Math.max(0, (at.x - this.base.x) * this.dir.dx + (at.y - this.base.y) * this.dir.dy);
-    // Stepping, a fade (a warp on its way) or progress all mean something is still happening.
-    if (progress > this.progress || s.player.step || s.fade !== 0) this.#lastActive = frames;
-    this.progress = Math.max(this.progress, progress);
-    if (this.progress >= this.steps) return "done";
-    if (frames - this.#lastActive > stallFrames(this.stepFrames)) return "blocked";
-    return "hold";
-  }
+interface WalkHook {
+  readonly state: StateLite | null;
+  readonly frames: number;
+}
 
-  /**
-   * Emulated frames from this sample until the middle of the leg's last step, when letting go
-   * (or turning) gives exactly `steps` steps; null unless a step of this leg is under way.
-   */
-  framesToRelease(s: StateLite): number | null {
-    const step = s.player.step as { progress?: number } | null;
-    if (!step || this.progress < 1 || this.progress >= this.steps) return null;
-    const into = (step.progress ?? 0) * this.stepFrames;
-    // The step under way is this leg's `progress`th; the last one starts (steps - progress) steps later.
-    return (this.steps - this.progress) * this.stepFrames - into + this.stepFrames / 2;
+/**
+ * Runs in the game's page (serialised by Playwright: self-contained, no outer names). Call it
+ * before the touch goes down: it notes the touch's pointer, then follows the walk and stores its
+ * promise as `__qaWalk`. At each leg's last step it leans the thumb to the next leg's direction,
+ * and after the last leg (or anything that stops the walk) it lifts it. Returns false when the
+ * page has no game state to follow.
+ */
+export function walkPath(arg: PathArg): boolean {
+  type G = typeof globalThis & { __pokehd?: WalkHook; __qaWalk?: Promise<PathResult>; __qaStickPointer?: number; __qaStickArmed?: boolean };
+  const g = globalThis as G;
+  const hook = g.__pokehd;
+  const first = hook?.state;
+  if (!hook || !first) return false;
+  const stickEl = () => document.querySelector('[aria-label="Joystick"]');
+  if (!g.__qaStickArmed) {
+    g.__qaStickArmed = true;
+    document.addEventListener(
+      "pointerdown",
+      (e) => {
+        const target = e.target as Node | null;
+        if (target && stickEl()?.contains(target)) g.__qaStickPointer = e.pointerId;
+      },
+      true,
+    );
   }
-
-  /** Where the next leg counts from when this one was let go of by the clock (its last step not seen yet). */
-  get end(): { x: number; y: number } {
-    return { x: this.base.x + this.dir.dx * this.steps, y: this.base.y + this.dir.dy * this.steps };
-  }
+  const thumb = (to: { dx: number; dy: number } | null) => {
+    const el = stickEl();
+    const pointerId = g.__qaStickPointer;
+    if (!el || pointerId === undefined) return;
+    const x = arg.centre.x + (to ? to.dx * arg.reach : 0);
+    const y = arg.centre.y + (to ? to.dy * arg.reach : 0);
+    el.dispatchEvent(new PointerEvent(to ? "pointermove" : "pointerup", { pointerId, pointerType: "touch", isPrimary: true, bubbles: true, clientX: x, clientY: y }));
+  };
+  const at = (s: StateLite) => {
+    const step = s.player.step as { dx?: number; dy?: number } | null;
+    return { x: s.player.x + (step?.dx ?? 0), y: s.player.y + (step?.dy ?? 0) };
+  };
+  const lite = (s: StateLite): StateLite => ({ mode: s.mode, mapId: s.mapId, fade: s.fade, player: { ...s.player }, npcs: [] });
+  const trail: StateLite[] = [lite(first)];
+  g.__qaWalk = (async (): Promise<PathResult> => {
+    let leg = 0;
+    let base = at(first);
+    let best = 0;
+    let lastFrames = hook.frames;
+    let lastActive = hook.frames;
+    let ranAt = Date.now();
+    let key = "";
+    const finish = (end: PathResult["end"]): PathResult => {
+      thumb(null);
+      const s = hook.state;
+      if (s) trail.push(lite(s));
+      return { end, leg, trail };
+    };
+    for (;;) {
+      const s = hook.state;
+      const frames = hook.frames;
+      if (frames !== lastFrames && s) {
+        lastFrames = frames;
+        ranAt = Date.now();
+        const h = at(s);
+        const k = `${s.mapId},${h.x},${h.y}`;
+        if (k !== key) {
+          key = k;
+          trail.push(lite(s));
+        }
+        if (s.mapId !== first.mapId) return finish("map");
+        if (s.mode === "battle") return finish("battle");
+        if (s.mode === "dialog") return finish("text");
+        const l = arg.legs[leg]!;
+        const progress = Math.max(0, (h.x - base.x) * l.dx + (h.y - base.y) * l.dy);
+        // Stepping, a fade (a warp on its way) or progress all mean something is still happening.
+        if (progress > best || s.player.step || s.fade !== 0) lastActive = frames;
+        best = Math.max(best, progress);
+        if (best >= l.steps) {
+          // The leg's last step is under way: turn now, or let go after the last leg.
+          leg++;
+          const next = arg.legs[leg];
+          if (!next) return finish("done");
+          thumb(next);
+          base = { x: base.x + l.dx * l.steps, y: base.y + l.dy * l.steps };
+          best = 0;
+          lastActive = frames;
+          continue;
+        }
+        if (frames - lastActive > arg.stall) return finish("blocked");
+      }
+      if (Date.now() - ranAt > arg.idleMs) return finish("stalled");
+      await new Promise((r) => setTimeout(r, 1));
+    }
+  })();
+  return true;
 }
 
 /**

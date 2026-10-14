@@ -14,10 +14,10 @@ import { GlitchWatcher } from "./glitches.ts";
 import { continueButton, describeButtons, describeGameBoyText, describePanels, mapName, startingUp } from "./outcome.ts";
 import { describeLayouts, installLayoutLog, type LayoutEntry } from "./layout-log.ts";
 import { composeSheet, cropShot, MAX_SHEET_FRAMES, pickFrames, Recorder } from "./recorder.ts";
-import { readScreen, type ScreenRead } from "./screen-read.ts";
+import { readScreen, type ScreenRead, type StateLite } from "./screen-read.ts";
 import { blockerAt, buildTextMap } from "./textmap.ts";
 import type { Direction, GameDriver, GameStatus, Glitch, Move, Outcome, RestartOptions } from "./types.ts";
-import { countSteps, DIRS, heading, interruption, Leg, walkNote, type Stop } from "./walk.ts";
+import { countSteps, DIRS, interruption, stallFrames, walkNote, walkPath, type PathResult, type Stop } from "./walk.ts";
 
 export interface DriverOptions {
   /** The app's origin, e.g. http://localhost:5173. */
@@ -55,6 +55,8 @@ const SETTLE_MAX_MS = 4000;
 const SETTLE_CALM_MS = 500;
 /** Emulated frames the game must run unchanged to count as settled (a step is 16). */
 const SETTLE_CALM_FRAMES = 20;
+/** The same after a warp to another map. */
+const SETTLE_WARP_FRAMES = 60;
 const POLL_MS = 200;
 const CONSOLE_LINES = 200;
 const DEFAULT_ROM = fileURLToPath(new URL("../../../../rom/pokeblue.gb", import.meta.url));
@@ -131,7 +133,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
   let busy = 0;
   let slowSince = 0;
   let last: ScreenRead | null = null;
-  /** The emulator's measured speed (frames per second), which times the joystick's steps. */
+  /** The emulator's speed (frames per second), measured by `settle`; times a walk with no state to follow. */
   let emuFps = 59.7;
 
   const need = <T>(v: T | null): T => {
@@ -228,14 +230,18 @@ export function createDriver(opts: DriverOptions): GameDriver {
     ]);
 
   /** Waits until the screen stops changing (the player not mid-step, no fade, text done) or the timeout. */
-  async function settle(minMs = 250, maxMs = SETTLE_MAX_MS): Promise<ScreenRead> {
+  async function settle(minMs = 250, maxMs = SETTLE_MAX_MS, fromMap?: number): Promise<ScreenRead> {
     const start = Date.now();
     await sleep(minMs);
     let sig = "";
     let since = Date.now();
     let sinceFrames = 0;
+    let prev: { frames: number; at: number } | null = null;
     for (;;) {
       const r = await read();
+      const now = Date.now();
+      if (prev && r.frames > prev.frames && now > prev.at) emuFps = emuFps * 0.7 + Math.min(70, Math.max(10, ((r.frames - prev.frames) * 1000) / (now - prev.at))) * 0.3;
+      prev = { frames: r.frames, at: now };
       const s = signature(r);
       if (s !== sig) {
         sig = s;
@@ -247,7 +253,10 @@ export function createDriver(opts: DriverOptions): GameDriver {
       // Quiet while the game actually ran: a game starved of CPU looks still between its frames,
       // and would carry on (finish a step, say) after the outcome was read. A menu that holds the
       // game stops its frames on purpose.
-      const ran = r.held || !r.state || r.frames - sinceFrames >= SETTLE_CALM_FRAMES;
+      // After a warp (stairs, a ladder, a door) the new map is loaded, placed and faded in over a
+      // second or so: give it longer, so the map is read with the player where they landed.
+      const warped = fromMap !== undefined && !!r.state && r.state.mapId !== fromMap;
+      const ran = r.held || !r.state || r.frames - sinceFrames >= (warped ? SETTLE_WARP_FRAMES : SETTLE_CALM_FRAMES);
       const quiet = ran && Date.now() - since >= (r.printing ? SETTLE_CALM_MS * 2 : SETTLE_CALM_MS);
       if ((calm && quiet) || Date.now() - start > maxMs) return r;
       await sleep(100);
@@ -619,84 +628,46 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const layoutsFrom = Date.now();
       const centre = { x: stick.x + stick.w / 2, y: stick.y + stick.h / 2 };
       const p0 = await toPage(centre.x, centre.y);
-      await touch("touchStart", p0);
-      let finger = { dx: 0, dy: 0 };
       const from = before.state;
       const stepFrames = from?.player && (from.player as { transport?: string }).transport === "bike" ? 8 : 16;
-      /** Every state seen, for counting the steps afterwards (see countSteps). */
-      const seen: (typeof from)[] = [from];
-      let prevFrames = before.frames;
-      let prevAt = Date.now();
-      /** When the emulator last ran a frame: a game that stops running isn't a blocked player. */
-      let ranAt = prevAt;
-      /** How long a read takes, smoothed: it decides when to let go by the clock instead. */
-      let readMs = 50;
-      let stop: Stop | null = null;
-      let stoppedGoing: Direction = runs[0]!.direction;
-      let base: { x: number; y: number } | undefined;
-      let current = before;
-      for (const run of runs) {
-        // The finger slides to the new direction without lifting, as a thumb does; the game picks
-        // the new direction up between steps.
-        const { dx, dy } = DIRS[run.direction];
-        for (const f of [0.3, 0.6, 1]) {
-          await sleep(16);
-          await touch("touchMove", { x: p0.x + (finger.dx + (dx - finger.dx) * f) * 55, y: p0.y + (finger.dy + (dy - finger.dy) * f) * 55 });
-        }
-        finger = { dx, dy };
-        if (!from || !current.state) {
-          // No decoded state to follow (shouldn't happen with the joystick up): hold for the steps.
-          await sleep((run.steps - 0.5) * ((stepFrames * 1000) / emuFps));
-          continue;
-        }
-        // Hold until the leg's last step is under way (the game reads the pad only between steps,
-        // so turning or letting go mid-step finishes that step and no more), something else
-        // happens, or the player stops. All in emulated frames (see walk.ts).
-        const leg = new Leg(run.direction, run.steps, from, current.frames, stepFrames, base ?? heading(current.state));
-        base = undefined;
-        for (;;) {
-          await sleep(15);
-          const asked = Date.now();
-          const r = await read();
-          const now = Date.now();
-          readMs = readMs * 0.7 + (now - asked) * 0.3;
-          current = r;
-          seen.push(r.state);
-          if (r.frames > prevFrames && now > prevAt) {
-            const fps = ((r.frames - prevFrames) * 1000) / (now - prevAt);
-            emuFps = emuFps * 0.7 + Math.min(70, Math.max(10, fps)) * 0.3;
-            ranAt = now;
-          }
-          prevFrames = r.frames;
-          prevAt = now;
-          const v = leg.sample(r.state, r.frames);
-          if (v !== "hold") {
-            if (v !== "done") stop = v;
-            break;
-          }
-          if (now - ranAt > 5000) {
-            stop = "stalled";
-            break;
-          }
-          // A slow read could come back after the last step has ended and the game has started
-          // another: let go by the emulator's clock instead (the sample is about half a read old).
-          const frames = r.state ? leg.framesToRelease(r.state) : null;
-          if (frames !== null) {
-            const wait = (frames * 1000) / emuFps - readMs / 2;
-            if (wait < readMs * 1.5 + 15) {
-              await sleep(Math.max(0, wait));
-              base = leg.end;
-              break;
-            }
-          }
-        }
-        if (stop) {
-          stoppedGoing = run.direction;
-          break;
-        }
+      // The thumb leans 55 px (page) from where it went down; in the game's own pixels for the page side.
+      const lean = 55;
+      const box = await gameBox();
+      const frame = await gameFrame();
+      // Armed before the touch goes down, so it sees the first step from its first frame.
+      const following = from
+        ? await frame
+            .evaluate(walkPath, {
+              legs: runs.map((r) => ({ ...DIRS[r.direction], steps: r.steps })),
+              centre,
+              reach: (lean * GAME_SIZE.width) / box.width,
+              stall: stallFrames(stepFrames),
+              idleMs: 5000,
+            })
+            .catch(() => false)
+        : false;
+      await touch("touchStart", p0);
+      // The thumb slides to the first direction; walkPath turns it and lifts it from there.
+      const { dx, dy } = DIRS[runs[0]!.direction];
+      for (const f of [0.3, 0.6, 1]) {
+        await sleep(16);
+        await touch("touchMove", { x: p0.x + dx * f * lean, y: p0.y + dy * f * lean });
       }
+      let result: PathResult | null = null;
+      if (following) {
+        result = await frame
+          .evaluate(() => (globalThis as typeof globalThis & { __qaWalk?: Promise<PathResult> }).__qaWalk ?? null)
+          .catch(() => null);
+      } else {
+        // No decoded state to follow (shouldn't happen with the joystick up): hold for the steps.
+        await sleep((total - 0.5) * ((stepFrames * 1000) / emuFps));
+      }
+      // walkPath already lifted the thumb in the page; this ends the touch itself.
       await touch("touchEnd");
-      const after = await settle(150);
+      const stop: Stop | null = result && result.end !== "done" ? result.end : null;
+      const stoppedGoing: Direction = runs[Math.min(result?.leg ?? 0, runs.length - 1)]!.direction;
+      const seen: (StateLite | null)[] = [from, ...(result?.trail ?? [])];
+      const after = await settle(150, SETTLE_MAX_MS, from?.mapId);
       const o = await outcome(before, after);
       const to = after.state;
       seen.push(to);
