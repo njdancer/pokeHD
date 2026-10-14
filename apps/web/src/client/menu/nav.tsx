@@ -2,6 +2,7 @@
 // game request's sheet. Screens push and pop; a purpose ("use this POTION on…") rides along.
 import { createContext, useContext } from "react";
 import type { TabId } from "./icons.tsx";
+import type { ItemKind } from "./model.ts";
 
 /** Why a list is being shown: to pick something for an action already started. */
 export type Purpose =
@@ -25,6 +26,9 @@ export type Screen =
   | { k: "item"; id: number; for?: Purpose }
   | { k: "team"; for: Purpose }
   | { k: "bag"; for: Purpose }
+  /** How many to buy from the Mart's shelf, or to sell it from the bag (the shop's sheet). */
+  | { k: "buy"; item: { id: number; name: string; price: number; kind: ItemKind } }
+  | { k: "sell"; id: number }
   | { k: "map"; focus?: string }
   | { k: "me" }
   | { k: "settings" }
