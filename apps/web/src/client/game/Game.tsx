@@ -178,6 +178,18 @@ type Onboarding = { phase: "choose" } | { phase: "starting"; choice: StartChoice
  * resume-keeper.ts), so this is kept short.
  */
 const RESUME_POINT_MS = 2000;
+const GPU_RELOAD_KEY = "pokehd.gpuReloadAt";
+/** Whether the page may reload to get its GPU back: not if it already did within the last minute. */
+function gpuReloadAllowed(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(GPU_RELOAD_KEY)) || 0;
+    if (Date.now() - last < 60_000) return false;
+    sessionStorage.setItem(GPU_RELOAD_KEY, String(Date.now()));
+    return true;
+  } catch {
+    return false; // no storage, no way to tell a reload loop: stay on the Game Boy screen
+  }
+}
 /** How often the newest resume point goes to the cloud (also whenever the page is hidden). */
 const RESUME_UPLOAD_MS = 60_000;
 /** The loading screen gives up waiting for the HD world after this long, rather than stay up for good. */
@@ -1069,9 +1081,27 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         setStartup((s) => ({ ...s, world: true }));
         return setMessage("");
       }
+      /**
+       * The engine couldn't bring the HD view back after losing the GPU (QA bug #74; it normally
+       * does by itself). A reload starts the GPU afresh: the game keeps its place through a resume
+       * point taken first. At most once a minute, so a GPU that keeps failing doesn't reload the
+       * page over and over; then it's the Game Boy screen alone until the player reloads.
+       */
+      const gpuGaveUp = async () => {
+        if (disposed) return;
+        if (gpuReloadAllowed()) {
+          setMessage("The graphics card reset, so the page is reloading to bring the HD view back.");
+          await Promise.race([finish().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
+          if (!disposed) location.reload();
+          return;
+        }
+        hd = false;
+        setNoHd(true);
+        setMessage("The graphics card keeps resetting, so this is the Game Boy screen alone. Reload the page to try HD again.");
+      };
       let created: Engine;
       try {
-        created = await createEngine(canvas, { world: live });
+        created = await createEngine(canvas, { world: live, onGpu: (event) => event.state === "failed" && void gpuGaveUp() });
       } catch (e) {
         // Still playable on the Game Boy screen alone.
         console.error("[pokeHD] renderer failed", e);

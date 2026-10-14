@@ -100,12 +100,13 @@ export function installCachedShadow(light: THREE.DirectionalLight): CachedShadow
    * nothing would never notice. Any uncaught GPU error while the cache is on turns it off: at
    * worst that loses the speed-up, never the frame.
    */
-  let watching = false;
+  let watching: object | undefined;
   function watchGpuErrors(renderer: THREE.WebGPURenderer) {
-    if (watching) return;
-    watching = true;
+    // Per device: a lost device is replaced by a new one (QA bug #74).
     const device = (renderer.backend as { device?: EventTarget }).device;
-    device?.addEventListener("uncapturederror", (e) => fail((e as Event & { error?: { message?: string } }).error?.message));
+    if (!device || watching === device) return;
+    watching = device;
+    device.addEventListener("uncapturederror", (e) => fail((e as Event & { error?: { message?: string } }).error?.message));
   }
 
   function fail(why: unknown) {
