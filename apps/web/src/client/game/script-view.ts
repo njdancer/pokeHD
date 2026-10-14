@@ -99,11 +99,19 @@ export const SCRIPT_UNFIT_FRAMES = 10;
 /**
  * Whether a line in the game's box is one of the message's. The ▼ sits in the box's last
  * column, over the 18th letter of a full second line, so that line reads one letter short.
+ *
+ * The game also wipes its box from the left, and a frame can land partway through: "AAAJJJJ sent"
+ * reads "sent", "BUG CATCHER sent" reads "R sent". That's still this message going, not other
+ * words: taken for other words, the HD box dropped the message for the game's own half-wiped
+ * line, and showed "R sent / out WEEDLE!" (QA bug 17).
  */
 function isOurs(script: ScriptView, line: string): boolean {
   const l = line.trim();
   if (!l || script.lines.has(l)) return true;
-  for (const s of script.lines) if (s.length === l.length + 1 && s.startsWith(l)) return true;
+  for (const s of script.lines) {
+    if (s.length === l.length + 1 && s.startsWith(l)) return true;
+    if (s.endsWith(l)) return true;
+  }
   return false;
 }
 
