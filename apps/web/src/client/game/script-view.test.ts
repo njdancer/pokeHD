@@ -147,4 +147,18 @@ describe("withScriptState", () => {
     expect(withScriptState(text, script).dialog?.state).toBe("idle");
     expect(scriptTap(script)).toBe("wait");
   });
+
+  it("has no menu taking input while a message is under way, though a list's ▶ still shows (QA bug 63)", () => {
+    const visit: Message = { pages: [{ lines: ["Come visit me any", "time you wish."], wait: "end" }], ending: "done" };
+    const script = newScriptView(4, visit, 0);
+    script.shown = script.readyAt;
+    const list = { kind: "list", box: { x: 4, y: 2, width: 16, height: 11, lines: [] }, items: [{ text: "BOULDERBADGE", row: 4 }], cursor: 0, active: true };
+    const text = { ...screen(["Come visit me any", "time you wish."]), menus: [list] } as unknown as ScreenText;
+    const shown = withScriptState(text, script);
+    expect(shown.menus.map((m) => m.active)).toEqual([false]);
+    expect(shown.dialog?.state).toBe("waiting");
+    // Once the message is over (a menu took input), the list is the game's again.
+    script.ended = true;
+    expect(withScriptState(text, script).menus.map((m) => m.active)).toEqual([true]);
+  });
 });

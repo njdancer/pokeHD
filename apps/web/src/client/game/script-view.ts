@@ -90,7 +90,15 @@ export function scriptReady(script: ScriptView | null): boolean {
 export function withScriptState(text: ScreenText, script: ScriptView | null): ScreenText {
   if (!text.dialog) return text;
   const state = scriptReady(script) ? "waiting" : script && !script.closed && !script.ended ? "printing" : "idle";
-  return text.dialog.state === state ? text : { ...text, dialog: { ...text.dialog, state } };
+  // While a message is under way no menu takes input: the game is in its text engine, and the
+  // message ends the moment a menu does (ScriptText ends it at HandleMenuInput). A list left on
+  // the screen under the message still shows its ▶, and the game's ▼ that would tell the decoder
+  // it waits never draws (the page answers that wait), so the list read as taking input: its ×
+  // was the only way on, and a tap on the message box did nothing. The Cerulean badge house's
+  // "Come visit me any time you wish." after B on its badge list (QA bug 63).
+  const quiet = script && !script.ended && text.menus.some((m) => m.active);
+  const menus = quiet ? text.menus.map((m) => (m.active ? { ...m, active: false } : m)) : text.menus;
+  return text.dialog.state === state && !quiet ? text : { ...text, menus, dialog: { ...text.dialog, state } };
 }
 
 /** Frames the HD text may not show a message before it goes back to the game's own text. */
