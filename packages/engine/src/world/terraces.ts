@@ -215,19 +215,25 @@ export function terraces(region: Region): Terraces {
     }
     const base = Number.isFinite(low[i]!) ? low[i]! : 0;
     if (STEPS.has(tiles[i]!)) {
-      levels[i] = stepLevel(i) ?? base;
+      levels[i] = stepsLevel(i) ?? base;
     } else {
       levels[i] = SOLID.has(region.labels[i]!) ? base + 1 : base;
     }
   }
   /** Steps climb from the floor below their face to the floor above it, a tile at a time. */
-  function stepLevel(i: number): number | undefined {
+  function stepsLevel(i: number): number | undefined {
     let up = i - w;
     let above = 1;
-    while (up >= 0 && piece[up] === -1 && above <= MAX_RUN) (up -= w), above++;
+    while (up >= 0 && piece[up] === -1 && above <= MAX_RUN) {
+      up -= w;
+      above++;
+    }
     let down = i + w;
     let below = 1;
-    while (down < n && piece[down] === -1 && below <= MAX_RUN) (down += w), below++;
+    while (down < n && piece[down] === -1 && below <= MAX_RUN) {
+      down += w;
+      below++;
+    }
     if (up < 0 || down >= n || piece[up] === -1 || piece[down] === -1) return undefined;
     const hi = pieceLevel[piece[up]!]!;
     const lo = pieceLevel[piece[down]!]!;

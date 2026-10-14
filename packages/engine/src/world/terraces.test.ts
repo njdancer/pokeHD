@@ -1,9 +1,12 @@
-import { existsSync, readFileSync } from "node:fs";
 import { MAP_NAMES, parseWorld, type MapId } from "@pokehd/rom";
 import { describe, expect, it } from "vitest";
 import { buildRegion } from "./region.ts";
 import { hasTerraces, stepLevel, terraces } from "./terraces.ts";
 
+// The engine is typed for the browser, without Node's types: fs comes in untyped.
+const { existsSync, readFileSync }: { existsSync(p: URL): boolean; readFileSync(p: URL): Uint8Array } = await import(
+  "node:fs" as string
+);
 const ROM_PATH = new URL("../../../../rom/pokeblue.gb", import.meta.url);
 const romAvailable = existsSync(ROM_PATH);
 
