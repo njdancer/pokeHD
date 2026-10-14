@@ -189,6 +189,33 @@ function spaceCells(text: string): string {
   return lines.join("\n");
 }
 
+/**
+ * The text map in symbols that are one token each to Haiku, alone and beside each other (checked
+ * with tok.ts: ASCII runs like "##########" merge to ~3 tokens; these stay at one a cell), so the
+ * model sees every cell without the extra tokens spacing costs.
+ */
+const GLYPHS: Record<string, string> = {
+  "@": "★", ".": "□", "#": "■", N: "人", D: "門", '"': "草", "~": "水", S: "木", o: "●", O: "石", "/": "△", "^": "山", _: "田", v: "v", "<": "←", ">": "→",
+};
+function glyphCells(text: string): string {
+  const lines = text.split("\n");
+  const head = lines.findIndex((l) => /0123456789$/.test(l));
+  if (head < 0) return text;
+  const legend = lines.findIndex((l, i) => i > head && l.startsWith("Legend:"));
+  if (legend < 0) return text;
+  for (let i = head + 1; i < legend; i++) {
+    const l = lines[i]!;
+    lines[i] = `${l.slice(0, 2)}${[...l.slice(2)].map((c) => GLYPHS[c] ?? c).join("")}`;
+  }
+  const [intro, rest] = [lines[legend]!.slice(0, "Legend: ".length), lines[legend]!.slice("Legend: ".length)];
+  const end = rest.indexOf(". You're");
+  const entries = rest.slice(0, end).split(", ").map((e) => `${GLYPHS[e[0]!] ?? e[0]}${e.slice(1)}`);
+  const swap = (t: string) => t.replace(/between \^ and/g, `between ${GLYPHS["^"]} and`).replace(/between _ and/g, `between ${GLYPHS["_"]} and`).replace(/stairs \/\)/g, `stairs ${GLYPHS["/"]})`);
+  lines[legend] = `${intro}${swap(entries.join(", "))}${rest.slice(end)}`;
+  for (let i = legend + 1; i < lines.length; i++) lines[i] = lines[i]!.replace("(D, under the @)", `(${GLYPHS["D"]}, under the ${GLYPHS["@"]})`);
+  return lines.join("\n");
+}
+
 /** The pieces a variant can switch on; each variant is its parent plus one more. */
 export interface Features {
   exitNote?: boolean;
@@ -202,6 +229,8 @@ export interface Features {
   clip?: "plain" | "ground";
   /** A space between the text map's cells, one token each. */
   spaced?: boolean;
+  /** One-token symbols for the text map's cells. */
+  glyphs?: boolean;
 }
 
 function build(id: string, note: string, parent: string | null, f: Features): Variant {
@@ -222,7 +251,13 @@ function build(id: string, note: string, parent: string | null, f: Features): Va
     const out = base.run(sim, input, turn);
     return { ...out, text: spaceCells(out.text) };
   } };
-  const tool: VariantTool = f.spaced
+  const glyphs: VariantTool = { ...base, run: (sim, input, turn) => {
+    const out = base.run(sim, input, turn);
+    return { ...out, text: glyphCells(out.text) };
+  } };
+  const tool: VariantTool = f.glyphs
+    ? glyphs
+    : f.spaced
     ? spaced
     : !f.clip
     ? base
@@ -252,7 +287,7 @@ function build(id: string, note: string, parent: string | null, f: Features): Va
     opening: (sim) => {
       memory.set(sim, new Explored());
       const opening = withExtra(sim.opening(), tracking(sim));
-      return f.spaced ? spaceCells(opening) : opening;
+      return f.spaced ? spaceCells(opening) : f.glyphs ? glyphCells(opening) : opening;
     },
   };
 }
@@ -271,4 +306,5 @@ export const VARIANTS: Record<string, Variant> = {
   clipped: build("clipped", "Text map clipped to the strips a walk revealed (no repeats of tiles in the last view).", "from-entry", { exitNote: true, fromEntry: true, clip: "plain" }),
   "clipped-ground": build("clipped-ground", "Clipped text map plus one already-seen row or column to line the new strips up against.", "from-entry", { exitNote: true, fromEntry: true, clip: "ground" }),
   spaced: build("spaced", "A space between the text map's cells, so each cell is one token (run together, 10 cells are ~3 tokens).", "from-entry", { exitNote: true, fromEntry: true, spaced: true }),
+  glyphs: build("glyphs", "Text map cells in one-token symbols (□ floor, ■ wall, ★ you…), one token a cell without spaces.", "from-entry", { exitNote: true, fromEntry: true, glyphs: true }),
 };
