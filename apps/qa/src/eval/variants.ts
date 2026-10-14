@@ -30,6 +30,8 @@ export interface Variant {
   features: Features;
   /** The screen description that opens an episode. */
   opening(sim: Sim): string;
+  /** Changes to the system prompt (apps/qa/prompt.md), if any. */
+  system?: (base: string) => string;
 }
 
 /** Arrows as parseMoves reads them, plus "*" after an arrow: run that way until something stops you. */
@@ -372,4 +374,17 @@ export const VARIANTS: Record<string, Variant> = {
     description:
       'Walk with the on-screen joystick: one arrow per step, in order, e.g. "↑↑↑→→" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Put * after an arrow to keep going that way until something stops you, e.g. "↑*" or "→→↑*". Stops early if something interrupts you (a wall, a door, someone talking, a battle). Usually stay within about one screen\'s worth of steps so you can see where you\'re going; longer routes are allowed when you\'re sure. Returns what\'s on screen afterwards.',
   }),
+  // Advice to build the warp netlist itself (no map knowledge given), appended to the QA prompt.
+  ...Object.fromEntries(
+    (
+      [
+        ["prompt-warps", "In caves, forests and buildings with several floors, keep a list as you explore of every door, ladder and stairway you find: where it is (from where you came into that floor) and where it took you."],
+        ["prompt-netlist", "In caves, forests and buildings with several floors, build up a list of connections as you explore, one line per door, ladder or stairway you've used, e.g. \"B1F: ladder 12S 16E of where I came in -> B2F (arrived at its north-west)\". Write each one down as soon as you use it, and check the list before taking a ladder."],
+        ["prompt-netlist-strategy", "In caves, forests and buildings with several floors, build up a list of connections as you explore, one line per door, ladder or stairway you've used, e.g. \"B1F: ladder 12S 16E of where I came in -> B2F (arrived at its north-west)\". Write each one down as soon as you use it, and check the list before taking a ladder. Prefer ladders and exits you haven't tried yet, and don't go straight back up a ladder you've just come down unless everything reachable from where you are has been explored."],
+      ] as const
+    ).map(([id, advice]) => {
+      const v = build(id, `System prompt advice: ${advice}`, "from-entry", { exitNote: true, fromEntry: true });
+      return [id, { ...v, system: (base: string) => `${base}\n- ${advice}` }];
+    }),
+  ),
 };
