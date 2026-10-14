@@ -80,6 +80,12 @@ export interface GameSnapshot {
   inBattle: boolean;
   /** wIsInBattle: 1 is a wild battle, 2 a trainer's. */
   battleKind: "wild" | "trainer" | null;
+  /**
+   * wPlayerMonNumber: the party index of the Pokémon out in battle, in a battle (null otherwise).
+   * Switching in battle never reorders the party, so this isn't always the leader (QA bug 58).
+   * It still names a fainted Pokémon while the game asks who's next (ChooseNextMon sets it after).
+   */
+  battleMon: number | null;
 }
 
 const sym = (name: SymbolName, length: number): Watch => [SYMBOLS[name].address, length];
@@ -110,6 +116,7 @@ export const SNAPSHOT_RANGES: readonly Watch[] = [
   sym("wYCoord", 2),
   sym("wIsInBattle", 1),
   sym("wCurrentBoxNum", 1),
+  sym("wPlayerMonNumber", 1),
 ];
 
 const word = (b: Uint8Array, i: number) => ((b[i] ?? 0) << 8) | (b[i + 1] ?? 0);
@@ -182,7 +189,7 @@ function wholeCount(list: Uint8Array, capacity: number, structLength: number): n
 }
 
 export function decodeSnapshot(bytes: readonly Uint8Array[]): GameSnapshot {
-  const [party, partyOt, partyNicks, bag, pcItems, box, boxNicks, player, rival, id, money, badges, owned, seen, options, time, repel, transport, map, coords, battle, boxNumber] =
+  const [party, partyOt, partyNicks, bag, pcItems, box, boxNicks, player, rival, id, money, badges, owned, seen, options, time, repel, transport, map, coords, battle, boxNumber, battleMon] =
     bytes as Uint8Array[];
   const teamCount = wholeCount(party!, PARTY_LENGTH, PARTYMON);
   const mons = 1 + PARTY_LENGTH + 1;
@@ -215,5 +222,6 @@ export function decodeSnapshot(bytes: readonly Uint8Array[]): GameSnapshot {
     x: coords![1] ?? 0,
     inBattle: (battle![0] ?? 0) !== 0,
     battleKind: battle![0] === 1 ? "wild" : battle![0] === 2 ? "trainer" : null,
+    battleMon: (battle![0] ?? 0) !== 0 && (battleMon![0] ?? 0xff) < teamCount ? battleMon![0]! : null,
   };
 }

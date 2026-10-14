@@ -7,6 +7,12 @@ export type Moment = "explore" | "talk" | "wild" | "trainer" | "fainted" | "pc" 
 
 export const inBattle = (m: Moment) => m === "wild" || m === "trainer" || m === "fainted";
 
+/**
+ * Which of the team is out in battle: the game's own index (wPlayerMonNumber) when it's known,
+ * else the leader, which is who a battle starts with (QA bug 58).
+ */
+export const battleMonOf = (model: Pick<MenuModel, "team" | "battleMon">): number => (model.battleMon !== undefined && model.battleMon < model.team.length ? model.battleMon : 0);
+
 export type Status = "PSN" | "BRN" | "SLP" | "PAR" | "FRZ";
 
 export interface Move {
@@ -172,6 +178,8 @@ export interface MenuModel {
   app: AppOptions;
   /** The battle opponent, in a battle. */
   enemy?: { dex: number; name: string; level: number; trainer?: string };
+  /** In a battle, which of the team is out (its index): not always the leader (QA bug 58). */
+  battleMon?: number;
   /** Steps of Repel left. */
   repel: number;
   biking: boolean;

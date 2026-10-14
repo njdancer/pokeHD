@@ -100,4 +100,22 @@ describe("decodeSnapshot's team and box", () => {
     box[BOX_STRUCTS] = GEODUDE;
     expect(decodeSnapshot(bytes).box.map((m) => m.species)).toEqual([GEODUDE]);
   });
+
+  it("names the Pokémon out in battle by its party index, not the leader (QA bug 58)", () => {
+    const bytes = blank();
+    const party = bytes[0]!;
+    party.set([2, GEODUDE, CHARMELEON, 0xff]);
+    party[PARTY_STRUCTS] = GEODUDE;
+    party[PARTY_STRUCTS + 44] = CHARMELEON;
+    const battle = SNAPSHOT_RANGES.findIndex(([a]) => a === SYMBOLS.wIsInBattle.address);
+    const out = SNAPSHOT_RANGES.findIndex(([a]) => a === SYMBOLS.wPlayerMonNumber.address);
+    bytes[out]![0] = 1;
+    // Out of battle, wPlayerMonNumber is a leftover: nobody is out.
+    expect(decodeSnapshot(bytes).battleMon).toBeNull();
+    bytes[battle]![0] = 2;
+    expect(decodeSnapshot(bytes).battleMon).toBe(1);
+    // An index past the team (a stale byte) is no one.
+    bytes[out]![0] = 4;
+    expect(decodeSnapshot(bytes).battleMon).toBeNull();
+  });
 });
