@@ -5,7 +5,7 @@
 .qs-shell { position: fixed; inset: 0; overflow: hidden; background: #2a1d14; touch-action: manipulation; }
 .qs-fit { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px; transform-origin: center center; transform: translate(-50%,-50%); }
 .qs {
-  --paper:#fdf3df; --card:#fffaf0; --edge:#d6a866; --line:#ecd3a6; --ink:#3e2a1c; --muted:#9a6c45;
+  --paper:#fdf3df; --card:#fffaf0; --edge:#d6a866; --line:#ecd3a6; --ink:#5a3a22; --muted:#9a6c45;
   --accent:#e0702a; --accent-dark:#b9541a; --red:#e8473b; --green:#4fae5a; --blue:#2c8fd6;
   --gold:#e0a020; --ball-ink:#2b2b33;
   --haiku-tint:#e3f0fb; --opus-tint:#fde9da;
@@ -168,11 +168,12 @@
 
 /* ---------- right column ---------- */
 .qs .qs-info, .qs .qs-bugs { left: 1372px; width: 520px; transition: left .7s var(--ease), width .7s var(--ease), top .7s var(--ease), height .7s var(--ease); }
-.qs .qs-info { top: 200px; height: 456px; overflow: hidden; padding: 14px 24px 18px; display: flex; flex-direction: column; gap: 10px; }
-.qs .qs-bugs { top: 680px; height: 372px; display: flex; flex-direction: column; padding: 18px 26px 18px 26px; }
-.qs .qs-row { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; }
-.qs .qs-place { font-family:"Fredoka",sans-serif; font-weight: 700; font-size: 54px; line-height: 1.05; color: var(--ink); white-space: nowrap; transition: font-size .7s var(--ease); }
-.qs .qs-facts { display: flex; align-items: baseline; gap: 10px; font-size: 26px; font-weight: 900; color: var(--muted); white-space: nowrap; text-transform: uppercase; letter-spacing: .05em; }
+.qs .qs-info { top: 200px; height: calc(828px - var(--bugs-h, 372px)); overflow: hidden; padding: 14px 24px 18px; display: flex; flex-direction: column; gap: 10px; }
+/* At most what leaves the player card room for its whole team. */
+.qs .qs-bugs { top: auto; bottom: 28px; height: auto; max-height: 396px; display: flex; flex-direction: column; padding: 18px 26px 18px 26px; }
+.qs .qs-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.qs .qs-place { font-family:"Fredoka",sans-serif; font-weight: 700; font-size: 54px; line-height: 1.05; color: var(--ink); min-width: 0; overflow-wrap: anywhere; transition: font-size .7s var(--ease); }
+.qs .qs-facts { flex: none; margin-top: 18px; display: flex; align-items: baseline; gap: 10px; font-size: 26px; font-weight: 900; color: var(--muted); white-space: nowrap; text-transform: uppercase; letter-spacing: .05em; }
 .qs .qs-facts b { font-family:"Fredoka",sans-serif; font-weight: 700; color: var(--accent-dark); font-size: 36px; letter-spacing: 0; }
 .qs .qs-badgerow { display: flex; align-items: center; gap: 6px; }
 .qs .qs-badgerow .qs-label { margin-right: 4px; }
@@ -185,10 +186,10 @@
 .qs .qs-badge-none { width: 32px; height: 32px; border-radius: 50%; border: 4px dashed var(--edge); flex: none; }
 .qs .qs-badgerow b { margin-left: auto; font-family:"Fredoka",sans-serif; font-weight: 700; font-size: 36px; color: var(--gold); line-height: 1; }
 .qs .qs-badgerow b small { color: var(--muted); font-size: 28px; }
-.qs .qs-party { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 10px; margin-top: 2px; }
+.qs .qs-party { flex: 1; min-height: 0; grid-auto-rows: minmax(70px, 96px); display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px 10px; margin-top: 2px; }
 .qs .qs-slot {
   background: var(--paper); border: 3px solid var(--line); border-radius: 14px; padding: 4px 10px 6px 4px; min-width: 0;
-  display: flex; align-items: center; gap: 4px; height: 70px;
+  display: flex; align-items: center; gap: 4px;
 }
 .qs .qs-slot.qs-empty { background: transparent; border-style: dashed; justify-content: center; }
 .qs .qs-slot.qs-empty::before {
@@ -265,10 +266,10 @@
 .qs[data-mode="talk"] .qs-chat .qs-msg:nth-child(4) { transition-delay: .45s; }
 
 .qs[data-mode="talk"] .qs-info, .qs[data-mode="talk"] .qs-bugs { left: 1292px; width: 600px; }
-.qs[data-mode="talk"] .qs-info { height: 330px; padding-top: 10px; gap: 8px; }
+.qs[data-mode="talk"] .qs-info { padding-top: 10px; gap: 8px; }
 .qs[data-mode="talk"] .qs-place { font-size: 44px; }
 .qs[data-mode="talk"] .qs-party { grid-template-columns: repeat(3, minmax(0,1fr)); }
-.qs[data-mode="talk"] .qs-bugs { top: 554px; height: 498px; }
+.qs[data-mode="talk"] .qs-bugs { max-height: 470px; }
 .qs[data-mode="talk"] .qs-bl { gap: 4px; }
 .qs[data-mode="talk"] .qs-bug { padding: 6px 0; }
 .qs[data-mode="talk"] .qs-name { font-size: 21px; letter-spacing: -.01em; }
