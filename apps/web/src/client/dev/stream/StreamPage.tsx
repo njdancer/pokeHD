@@ -50,6 +50,17 @@ export function StreamPage() {
   useLayoutEffect(() => {
     if (stage.current) trim(stage.current, settled === mode);
   });
+  // The bug tracker is as tall as its bugs; the player card takes the rest of the column.
+  useLayoutEffect(() => {
+    const qs = stage.current;
+    const bugs = qs?.querySelector<HTMLElement>(".qs-bugs");
+    if (!qs || !bugs) return;
+    const fit = () => qs.style.setProperty("--bugs-h", `${bugs.offsetHeight}px`);
+    fit();
+    const watch = new ResizeObserver(fit);
+    watch.observe(bugs);
+    return () => watch.disconnect();
+  }, []);
   useEffect(() => {
     if (!document.fonts) return;
     void document.fonts.ready.then(() => stage.current && trim(stage.current, true));
@@ -336,10 +347,6 @@ function Stats({ game, playTime }: { game: GameSnapshot | null; playTime: string
     <div className="qs-stats">
       <span>
         <b>₽{game ? game.money.toLocaleString("en-US") : "–"}</b>
-      </span>
-      <span>
-        Dex <b>{game ? game.owned.size : "–"}</b>
-        <small>/{game ? game.seen.size : "–"} seen</small>
       </span>
       <span>
         Balls <b>{game ? balls : "–"}</b>
