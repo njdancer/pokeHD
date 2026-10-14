@@ -209,6 +209,8 @@ export interface MenuActions {
   sendOut(mon: number): string;
   throwBall(item: number): string;
   teach(item: number, mon: number): string;
+  /** The field move CUT by this Pokémon, on what the player faces (the game's UsedCut). */
+  cut(mon: number): string;
   deposit(mon: number): string;
   withdraw(box: number): string;
   buy(item: number, count: number): string;

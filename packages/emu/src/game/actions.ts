@@ -7,12 +7,16 @@
 // | action | the game's code |
 // |---|---|
 // | use an item | `UseItem` with wCurItem, framed like a person's text (`DisplayTextIDInit` … `CloseTextDisplay`) |
+// | CUT | `UsedCut`, as the start menu's POKéMON list calls it, in the same frame |
 // | toss | `RemoveItemFromInventory`, as tossing does once the player says yes |
 // | reorder the team | `SwitchPartyMon_InitVarOrSwapData`, the party menu's swap without its drawing |
 // | reorder moves | none outside battle: the moves and their PP swapped in the party struct |
 // | reorder the bag | the swap `HandleItemListSwapping` makes, on wBagItems |
 // | game options | wOptions, as the OPTION screen writes it |
 // | save | `SaveGameData` |
+//
+// Both of the first two start where pressing START does: the tile the player faces worked out
+// afresh (`GetTileAndCoordsInFrontOfPlayer`), as CUT, SURF and the rods read it.
 import { isKeyItem, romOffset, SYMBOLS, type SymbolName } from "@pokehd/rom";
 import type { GameBoy } from "../core.ts";
 import { StandIn } from "../ffi.ts";
@@ -27,6 +31,8 @@ export type GameAction =
    * item's routine asks, in order (a TM's "Teach it to a Pokémon?"); any more are answered no.
    */
   | { kind: "use-item"; item: number; mon?: number; answers?: boolean[] }
+  /** The field move CUT, by the party member in slot `mon`, on whatever the player faces. */
+  | { kind: "cut"; mon: number }
   | { kind: "toss-item"; item: number; quantity: number }
   /** Moves a party member from one slot to another (the rest shift up or down). */
   | { kind: "move-mon"; from: number; to: number }
@@ -54,6 +60,24 @@ const CHOSE_SECOND_ITEM = 2;
 const ITEM_USED = 1;
 /** A text ID other than 0 (the start menu): DisplayTextIDInit draws an ordinary dialogue box. */
 const TEXT_BOX = 1;
+const CUT = 0x0f;
+/** wObtainedBadges' BIT_CASCADEBADGE, which the start menu's CUT asks for. */
+const CASCADEBADGE = 1 << 1;
+/** `lda_coord 8, 9`: the screen tile under the player's feet. */
+const TILE_UNDER_PLAYER = 9 * 20 + 8;
+
+/**
+ * What pressing START works out before the start menu opens (OverworldLoop's `.displayDialogue`):
+ * the tile in front of the player, for the way they face now, and the one they stand on. The
+ * page's menu opens without START, so without this CUT read whatever tile was last worked out
+ * (QA bug 69), and so would SURF and the rods.
+ */
+const facingStep = (before?: (gb: GameBoy) => void): Step => ({
+  routine: "Bankswitch",
+  before,
+  registers: () => ({ bc: SYMBOLS._GetTileAndCoordsInFrontOfPlayer.bank << 8, hl: SYMBOLS._GetTileAndCoordsInFrontOfPlayer.address }),
+  after: (g) => g.write(addr("wTilePlayerStandingOn"), g.read(addr("wTileMap") + TILE_UNDER_PLAYER)),
+});
 
 /** What the page needs to know to offer an item: whether it needs a Pokémon. */
 export interface ItemUse {
@@ -183,14 +207,17 @@ export class GameActions {
 
   #job(action: GameAction, done: (result: ActionResult) => void): Job {
     let failed: string | undefined;
-    const fail = (reason: string) => {
+    /** What the player is told when the action is refused before the game is asked. */
+    let refusal: string[] = [];
+    const fail = (reason: string, say?: string) => {
       failed = reason;
+      if (say) refusal = [say];
       return { drop: reason };
     };
     /** We set the game's "no text delay" flag (it wasn't set before): cleared again at the end. */
     let quick = false;
     const finish = (completed: boolean) => {
-      const messages = this.#running?.messages ?? [];
+      const messages = this.#running?.messages ?? refusal;
       this.#running = null;
       acting.delete(this.#gb);
       if (quick) this.#gb.write(addr("wStatusFlags5"), this.#gb.read(addr("wStatusFlags5")) & ~NO_TEXT_DELAY);
@@ -224,13 +251,11 @@ export class GameActions {
             return undefined;
           },
           steps: [
+            facingStep(() => begin(mon, answers)),
             // The frame every message from a person gets: font loaded, sprites still, box drawn.
             {
               routine: "Bankswitch",
-              before: (g) => {
-                begin(mon, answers);
-                g.write(addr("hTextID"), TEXT_BOX);
-              },
+              before: (g) => g.write(addr("hTextID"), TEXT_BOX),
               registers: () => ({ bc: SYMBOLS.DisplayTextIDInit.bank << 8, hl: SYMBOLS.DisplayTextIDInit.address }),
             },
             {
@@ -255,6 +280,44 @@ export class GameActions {
           done: finish,
         };
         return job;
+      }
+      case "cut": {
+        const { mon } = action;
+        return {
+          scratch: [
+            [addr("hTextID"), 1],
+            [addr("wUpdateSpritesEnabled"), 1],
+            [addr("wWhichPokemon"), 1],
+          ],
+          check: (g) => {
+            if (mon >= g.read(addr("wPartyCount"))) return fail("no such Pokémon");
+            const moves = g.readBytes(addr("wPartyMons") + mon * PARTYMON_STRUCT_LENGTH + MON_MOVES, NUM_MOVES);
+            if (!moves.includes(CUT)) return fail("doesn't know CUT");
+            // StartMenu_Pokemon's `.cut`, before it calls UsedCut.
+            if (!(g.read(addr("wObtainedBadges")) & CASCADEBADGE)) return fail("needs the CASCADEBADGE", "CUT needs the CASCADEBADGE from Cerulean's Gym.");
+            return undefined;
+          },
+          steps: [
+            facingStep(() => begin(mon)),
+            {
+              routine: "Bankswitch",
+              before: (g) => g.write(addr("hTextID"), TEXT_BOX),
+              registers: () => ({ bc: SYMBOLS.DisplayTextIDInit.bank << 8, hl: SYMBOLS.DisplayTextIDInit.address }),
+            },
+            {
+              routine: "Bankswitch",
+              // The party menu leaves the chosen Pokémon here; UsedCut names it from wPartyMonNicks.
+              before: (g) => g.write(addr("wWhichPokemon"), mon),
+              registers: () => ({ bc: SYMBOLS.UsedCut.bank << 8, hl: SYMBOLS.UsedCut.address }),
+              after: (g) => {
+                // 0: "There isn't anything to CUT!", already kept from its prompt.
+                if (g.read(addr("wActionResultOrTookBattleTurn")) === 0) failed = this.#running?.messages.at(-1) ?? "nothing to cut";
+              },
+            },
+            { routine: "CloseTextDisplay", push: (g) => [g.read(addr("hLoadedROMBank")) << 8] },
+          ],
+          done: finish,
+        };
       }
       case "toss-item": {
         const { item, quantity } = action;

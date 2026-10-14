@@ -50,7 +50,9 @@ export function monVerbs(env: MenuEnv, nav: Nav, i: number, purpose?: Purpose): 
   }
   const v: VerbSpec[] = [];
   if (i > 0) v.push({ label: "Make it the leader", run: () => (done(env, nav, actions.makeLeader(i)), nav.replace({ k: "mon", i: 0 })) });
-  if (m.moves.some((x) => x.name === "CUT")) v.push({ label: "Use CUT", alt: true, run: () => done(env, nav, "There's nothing to cut here") });
+  // The game's own CUT on what the player faces; the menu closes so the tree is seen to go, and
+  // what the game says comes back as a notice (QA bug 69: this only ever said "nothing to cut").
+  if (m.moves.some((x) => x.name === "CUT")) v.push({ label: "Use CUT", alt: true, run: () => done(env, nav, actions.cut(i), true) });
   v.push({ label: "Use an item on it", alt: true, run: () => nav.go({ k: "bag", for: { onMon: i } }) });
   return v;
 }

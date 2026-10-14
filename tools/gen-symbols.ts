@@ -307,6 +307,13 @@ export const ALLOWLIST: readonly string[] = [
   "wTextBoxID",
   "wTwoOptionMenuID",
   "wUpdateSpritesEnabled",
+  // CUT from the Pokédex menu (QA bug 69): the start menu's own call, with the tile in front of
+  // the player worked out first, as pressing START does
+  "UsedCut",
+  "_GetTileAndCoordsInFrontOfPlayer",
+  "wSpritePlayerStateData1FacingDirection",
+  "wTileInFrontOfPlayer",
+  "wTilePlayerStandingOn",
   // HD battle menus (p2-tapfirst): the battle menu's and the move list's waits for input, and
   // what the page shows and answers there
   "DisplayBattleMenu.AButtonPressed",

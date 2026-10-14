@@ -239,4 +239,90 @@ describe.skipIf(!existsSync(ROM_PATH))("game actions (ROM)", () => {
     expect(r(gb, "wOptions")).toBe(before);
     expect(actions.pending).toBe(0);
   });
+
+  // QA bug 69: CUT from the page's menu said there was nothing to cut beside Vermilion's Gym.
+  // The tree is in block (7, 9) of VERMILION_CITY, block $35, whose top-right step (15, 18) is
+  // the tree (tiles $2D $2E / $3D $3E; UsedCut looks for $3D). The player stood at (14, 18).
+  describe("CUT beside Vermilion's Gym", () => {
+    const VERMILION_CITY = 5;
+    const VERMILION_WIDTH = 20;
+    const CUT = 0x0f;
+    /** wOverworldMap: the map's blocks inside a border three blocks wide. */
+    const block = (gb: GameBoy, bx: number, by: number) => r(gb, "wOverworldMap", (VERMILION_WIDTH + 6) * (by + 3) + bx + 3);
+
+    /** A game standing at (x, y) in Vermilion as a warp would put it there, with CUT and the badge. */
+    async function vermilion(x: number, y: number, badges = 0b10) {
+      const g = await game();
+      const { gb } = g;
+      const moves = addr("wPartyMons") + 8;
+      gb.write(moves + 3, CUT);
+      gb.write(moves + 21 + 3, 30);
+      gb.write(addr("wObtainedBadges"), badges);
+      let entered = false;
+      const remove = gb.addHook("OverworldLoop", (h) => {
+        if (entered) return;
+        entered = true;
+        h.write(addr("wCurMap"), VERMILION_CITY);
+        h.write(addr("wXCoord"), x);
+        h.write(addr("wYCoord"), y);
+        const view = addr("wOverworldMap") + 7 + VERMILION_WIDTH + (VERMILION_WIDTH + 6) * (y >> 1) + (x >> 1);
+        h.write(addr("wCurrentTileBlockMapViewPointer"), view & 0xff);
+        h.write(addr("wCurrentTileBlockMapViewPointer") + 1, view >> 8);
+        h.write(addr("wYBlockCoord"), y & 1);
+        h.write(addr("wXBlockCoord"), x & 1);
+        h.setRegisters({ pc: addr("EnterMap") });
+      });
+      frames(gb, 300);
+      remove();
+      expect([r(gb, "wCurMap"), r(gb, "wXCoord"), r(gb, "wYCoord")]).toEqual([VERMILION_CITY, x, y]);
+      expect(block(gb, 7, 9)).toBe(0x35);
+      return g;
+    }
+    const face = (gb: GameBoy, button: number) => {
+      gb.setButtons(button);
+      frames(gb, 4);
+      gb.setButtons(0);
+      frames(gb, 30);
+    };
+
+    it("cuts the tree the player faces, with the start menu's own UsedCut", async () => {
+      const { gb, run } = await vermilion(14, 18);
+      // Facing right, into the tree: the player turns and stays.
+      face(gb, Button.Right);
+      expect([r(gb, "wXCoord"), r(gb, "wYCoord")]).toEqual([14, 18]);
+      // Whatever tile was worked out last (pressing A at something else, the map's arrival) is
+      // stale: the action works it out afresh, as pressing START would.
+      gb.write(addr("wTileInFrontOfPlayer"), 0);
+      const result = run({ kind: "cut", mon: 0 });
+      expect(result.ok, JSON.stringify(result)).toBe(true);
+      expect(result.messages.join(" ")).toMatch(/hacked.*away with CUT!/s);
+      // CutTreeBlockSwaps: $35 becomes $4C, and the way to the Gym's door is open.
+      expect(block(gb, 7, 9)).toBe(0x4c);
+      frames(gb, 30);
+      gb.setButtons(Button.Right);
+      frames(gb, 20);
+      gb.setButtons(0);
+      frames(gb, 20);
+      expect([r(gb, "wXCoord"), r(gb, "wYCoord")]).toEqual([15, 18]);
+    });
+
+    it("says what the game says with nothing in front, and leaves the tree", async () => {
+      const { gb, run } = await vermilion(14, 18);
+      face(gb, Button.Right);
+      gb.write(addr("wSpritePlayerStateData1FacingDirection"), 0); // facing down: the Gym's corner
+      const result = run({ kind: "cut", mon: 0 });
+      expect(result).toMatchObject({ ok: false, messages: ["There isn't\nanything to CUT!"] });
+      expect(block(gb, 7, 9)).toBe(0x35);
+      walksAfter(gb);
+    });
+
+    it("needs the CASCADEBADGE, as the start menu's CUT does", async () => {
+      const { gb, run } = await vermilion(14, 18, 0b01);
+      face(gb, Button.Right);
+      const result = run({ kind: "cut", mon: 0 });
+      expect(result).toMatchObject({ ok: false, reason: "needs the CASCADEBADGE" });
+      expect(result.messages).toHaveLength(1);
+      expect(block(gb, 7, 9)).toBe(0x35);
+    });
+  });
 });

@@ -578,6 +578,9 @@ export class LiveActions implements MenuActions {
     // Something at once: the game takes a moment to boot it up before any question (QA bug 47).
     return `Booting up ${itemName(this.#rom, item)}…`;
   }
+  cut(mon: number): string {
+    return this.#do({ kind: "cut", mon });
+  }
   deposit(mon: number): string {
     this.#answer({ index: mon });
     return "";
