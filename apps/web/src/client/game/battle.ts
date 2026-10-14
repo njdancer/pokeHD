@@ -334,16 +334,30 @@ export function battleMenuShown(text: ScreenText): boolean {
   );
 }
 
-/** Longest the Game Boy screen stays covered after an answer with nothing else to go on. */
+/**
+ * Frames with nothing to read that the Game Boy screen stays covered after an answer, at most.
+ * Messages in between don't count.
+ */
 const ANSWER_HOLD_FRAMES = 120;
+
+/** Words on the battle screen to read (a message, the stats box), other than the move's TYPE box. */
+function readable(text: ScreenText): boolean {
+  return (
+    !!text.dialog?.lines.some((l) => l.trim() !== "") ||
+    text.boxes.some((b) => !isMoveInfo(b) && b.lines.some((l) => l.text.trim() !== ""))
+  );
+}
 
 /**
  * Whether the HD battle menu covers the Game Boy screen (`maskBattleScreen` with `battleCovered`'s
  * whole screen): while the game asks, while its own menus are drawn (`battleMenuShown`), and from
- * an answer until the game shows what comes of it. Between the two the game can clear the menu's
- * area before it draws the move list (a blank, white message box over the HD battle, with the old
- * menu still in video memory), which no reading of the text tells from a turn's empty message box
- * (QA bug 51). A message with words in it, the next question or leaving the battle screen ends it.
+ * an answer to the next question whenever there is nothing to read. In between the game clears
+ * the menu's area before it draws the move list, and after "No PP left for this move!" it puts
+ * back the screen it saved (LoadScreenTilesFromBuffer1) before drawing the list again: a blank,
+ * white message box over the HD battle, with the old menu still in video memory for a frame or
+ * two, which no reading of the text tells from a turn's empty message box (QA bug 51). Messages
+ * show as ever. The next question, leaving the battle screen or a long while with nothing to
+ * read (ANSWER_HOLD_FRAMES) ends it.
  */
 export class BattleMenuCover {
   #held = 0;
@@ -355,9 +369,12 @@ export class BattleMenuCover {
 
   /** Per frame: `onScreen` is the battle screen's text, null off the battle screen. */
   covering(onScreen: ScreenText | null, asking: boolean): boolean {
-    if (!onScreen || asking || onScreen.dialog?.lines.some((l) => l.trim() !== "")) this.#held = 0;
-    else if (this.#held > 0) this.#held--;
-    return !!onScreen && (asking || this.#held > 0 || battleMenuShown(onScreen));
+    if (!onScreen || asking) this.#held = 0;
+    if (!onScreen) return false;
+    if (asking || battleMenuShown(onScreen)) return true;
+    if (this.#held === 0 || readable(onScreen)) return false;
+    this.#held--;
+    return true;
   }
 }
 

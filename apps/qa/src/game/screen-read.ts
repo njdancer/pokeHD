@@ -28,7 +28,7 @@ export interface Rect {
   h: number;
 }
 export interface Panel {
-  /** start, name, message, menu, dialog, battle-card, toast, lock. */
+  /** start, name, message, menu, dialog, battle-menu, battle-card, toast, lock. */
   kind: string;
   text: string;
   /** For menus: the line the cursor is on. */
@@ -91,6 +91,9 @@ export function readScreen(arg: { slowSince: number }): ScreenRead {
     [".hd-box", "box"],
     ['[role="dialog"]', "dialog"],
     ['[role="alertdialog"]', "dialog"],
+    // The HD battle menu: in front of the Game Boy screen, whose tiles behind it (the move list,
+    // the TYPE box) are hidden and must not be read out as if on screen (QA bug 51).
+    ['[data-testid="battle-menu"]', "battle-menu"],
     [".battle-card", "battle-card"],
     [".game-toast", "toast"],
     ['[role="status"]:not([data-testid="loading"])', "toast"],
