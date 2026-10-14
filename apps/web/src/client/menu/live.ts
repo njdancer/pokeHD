@@ -20,6 +20,7 @@ import {
   typeName,
   type WorldData,
 } from "@pokehd/rom";
+import { scriptedOutcome } from "../dex/battles.ts";
 import type { Catalogue } from "../dex/catalogue.ts";
 import type { Friend as RoomFriend } from "../room/client.ts";
 import { bikeAllowed, escapeRopeWorks, itemLine, itemPrice, shelf } from "./items.ts";
@@ -226,14 +227,19 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
     const p = catalogue.person(met.map, met.npc);
     const npc = world.maps[met.map]?.npcs[met.npc];
     if (!p || !npc) continue;
-    const kind: PersonKind = p.trainer ? (LEADERS.has(p.trainer.name) || p.name === "Rival" ? "Leader" : "Trainer") : HELPERS.has(p.name) ? "Helper" : "Townsfolk";
+    // Leaders and the rival end their battles in scripts of their own, which the journal's beat
+    // hook never sees: the game's event flag says (QA bug 71).
+    const scripted = scriptedOutcome(met.map, met.npc, game.events);
+    const fights = !!p.trainer || scripted !== undefined;
+    const beaten = !!met.beaten || scripted === "beaten";
+    const kind: PersonKind = fights ? (scripted !== undefined || (p.trainer && LEADERS.has(p.trainer.name)) || p.name === "Rival" ? "Leader" : "Trainer") : HELPERS.has(p.name) ? "Helper" : "Townsfolk";
     people.push({
       key: p.key,
       name: p.name,
       kind,
       place: catalogue.placeOf(met.map)?.name ?? "",
-      status: p.trainer ? (met.beaten ? "Beaten" : "Not beaten yet") : `Met ${ago(met.at)}`,
-      ...(met.beaten ? { beaten: true } : {}),
+      status: fights ? (beaten ? "Beaten" : scripted === "fought" ? "Battled" : "Not beaten yet") : `Met ${ago(met.at)}`,
+      ...(beaten ? { beaten: true } : {}),
       ...(met.said ? { said: met.said.replace(/\n/g, " ") } : {}),
       picture: npc.kind === "trainer" ? { trainer: npc.trainerClass } : { sprite: npc.sprite },
     });
