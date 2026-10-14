@@ -4,6 +4,7 @@ import { sceneTime as time } from "../scene-time.ts";
 import { LABEL_RAMPS } from "./palette.ts";
 import type { StyleParams } from "./params.ts";
 import { TILE_UNITS } from "./region.ts";
+import { GRASS_RENDER_ORDER } from "./render-order.ts";
 
 // Hybrid-only extras: instanced grass blades and shader water.
 
@@ -48,6 +49,7 @@ export function grass(tiles: { tx: number; ty: number }[], params: StyleParams):
     mesh.setMatrixAt(i, m);
   }
   mesh.receiveShadow = true;
+  mesh.renderOrder = GRASS_RENDER_ORDER;
   return mesh;
 }
 

@@ -1,5 +1,7 @@
 import * as THREE from "three/webgpu";
+import { floor, mod, screenCoordinate } from "three/tsl";
 import { markMovingShadow } from "../look/cached-shadow.ts";
+import { SEE_THROUGH_RENDER_ORDER } from "./render-order.ts";
 import type { NpcMovement, SpriteSheet } from "@pokehd/rom";
 import type { Ramp } from "./palette.ts";
 import type { Region } from "./region.ts";
@@ -59,6 +61,27 @@ export function personMaterial(kind: keyof typeof PERSON_COLOURS) {
   return new THREE.MeshStandardNodeMaterial({ map: personTexture(kind), alphaTest: 0.5, roughness: 1, side: THREE.DoubleSide });
 }
 export const PERSON_GEOMETRY = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
+
+/**
+ * A sprite's see-through copy. On the Game Boy a person is never hidden by scenery, but here a
+ * tree, roof or ledge on the step in front stands up between them and the camera (QA bug 38). The
+ * copy draws only where something nearer the camera was already drawn over the sprite (depth
+ * test "greater", no depth write), as a half-on screen door of the sprite's own pixels: the hidden
+ * part shows through the scenery, and nothing changes where the person is in plain view. Opaque,
+ * not blended, so it sorts with the scene and leaves the depth the post-processing reads alone.
+ * Draw it with `SEE_THROUGH_RENDER_ORDER`.
+ */
+export function seeThroughMaterial(map: THREE.Texture | null): THREE.MeshStandardNodeMaterial {
+  const m = new THREE.MeshStandardNodeMaterial({ map, alphaTest: 0.5, roughness: 1, side: THREE.DoubleSide });
+  m.depthWrite = false;
+  m.depthFunc = THREE.GreaterDepth;
+  // Nudged toward the camera, so the sprite's own pixels never pass the "greater" test.
+  m.polygonOffset = true;
+  m.polygonOffsetFactor = -1;
+  m.polygonOffsetUnits = -4;
+  m.maskNode = mod(floor(screenCoordinate.x).add(floor(screenCoordinate.y)), 2).equal(0);
+  return m;
+}
 
 /** Turns a billboard to face the camera about the vertical axis. */
 export function faceCamera(sprite: THREE.Object3D, camera: THREE.Camera) {
@@ -142,41 +165,56 @@ export interface SpriteActor {
 
 /** Materials per sheet and ramp, shared by every actor using them. Dispose when the world goes. */
 export function createSpriteSet(defaultRamp: Ramp = SPRITE_RAMP) {
-  const materials = new Map<Ramp, Map<SpriteSheet, THREE.MeshStandardNodeMaterial>>();
-  const fallback = personMaterial("npc");
+  /** A sheet's material, and its see-through copy. */
+  type Pair = { solid: THREE.MeshStandardNodeMaterial; seeThrough: THREE.MeshStandardNodeMaterial };
+  const materials = new Map<Ramp, Map<SpriteSheet, Pair>>();
+  const fallbackSolid = personMaterial("npc");
+  const fallback: Pair = { solid: fallbackSolid, seeThrough: seeThroughMaterial(fallbackSolid.map) };
   const material = (sheet: SpriteSheet, ramp: Ramp) => {
     let byRamp = materials.get(ramp);
     if (!byRamp) materials.set(ramp, (byRamp = new Map()));
     let m = byRamp.get(sheet);
     if (!m) {
-      m = new THREE.MeshStandardNodeMaterial({ map: sheetTexture(sheet, ramp), alphaTest: 0.5, roughness: 1, side: THREE.DoubleSide });
+      const map = sheetTexture(sheet, ramp);
+      m = {
+        solid: new THREE.MeshStandardNodeMaterial({ map, alphaTest: 0.5, roughness: 1, side: THREE.DoubleSide }),
+        seeThrough: seeThroughMaterial(map),
+      };
       byRamp.set(sheet, m);
     }
     return m;
   };
   return {
     actor(): SpriteActor {
-      const mesh = new THREE.Mesh(PERSON_GEOMETRY, fallback);
+      const mesh = new THREE.Mesh(PERSON_GEOMETRY, fallback.solid);
       mesh.castShadow = true;
       markMovingShadow(mesh);
+      // The part of the person scenery hides, drawn through it; a child, so it moves, turns and
+      // hides with the person. It casts no shadow.
+      const through = new THREE.Mesh(PERSON_GEOMETRY, fallback.seeThrough);
+      through.name = "see-through";
+      through.renderOrder = SEE_THROUGH_RENDER_ORDER;
+      mesh.add(through);
+      const wear = (m: Pair, geometry: THREE.PlaneGeometry) => {
+        mesh.material = m.solid;
+        mesh.geometry = geometry;
+        through.material = m.seeThrough;
+        through.geometry = geometry;
+      };
       return {
         mesh,
         show(sheet, facing, animFrame, ramp = defaultRamp) {
-          if (!sheet) {
-            mesh.material = fallback;
-            mesh.geometry = PERSON_GEOMETRY;
-            return;
-          }
+          if (!sheet) return wear(fallback, PERSON_GEOMETRY);
           const { frame, flip } = spriteFrame(facing, animFrame, sheet.still);
-          mesh.material = material(sheet, ramp);
-          mesh.geometry = FRAME_GEOMETRY[frame * 2 + (flip ? 1 : 0)]!;
+          wear(material(sheet, ramp), FRAME_GEOMETRY[frame * 2 + (flip ? 1 : 0)]!);
         },
       };
     },
     dispose() {
       for (const m of [...[...materials.values()].flatMap((b) => [...b.values()]), fallback]) {
-        m.map?.dispose();
-        m.dispose();
+        m.solid.map?.dispose();
+        m.solid.dispose();
+        m.seeThrough.dispose();
       }
       materials.clear();
     },
