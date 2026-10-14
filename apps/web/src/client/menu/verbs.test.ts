@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { MenuEnv } from "./env.tsx";
 import type { Item, MenuActions, MenuModel, Moment, Mon } from "./model.ts";
 import type { Nav } from "./nav.tsx";
-import { ID, itemVerbs, monVerbs } from "./verbs.ts";
+import { heals, ID, itemVerbs, monVerbs, onMon } from "./verbs.ts";
 
 const POTION: Item = { id: 0x14, name: "POTION", kind: "Healing", count: 1, text: "" };
 const TM34: Item = { id: 0xc9 + 33, name: "TM34", kind: "Machines", count: 1, text: "" };
@@ -79,5 +79,33 @@ describe("itemVerbs for the field items", () => {
     const [off] = itemVerbs(riding.env, riding.nav, BIKE);
     expect(off!.label).toBe("Get off");
     expect(off!.off).toBeUndefined();
+  });
+});
+
+// QA bug 50: MOON STONE was filed under Healing. It's a boost now, still used on a Pokémon.
+describe("itemVerbs for a boost (MOON STONE)", () => {
+  const MOON_STONE: Item = { id: 0x0a, name: "MOON STONE", kind: "Boosts", count: 1, text: "" };
+
+  it("is not Healing but still asks which Pokémon", () => {
+    expect(heals(MOON_STONE)).toBe(false);
+    expect(onMon(MOON_STONE)).toBe(true);
+    const { env, nav } = setup();
+    const [v] = itemVerbs(env, nav, MOON_STONE);
+    expect(v).toMatchObject({ label: "Use it on…", off: undefined });
+    v!.run!();
+    expect(nav.go).toHaveBeenCalledWith({ k: "team", for: { use: 0x0a } });
+  });
+
+  it("uses it on the Pokémon picked first", () => {
+    const { env, nav, actions } = setup();
+    const [v] = itemVerbs(env, nav, MOON_STONE, { onMon: 0 });
+    expect(v!.label).toBe("Use on Charmeleon");
+    v!.run!();
+    expect(actions.useItem).toHaveBeenCalledWith(0x0a, 0);
+  });
+
+  it("is greyed out in battle, as the game refuses it there", () => {
+    const { env, nav } = setup("wild");
+    expect(itemVerbs(env, { ...nav, sheet: true }, MOON_STONE, { onMon: 0 })[0]!.off).toBe("Not in battle");
   });
 });

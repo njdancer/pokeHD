@@ -9,6 +9,9 @@ import type { VerbSpec } from "./ui.tsx";
 export const ID = { POKE_BALL: 4, TOWN_MAP: 5, BICYCLE: 6, ANTIDOTE: 0x0b, SUPER_POTION: 0x13, POTION: 0x14, ESCAPE_ROPE: 0x1d, REPEL: 0x1e, HM01: 0xc4 } as const;
 
 export const heals = (it: Item) => it.kind === "Healing";
+/** Used on a Pokémon: medicine, and the boosts (stones, vitamins, RARE CANDY), which the game refuses in battle. */
+export const onMon = (it: Item) => heals(it) || it.kind === "Boosts";
+const notNow = (it: Item, battle: boolean) => (battle && it.kind === "Boosts" ? "Not in battle" : undefined);
 export const isMachine = (it: Item) => it.id >= ID.HM01;
 
 /** Who can learn what: the model's answer (the ROM's TM/HM flags in the real game). */
@@ -64,10 +67,10 @@ export function itemVerbs(env: MenuEnv, nav: Nav, it: Item, purpose?: Purpose, c
   }
   if (purpose && "onMon" in purpose) {
     const m = model.team[purpose.onMon]!;
-    return heals(it) ? [{ label: `Use on ${niceMon(m.name)}`, note: battle ? "Uses your turn" : undefined, run: () => (done(env, nav, actions.useItem(it.id, purpose.onMon), battle), battle || nav.reset({ k: "mon", i: purpose.onMon })) }] : [{ label: "Not for Pokémon", off: "—" }];
+    return onMon(it) ? [{ label: `Use on ${niceMon(m.name)}`, note: battle && !notNow(it, battle) ? "Uses your turn" : undefined, off: notNow(it, battle), run: () => (done(env, nav, actions.useItem(it.id, purpose.onMon), battle), battle || nav.reset({ k: "mon", i: purpose.onMon })) }] : [{ label: "Not for Pokémon", off: "—" }];
   }
   if (battle && !nav.sheet) return [{ label: "Choose on the battle screen", off: "Just looking in battle" }];
-  if (heals(it)) return [{ label: "Use it on…", note: battle ? "Uses your turn" : undefined, run: () => nav.go({ k: "team", for: { use: it.id } }) }];
+  if (onMon(it)) return [{ label: "Use it on…", note: battle && !notNow(it, battle) ? "Uses your turn" : undefined, off: notNow(it, battle), run: () => nav.go({ k: "team", for: { use: it.id } }) }];
   if (it.kind === "Balls")
     return battle ? [{ label: "Throw it", note: moment === "trainer" ? "The trainer will block it" : "Uses your turn", run: () => done(env, nav, actions.throwBall(it.id), true) }] : [{ label: "Throw it", off: "In a wild battle" }];
   if (it.id === ID.REPEL) return battle ? [{ label: "Use it", off: "Not in battle" }] : [{ label: model.repel ? `Use it (${model.repel} steps left)` : "Use it", run: () => done(env, nav, actions.useItem(it.id), true) }];

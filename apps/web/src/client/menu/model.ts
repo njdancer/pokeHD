@@ -30,8 +30,9 @@ export interface Mon {
   moves: Move[];
 }
 
-export type ItemKind = "Healing" | "Balls" | "Travel" | "Battle" | "Machines" | "Key";
-export const ITEM_KINDS: ItemKind[] = ["Healing", "Balls", "Travel", "Battle", "Machines", "Key"];
+/** "Boosts": used on a Pokémon but not medicine (evolution stones, vitamins, RARE CANDY, PP UP). */
+export type ItemKind = "Healing" | "Boosts" | "Balls" | "Travel" | "Battle" | "Machines" | "Key";
+export const ITEM_KINDS: ItemKind[] = ["Healing", "Boosts", "Balls", "Travel", "Battle", "Machines", "Key"];
 
 /** Something in the bag, or something the player once had (`count` 0). */
 export interface Item {

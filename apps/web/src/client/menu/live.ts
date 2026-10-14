@@ -93,9 +93,14 @@ function learnsOf(rom: Uint8Array, cache: Map<number, Learns>, dex: number, spec
   return out;
 }
 
-function itemKind(rom: Uint8Array, item: number): ItemKind {
+/**
+ * The Inventory's filter for an item. What's left after our shelves and is used on a Pokémon
+ * (UsableItems_PartyMenu: the evolution stones, vitamins, RARE CANDY, PP UP) is a boost, not
+ * medicine (QA bug 50: MOON STONE was listed under Healing).
+ */
+export function itemKind(rom: Uint8Array, item: number): ItemKind {
   const s = shelf(rom, item);
-  if (s === "Other") return itemUse(rom, item).onMon ? "Healing" : isKeyItem(rom, item) ? "Key" : "Travel";
+  if (s === "Other") return itemUse(rom, item).onMon ? "Boosts" : isKeyItem(rom, item) ? "Key" : "Travel";
   return s;
 }
 
