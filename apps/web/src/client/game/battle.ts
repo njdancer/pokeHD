@@ -463,6 +463,67 @@ export class BattleItemUse {
   }
 }
 
+/** Longest the Game Boy screen stays behind the HD battle after the Pokédex page, with nothing to read (5 s). */
+const DEX_PAGE_AFTER_FRAMES = 300;
+
+/**
+ * A Pokémon's Pokédex page after a catch (QA bug 68). ItemUseBall says "New POKéDEX data will be
+ * added for SPEAROW!", then ShowPokedexData whites the screen out, clears it and draws the
+ * Pokémon's page in place of the battle, waiting for A or B. The page shows its own entry for it
+ * (DexGuard's `onOpen`, the Pokédex menu on the Pokémon's page) and the game's waits behind it;
+ * once the player shuts the HD one the game leaves its page (GBPalWhiteOut, ClearScreen) and asks
+ * "Do you want to give a nickname to SPEAROW?" over the cleared screen. None of that is the
+ * battle: from the page opening until the game asks (or the battle screen is back), the Game Boy
+ * screen stays behind the HD battle, and only a message shows, in HD (`partyScreenMessage`).
+ *
+ * Only for a page the HD Pokédex shows (`opened`): with the HD Pokédex off, the game's own page is
+ * all there is. It ends at a question (the nickname's sheet, the battle menu), with the battle
+ * screen back or the battle over, or DEX_PAGE_AFTER_FRAMES after the page with nothing to read.
+ */
+export class BattleDexPage {
+  #on = false;
+  #left = false;
+  #frames = 0;
+
+  /** The game's Pokédex page may be up, or the screens after it (`showing` decides). */
+  get active(): boolean {
+    return this.#on;
+  }
+
+  /** The game's page is still up behind the HD Pokédex: nothing on it is for the HD text layer. */
+  get onPage(): boolean {
+    return this.#on && !this.#left;
+  }
+
+  /** In a battle, the game opened a Pokémon's Pokédex page and the page shows its own over it. */
+  opened(): void {
+    this.#on = true;
+    this.#left = false;
+    this.#frames = 0;
+  }
+
+  /** The game has left its Pokédex page (DexGuard's `onClosed`). */
+  closed(): void {
+    if (this.#on) this.#left = true;
+  }
+
+  /**
+   * Per frame: whether the page, or what follows it, is up. `fight` is the BattleTracker's frame,
+   * `text` the whole Game Boy screen's, `asking` whether one of the game's questions is up (the
+   * HD battle menu or a sheet).
+   */
+  showing(fight: Pick<BattleFrame, "state" | "scene">, text: ScreenText, asking: boolean): boolean {
+    if (!this.#on) return false;
+    if (!fight.state) this.#on = false;
+    else if (this.#left) {
+      const words = !!text.dialog?.lines.some((l) => l.trim() !== "");
+      if (!words) this.#frames++;
+      if (asking || fight.scene === "scene" || this.#frames > DEX_PAGE_AFTER_FRAMES) this.#on = false;
+    }
+    return this.#on;
+  }
+}
+
 /** The party screen's message alone ("GEODUDE recovered by 20!"), for the HD text layer. */
 export function partyScreenMessage(text: ScreenText): ScreenText {
   return { ...text, boxes: text.dialog ? [text.dialog.box] : [], menus: [], quantity: null, loose: [], pictures: false };
