@@ -51,13 +51,13 @@ export function useBroadcast(bus: string, enabled: boolean): void {
           void sender.setParameters(params).catch(() => {});
           continue;
         }
-        // A screen share keeps its sharpness and sheds frames when the CPU is short (it fell to
-        // under one a second); a game should do the opposite.
-        track.contentHint = "motion";
         // WebRTC starts low and ramps up; let it reach a clean picture on the local network.
         const params = sender.getParameters();
         for (const encoding of params.encodings ?? []) encoding.maxBitrate = MAX_BITRATE;
-        params.degradationPreference = "maintain-framerate";
+        // A screen share keeps its sharpness and sheds frames when the CPU is short (under one a
+        // second at 1080p on a starved Mac); "maintain-framerate" went the other way and sank to
+        // 320×180. Balanced gives a little of each.
+        params.degradationPreference = "balanced";
         void sender.setParameters(params).catch(() => {});
       }
       await pc.setRemoteDescription({ type: "offer", sdp: musicOffer(sdp) });
