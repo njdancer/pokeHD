@@ -27,7 +27,7 @@ const MenuLive = lazy(() => import("./dev/MenuLive.tsx").then((m) => ({ default:
 const DialogDev = lazy(() => import("./dev/DialogDev.tsx").then((m) => ({ default: m.DialogDev })));
 // The relief editor: paint which way each pixel faces, for training data only (never used in play).
 const ReliefEditor = lazy(() => import("./tools/relief/ReliefEditor.tsx").then((m) => ({ default: m.ReliefEditor })));
-// The QA stream's broadcast overlay (Haiku plays, Opus fixes), captured by OBS at 1920×1080.
+// The QA stream's broadcast overlay (Claude plays, Opus fixes), captured by OBS at 1920×1080.
 const StreamHost = lazy(() => import("./dev/stream/StreamHost.tsx").then((m) => ({ default: m.StreamHost })));
 const WatchPage = lazy(() => import("./dev/stream/WatchPage.tsx").then((m) => ({ default: m.WatchPage })));
 const StreamPage = lazy(() => import("./dev/stream/StreamPage.tsx").then((m) => ({ default: m.StreamPage })));

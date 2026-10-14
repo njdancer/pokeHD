@@ -11,7 +11,10 @@ import "./stream.css";
 export function StreamHost() {
   useFonts();
   const scale = useFit();
-  const mode = useBus(BUS).status?.mode === "talk" ? "talk" : "play";
+  const status = useBus(BUS).status;
+  const mode = status?.mode === "talk" ? "talk" : "play";
+  // "Sonnet 5.5" → "Sonnet", as the overlay names the player.
+  const who = (status?.player ?? "Haiku").split(" ")[0];
   useBroadcast(BUS, new URLSearchParams(location.search).has("broadcast"));
   return (
     <div className="qs-shell">
@@ -28,7 +31,7 @@ export function StreamHost() {
                 </span>
                 PAUSED
               </div>
-              <div className="qs-veil-sub">Haiku is talking to Opus</div>
+              <div className="qs-veil-sub">{who} is talking to Opus</div>
             </div>
           </div>
         </div>
