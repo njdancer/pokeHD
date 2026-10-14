@@ -134,7 +134,7 @@ describe("BattleMenuCover", () => {
   } as ScreenText);
   const message = (lines: string[]) => text({ dialog: { box: { x: 0, y: 12, width: 20, height: 6, lines: [] }, lines, state: "printing" } as unknown as ScreenText["dialog"] });
 
-  it("covers while asked, and from an answer until a message has words (QA bug 51)", () => {
+  it("covers while asked, and from an answer to the next question whenever there's nothing to read (QA bug 51)", () => {
     const cover = new BattleMenuCover();
     expect(cover.covering(text(), false)).toBe(false);
     expect(cover.covering(text(), true)).toBe(true);
@@ -142,7 +142,12 @@ describe("BattleMenuCover", () => {
     // The game clears the menu's area: a blank box, nothing to read.
     expect(cover.covering(text(), false)).toBe(true);
     expect(cover.covering(message(["", ""]), false)).toBe(true);
-    expect(cover.covering(message(["S", ""]), false)).toBe(false);
+    // "No PP left for this move!" shows…
+    expect(cover.covering(message(["No PP left for", "this move!"]), false)).toBe(false);
+    // …and the screen the game puts back after it, before its move list, doesn't.
+    expect(cover.covering(text(), false)).toBe(true);
+    // The next question ends it.
+    expect(cover.covering(text(), true)).toBe(true);
     expect(cover.covering(text(), false)).toBe(false);
   });
 
@@ -154,7 +159,7 @@ describe("BattleMenuCover", () => {
     cover.answered();
     let frames = 0;
     while (cover.covering(text(), false)) frames++;
-    expect(frames).toBe(119);
+    expect(frames).toBe(120);
   });
 
   it("sees the battle menu before its cursor is up (the question still on its way to the page)", () => {
