@@ -1,8 +1,9 @@
 // Everything the worker can turn on at once fits in the core's native hook slots: the page's
-// guards, the Pokédex menu's game hooks and the play journal together. Skips without the dev ROM.
+// guards, the Pokédex menu's game hooks, the play journal and the HD map's block watch together. Skips without the dev ROM.
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { AutoSave } from "./autosave.ts";
+import { BlockWatch } from "./block-watch.ts";
 import { Controls } from "./controls.ts";
 import { GameBoy } from "./core.ts";
 import { DexGuard } from "./dex-guard.ts";
@@ -31,7 +32,8 @@ describe.skipIf(!existsSync(ROM_PATH))("the hook budget (ROM)", () => {
     const actions = new GameActions(gb, { rom });
     new GameAsks(gb, { rom, busy: () => actions.pending > 0, onAsk: none });
     new BattleMenus(gb, { rom, onAsk: none });
-    // 48 when written; hooks added lazily (while a message or a call is under way) need room too.
+    new BlockWatch(gb, none);
+    // 48 when written, 52 with BlockWatch; hooks added lazily (while a message or a call is under way) need room too.
     expect(gb.hookCount, "native hooks in use").toBeLessThanOrEqual(56);
   });
 });

@@ -11,6 +11,7 @@ import type { GameInputWait } from "./input-wait.ts";
 import type { ActionResult, GameAction } from "./game/actions.ts";
 import type { AskAnswer, GameAsk } from "./game/asks.ts";
 import type { BattleAnswer, BattleAsk } from "./game/battle-menus.ts";
+import type { LiveBlocks } from "./block-watch.ts";
 
 /** A memory range read after every frame and sent with it: [address, length]. */
 export type Watch = readonly [address: number, length: number];
@@ -23,7 +24,8 @@ export type ToWorker =
   /** `menu` turns on the Pokédex menu's game hooks: page actions, and the game's questions asked of the page. */
   /** `journal` turns on JournalHooks (read-only): "journal" messages for the play journal. */
   /** `battleMenus` has the page answer the battle menu and the move list (BattleMenus). */
-  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean; menu?: boolean; journal?: boolean; battleMenus?: boolean }
+  /** `blocks` turns on BlockWatch: "blocks" messages when the game changes the current map's blocks. */
+  | { type: "start"; rom: Uint8Array; sram?: Uint8Array; resume?: Uint8Array; sampleRate: number; guardErase?: boolean; guardDex?: boolean; askNames?: boolean; menu?: boolean; journal?: boolean; battleMenus?: boolean; blocks?: boolean }
   /** Switches pacing to the audio clock; the port talks to the audio worklet. */
   | { type: "audio"; port: MessagePort }
   | { type: "buttons"; mask: number }
@@ -125,6 +127,8 @@ export type FromWorker =
   | { type: "beat"; map: number; npc: number }
   /** Something for the play journal happened in the game (JournalHooks). */
   | { type: "journal"; event: JournalEvent }
+  /** The current map's blocks, after the game loaded or changed them (BlockWatch). */
+  | { type: "blocks"; blocks: LiveBlocks }
   /** An outbound link message for the friend. */
   | { type: "link-send"; message: LinkMessage }
   | { type: "read"; id: number; bytes: Uint8Array[] }

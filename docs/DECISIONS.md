@@ -751,3 +751,23 @@ bug"). Nick picked the moves-up-front layout (2026-10-13 21:19Z), so it's on by 
 Why: the kid on an iPhone gets big buttons where his thumbs are, and most turns are one tap. A
 stand-in at the input routine keeps every rule and message the original's, with no battle logic
 of our own.
+
+## D45. The HD map follows the game's live blocks for the map it's on
+
+The renderer builds maps from the ROM's block data, but the game changes the blocks of the map
+it's on: CUT swaps a tree's block (CutTreeBlockSwaps), and ReplaceTileBlock opens Silph Co.'s
+card-key doors, gym and Elite Four doors, Victory Road's and the Mansion's switches, the Game
+Corner's poster and the Cinnabar Gym quiz's gates. The HD view now follows wOverworldMap:
+
+- **When:** the three routines that write wOverworldMap (`LoadTileBlockMap`, `ReplaceTileBlock`,
+  `ReplaceTreeTileBlock`) are hooked read-only (BlockWatch). A frame after one runs, the map's
+  blocks go to the page; nothing is read or sent on other frames. Three of the core's 64 hook
+  slots.
+- **What:** the live world keeps the blocks that differ from the ROM's for the game's current map
+  only, and builds that map's chunk again with them (in the chunk worker), keeping the old chunk
+  drawn until the new one is compiled. Every other map is the ROM's again, as in the game, which
+  builds each map afresh when it loads it: cut trees grow back after a warp or a battle in HD too.
+
+Why: diffing wOverworldMap every frame would also work, but it can't tell a map part-way through
+loading (or the old map's blocks while wCurMap already names the next) from a real change; the
+routines say exactly when the blocks are whole and whose they are.

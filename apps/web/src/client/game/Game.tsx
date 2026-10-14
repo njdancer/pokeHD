@@ -808,6 +808,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
             });
         },
         onDexClosed: () => battleDexRef.current.closed(),
+        // The game's own block changes to the map it's on (a tree cut down, a door opened): the HD
+        // map is built again to match (BlockWatch).
+        onBlocks: ({ map, blocks }) => live?.setBlocks(map, blocks),
         onTalk: (map, npc) => {
           journal?.met(map, npc);
           playJournalRef.current?.met(map, npc);

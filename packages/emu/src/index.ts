@@ -6,6 +6,7 @@ export * from "./host.ts";
 export * from "./autosave.ts";
 export * from "./dex-guard.ts";
 export * from "./journal-hooks.ts";
+export * from "./block-watch.ts";
 export * from "./erase-guard.ts";
 export * from "./link.ts";
 export * from "./input-wait.ts";
