@@ -117,7 +117,8 @@ describe.skipIf(!existsSync(ROM_PATH))("game actions (ROM)", () => {
     expect(result.ok, JSON.stringify(result)).toBe(true);
     expect(hp(gb, slot)).toBe(Math.min(25, maxHp(gb, slot)));
     expect(bag(gb)[1]).toEqual([POTION, 2]);
-    expect(result.messages.join(" ")).toMatch(/recovered/i);
+    // Only what the game said: not the map's tiles, read as a box once it put the map back (QA bug 60).
+    expect(result.messages).toEqual(["PIKACHU\nrecovered by 20!"]);
     walksAfter(gb);
   });
 
