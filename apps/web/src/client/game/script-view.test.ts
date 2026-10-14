@@ -46,6 +46,18 @@ describe("scriptView", () => {
     expect(ref.current).toBeNull();
   });
 
+  // TrainerSentOutText, then the game's TextBoxBorder wiping the box from the left for "Go!
+  // SQUIRTLE!", caught partway through by a frame.
+  it("keeps a message whole while the game wipes its box from the left (QA bug 17)", () => {
+    const sent: Message = { pages: [{ lines: ["BUG CATCHER sent", "out WEEDLE!"], wait: "end" }], ending: "done" };
+    const ref: { current: ScriptView | null } = { current: newScriptView(9, sent) };
+    const lines = ["BUG CATCHER sent", "out WEEDLE!"];
+    expect(scriptView(ref, screen(["BUG CATCHER sent", "out WEEDLE!"]), true, () => {})).toEqual({ lines });
+    expect(scriptView(ref, screen(["R sent", "out WEEDLE!"]), true, () => {})).toEqual({ lines });
+    expect(scriptView(ref, screen(["", "WEEDLE!"]), true, () => {})).toEqual({ lines });
+    expect(ref.current?.unfit).toBe(0);
+  });
+
   // The nurse (DisplayPokemonCenterDialogue_): "OK. We'll need your POKéMON." ends with no wait of
   // its own, and the game keeps it on screen through HealParty and the healing machine.
   it("keeps a message the player has read up while the game's box still shows it (QA bug 19)", () => {
