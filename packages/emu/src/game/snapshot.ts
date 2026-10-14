@@ -86,6 +86,11 @@ export interface GameSnapshot {
    * It still names a fainted Pokémon while the game asks who's next (ChooseNextMon sets it after).
    */
   battleMon: number | null;
+  /**
+   * wEventFlags: event n (constants/event_constants.asm) is bit n & 7 of byte n >> 3. Gym leaders and
+   * the rival's battles are remembered here (EVENT_BEAT_BROCK …), not by EndTrainerBattle.
+   */
+  events: Uint8Array;
 }
 
 const sym = (name: SymbolName, length: number): Watch => [SYMBOLS[name].address, length];
@@ -117,6 +122,8 @@ export const SNAPSHOT_RANGES: readonly Watch[] = [
   sym("wIsInBattle", 1),
   sym("wCurrentBoxNum", 1),
   sym("wPlayerMonNumber", 1),
+  // flag_array NUM_EVENTS, up to wGrassRate.
+  [SYMBOLS.wEventFlags.address, SYMBOLS.wGrassRate.address - SYMBOLS.wEventFlags.address],
 ];
 
 const word = (b: Uint8Array, i: number) => ((b[i] ?? 0) << 8) | (b[i + 1] ?? 0);
@@ -189,7 +196,7 @@ function wholeCount(list: Uint8Array, capacity: number, structLength: number): n
 }
 
 export function decodeSnapshot(bytes: readonly Uint8Array[]): GameSnapshot {
-  const [party, partyOt, partyNicks, bag, pcItems, box, boxNicks, player, rival, id, money, badges, owned, seen, options, time, repel, transport, map, coords, battle, boxNumber, battleMon] =
+  const [party, partyOt, partyNicks, bag, pcItems, box, boxNicks, player, rival, id, money, badges, owned, seen, options, time, repel, transport, map, coords, battle, boxNumber, battleMon, events] =
     bytes as Uint8Array[];
   const teamCount = wholeCount(party!, PARTY_LENGTH, PARTYMON);
   const mons = 1 + PARTY_LENGTH + 1;
@@ -223,5 +230,6 @@ export function decodeSnapshot(bytes: readonly Uint8Array[]): GameSnapshot {
     inBattle: (battle![0] ?? 0) !== 0,
     battleKind: battle![0] === 1 ? "wild" : battle![0] === 2 ? "trainer" : null,
     battleMon: (battle![0] ?? 0) !== 0 && (battleMon![0] ?? 0xff) < teamCount ? battleMon![0]! : null,
+    events: events ?? new Uint8Array(0),
   };
 }

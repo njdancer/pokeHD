@@ -90,6 +90,7 @@ import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
 import { LoadingScreen, LOADING_FADE_MS } from "../LoadingScreen.tsx";
+import { EVENT_FLAG_BYTES, scriptedOutcome } from "../dex/battles.ts";
 import { buildCatalogue, type DexProgress } from "../dex/catalogue.ts";
 import { DexJournal } from "../dex/journal.ts";
 import type { DexMenuProps } from "../menu/DexMenu.tsx";
@@ -789,8 +790,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
               [SYMBOLS.wPokedexSeen.address, 19],
               [SYMBOLS.wPlayerID.address, 2],
               [SYMBOLS.wRivalName.address, 11],
+              [SYMBOLS.wEventFlags.address, EVENT_FLAG_BYTES],
             ])
-            .then(async ([owned, seen, id, rival]) => {
+            .then(async ([owned, seen, id, rival, events]) => {
               const trainer = (id![0]! << 8) | id![1]!;
               if (!journal || journalFor !== trainer) {
                 journal = await DexJournal.open(romKey, trainer);
@@ -799,7 +801,10 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
               if (disposed) return;
               const dexNo = opened.kind === "data" ? pokedexNumber(rom, opened.species) : 0;
               const flags = dexProgress(owned!, seen!);
-              setDex({ progress: { ...journal.progress(flags.seen, flags.owned, decodeText(rival!)), onShow: flags.onShow }, openOn: dexNo || undefined });
+              const progress = journal.progress(flags.seen, flags.owned, decodeText(rival!));
+              // Leaders and the rival: the game's own flag for the win (QA bug 71).
+              const people = progress.people.map((p) => (!p.beaten && scriptedOutcome(p.map, p.npc, events!) === "beaten" ? { ...p, beaten: true } : p));
+              setDex({ progress: { ...progress, people, onShow: flags.onShow }, openOn: dexNo || undefined });
             });
         },
         onDexClosed: () => battleDexRef.current.closed(),
