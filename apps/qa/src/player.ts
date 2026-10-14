@@ -319,7 +319,7 @@ export class Player {
 
 type Message = Anthropic.Beta.BetaMessageParam;
 type Block = Anthropic.Beta.BetaContentBlockParam;
-const CHAPTER_TOKENS = 150_000;
+const CHAPTER_TOKENS = 90_000;
 /** Turns the player gets to write its handoff before the chapter ends anyway. */
 const HANDOFF_TURNS = 4;
 const HANDOFF =
