@@ -87,6 +87,7 @@ describe("buildTextMap", () => {
     expect(lines[8]).toBe(
       `Legend: @ you, . walkable, # blocked, " tall grass, ~ water, D door/stairs/exit, N person, S sign. You're at column 3, row 3, facing down; north is up.`,
     );
+    expect(lines[9]).toBe(`People (N) by how they look: column 4, row 3: ${SPRITE_NAMES[1]!.toLowerCase().replace(/_/g, " ")}.`);
   });
 
   it("leaves out people who aren't there and marks balls", () => {
@@ -101,7 +102,21 @@ describe("buildTextMap", () => {
       { left: 1, right: 1, up: 0, down: 0 },
     );
     expect(grid(text)[0]).toBe("o@.");
+    expect(text).not.toContain("People (N)");
     expect(text).toContain("o ball on the ground");
+  });
+});
+
+describe("counters and who's who", () => {
+  const COUNTER = 0x02;
+  const shop = { ...tileset, semantics: { ...tileset.semantics, counters: [COUNTER] } } as Tileset;
+  const shopWorld = { ...world, tilesets: [shop] } as unknown as WorldData;
+  it("marks counter tiles and names a nurse behind one", () => {
+    const nurse = SPRITE_NAMES.indexOf("NURSE");
+    const text = buildTextMap(shopWorld, null, state(3, 2, [{ x: 3, y: 0, facing: "down", step: null, visible: true, pictureId: nurse }]), { left: 0, right: 0, up: 2, down: 0 });
+    expect(grid(text)).toEqual(["N", "=", "@"]);
+    expect(text).toContain("= counter");
+    expect(text).toContain("People (N) by how they look: column 0, row 0: nurse.");
   });
 });
 

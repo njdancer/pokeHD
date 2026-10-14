@@ -32,6 +32,7 @@ const LEGEND: Record<string, string> = {
   o: "ball on the ground",
   O: "boulder",
   S: "sign",
+  "=": "counter (talk to whoever is across it by facing it)",
   v: "ledge (hop down)",
   "<": "ledge (hop left)",
   ">": "ledge (hop right)",
@@ -155,6 +156,7 @@ function terrain(world: WorldData, map: MapData, x: number, y: number, player: {
   if (sem.hasWater && tile === WATER_TILE) return "~";
   const ledge = sem.ledges.find((l) => l.ledge === tile);
   if (ledge) return ledge.facing === "down" ? "v" : ledge.facing === "left" ? "<" : ">";
+  if (sem.counters.includes(tile)) return "=";
   if (!sem.walkable.includes(tile)) return "#";
   if (sem.grass !== null && tile === sem.grass) return '"';
   if (levels) {
@@ -184,15 +186,28 @@ function playerLevel(world: WorldData, map: MapData, x: number, y: number): "rai
 
 /** Where people and balls stand, by cell: the symbol drawn there (both cells of someone mid-step). */
 function peopleAt(state: StateLite): Map<string, string> {
-  const people = new Map<string, string>();
+  return new Map([...actorsAt(state)].map(([k, n]) => [k, n.pictureId === POKE_BALL ? "o" : n.pictureId === BOULDER ? "O" : "N"]));
+}
+
+/** Who stands where, by cell (both cells of someone mid-step). */
+function actorsAt(state: StateLite): Map<string, StateLite["npcs"][number]> {
+  const at = new Map<string, StateLite["npcs"][number]>();
   for (const n of state.npcs) {
     if (n.visible === false) continue;
-    const c = n.pictureId === POKE_BALL ? "o" : n.pictureId === BOULDER ? "O" : "N";
-    people.set(`${n.x},${n.y}`, c);
+    at.set(`${n.x},${n.y}`, n);
     const step = n.step as { dx?: number; dy?: number } | null;
-    if (step && (step.dx || step.dy)) people.set(`${n.x + (step.dx ?? 0)},${n.y + (step.dy ?? 0)}`, c);
+    if (step && (step.dx || step.dy)) at.set(`${n.x + (step.dx ?? 0)},${n.y + (step.dy ?? 0)}`, n);
   }
-  return people;
+  return at;
+}
+
+/**
+ * What a person standing about looks like, from the sprite the ROM gives them ("nurse", "clerk",
+ * "link receptionist", "gentleman"): what a player sees on screen, and all "N" can't say.
+ */
+function looks(pictureId: number | undefined): string {
+  const name = pictureId === undefined ? undefined : SPRITE_NAMES[pictureId];
+  return name ? name.toLowerCase().replace(/_/g, " ") : "person";
 }
 
 /** The terrain symbol at step (x, y) of `map`, across a connection outdoors; off the world it's "#". */
@@ -216,6 +231,7 @@ export function buildTextMap(world: WorldData, stitched: StitchedWorld | null, s
   if (!map) return "(no map to show)";
   const { x: px, y: py } = state.player;
   const people = peopleAt(state);
+  const actors = actorsAt(state);
   // Floor at the player's own height is plain walkable floor; only the other height stands out:
   // raised floor "^" seen from below (or from stairs), lower floor "_" seen from above.
   const onRaised = playerLevel(world, map, px, py) === "raised";
@@ -224,6 +240,7 @@ export function buildTextMap(world: WorldData, stitched: StitchedWorld | null, s
   // top-left, to line the map up with a screenshot.
   const rows: string[] = [`  ${Array.from({ length: view.left + view.right + 1 }, (_, i) => i % 10).join("")}`];
   const used = new Set<string>();
+  const seen: string[] = [];
   for (let dy = -view.up; dy <= view.down; dy++) {
     let row = `${(dy + view.up) % 10} `;
     for (let dx = -view.left; dx <= view.right; dx++) {
@@ -232,6 +249,9 @@ export function buildTextMap(world: WorldData, stitched: StitchedWorld | null, s
       const c = dx === 0 && dy === 0 ? "@" : (people.get(`${x},${y}`) ?? relative(cellAt(world, stitched, map, x, y, state.player)));
       used.add(c);
       row += c;
+      if (c === "N") {
+        seen.push(`column ${dx + view.left}, row ${dy + view.up}: ${looks(actors.get(`${x},${y}`)?.pictureId)}`);
+      }
     }
     rows.push(row);
   }
@@ -240,7 +260,8 @@ export function buildTextMap(world: WorldData, stitched: StitchedWorld | null, s
     .map(([c, what]) => `${c} ${what}`)
     .join(", ");
   const under = underfoot(world, state);
-  return `${rows.join("\n")}\nLegend: ${legend}. You're at column ${view.left}, row ${view.up}, facing ${state.player.facing}; north is up.${under ? `\n${under}` : ""}`;
+  const who = seen.length ? `\nPeople (N) by how they look: ${seen.join("; ")}.` : "";
+  return `${rows.join("\n")}\nLegend: ${legend}. You're at column ${view.left}, row ${view.up}, facing ${state.player.facing}; north is up.${who}${under ? `\n${under}` : ""}`;
 }
 
 /**
@@ -275,6 +296,7 @@ const BLOCKERS: Record<string, string> = {
   O: "a boulder",
   o: "an item ball",
   S: "a sign",
+  "=": "a counter",
   "~": "water",
 };
 const LEDGE_HOPS: Record<string, [number, number]> = { v: [0, 1], "<": [-1, 0], ">": [1, 0] };
