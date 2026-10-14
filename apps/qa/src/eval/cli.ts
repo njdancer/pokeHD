@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { openingText, playEpisode, type EpisodeResult } from "./episode.ts";
-import { generate, type Area, type Kind, type Scenario } from "./scenarios.ts";
+import { generate, marathons, type Area, type Kind, type Scenario } from "./scenarios.ts";
 import { loadRomData, Sim } from "./sim.ts";
 import { summarise, compare, type Summary } from "./score.ts";
 import { VARIANTS } from "./variants.ts";
@@ -20,9 +20,10 @@ const ROOT = fileURLToPath(new URL("../../runs/eval/", import.meta.url));
 const SETS = join(ROOT, "sets");
 const RESULTS = join(ROOT, "results");
 
+const none = { outdoor: 0, indoor: 0, cave: 0 };
 const SET_SPECS: Record<string, { seed: number; quota: Record<Kind, Record<Area, number>> }> = {
-  dev: { seed: 1001, quota: { short: { outdoor: 16, indoor: 12, cave: 12 }, multi: { outdoor: 4, indoor: 5, cave: 5 } } },
-  holdout: { seed: 2002, quota: { short: { outdoor: 8, indoor: 6, cave: 6 }, multi: { outdoor: 2, indoor: 3, cave: 3 } } },
+  dev: { seed: 1001, quota: { short: { outdoor: 16, indoor: 12, cave: 12 }, multi: { outdoor: 4, indoor: 5, cave: 5 }, marathon: none } },
+  holdout: { seed: 2002, quota: { short: { outdoor: 8, indoor: 6, cave: 6 }, multi: { outdoor: 2, indoor: 3, cave: 3 }, marathon: none } },
 };
 
 export function loadSet(name: string): Scenario[] {
@@ -81,6 +82,14 @@ async function main(): Promise<void> {
       writeFileSync(join(SETS, `${name}.json`), JSON.stringify(set, null, 1));
       console.log(`${name}: ${set.length} scenarios`);
     }
+    return;
+  }
+  if (command === "gen-marathon") {
+    // Whole dungeons, outside to outside (Mt Moon, Viridian Forest): a few long episodes.
+    mkdirSync(SETS, { recursive: true });
+    const set = marathons(loadRomData().world);
+    writeFileSync(join(SETS, "marathon.json"), JSON.stringify(set, null, 1));
+    for (const s of set) console.log(`${s.id}: par ${s.par} steps, cap ${s.turnCap} turns`);
     return;
   }
   if (command === "show") {
