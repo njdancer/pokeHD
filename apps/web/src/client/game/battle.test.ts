@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CELL_HUD, CELL_SCENE, CELL_UI, TEXT_WATCHES, type BattleScreen, type ScreenText, type TextWatched } from "@pokehd/emu";
-import { barColour, battleCovered, battleMenuShown, battleText, maskBattleScreen } from "./battle.ts";
+import { barColour, battleCovered, battleMenuShown, battleText, battleTextShown, maskBattleScreen } from "./battle.ts";
 
 describe("maskBattleScreen", () => {
   const screen = (origin = { x: 0, y: 0 }): BattleScreen => {
@@ -95,5 +95,35 @@ describe("battleMenuShown", () => {
   it("leaves messages and other menus alone", () => {
     expect(battleMenuShown(text({ boxes: [box(0, 12, 20, 6, [{ row: 14, col: 1, text: "Wild PIDGEY" }])] }))).toBe(false);
     expect(battleMenuShown(text({ boxes: [box(4, 2, 16, 11)] }))).toBe(false);
+  });
+
+  // The turn's move list as the game draws it: its box's corner drawn over, so its moves are
+  // loose text, with the TYPE box beside it (QA bug 46).
+  const typeBox = (height: number) => box(0, 8, 11, height, [{ row: 9, col: 1, text: "TYPE/" }, { row: 10, col: 2, text: "NORMAL" }, { row: 11, col: 6, text: "0/35" }]);
+  const moves = [{ row: 13, col: 6, text: "TACKLE" }, { row: 14, col: 6, text: "TAIL WHIP" }];
+  const noPp = box(0, 12, 20, 6, [{ row: 14, col: 1, text: "No PP left for" }, { row: 16, col: 1, text: "this move!" }]);
+  const noPpDialog = { box: noPp, lines: ["No PP left for", "this move!"], state: "waiting" } as ScreenText["dialog"];
+
+  it("sees the turn's move list while the game draws it", () => {
+    expect(battleMenuShown(text({ loose: moves }))).toBe(true);
+    expect(battleMenuShown(text({ boxes: [typeBox(5)], loose: moves }))).toBe(true);
+    expect(battleMenuShown(text({ boxes: [box(0, 8, 11, 5, [{ row: 10, col: 1, text: "disabled!" }])] }))).toBe(true);
+  });
+
+  it("lets the game's message under the TYPE box through", () => {
+    expect(battleMenuShown(text({ boxes: [typeBox(10), noPp], dialog: noPpDialog }))).toBe(false);
+  });
+});
+
+describe("battleTextShown", () => {
+  const box = (x: number, y: number, width: number, height: number, lines: { row: number; col: number; text: string }[]) => ({ x, y, width, height, lines });
+  it("drops the TYPE box from the HD text, and battleCovered still masks it", () => {
+    const type = box(0, 8, 11, 10, [{ row: 9, col: 1, text: "TYPE/" }]);
+    const message = box(0, 12, 20, 6, [{ row: 14, col: 1, text: "No PP left for" }]);
+    const onScreen = { shown: true, boxes: [type, message], dialog: null, menus: [], quantity: null, loose: [], pictures: false } as unknown as ScreenText;
+    expect(battleTextShown(onScreen).boxes).toEqual([message]);
+    expect(battleCovered(onScreen, true, false)).toEqual([type, message]);
+    const other = { ...onScreen, boxes: [message] };
+    expect(battleTextShown(other)).toBe(other);
   });
 });
