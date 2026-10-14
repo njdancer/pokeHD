@@ -100,6 +100,10 @@ export class Sim {
     if (opts.eventsDone) for (let i = 0; i < W.eventBytes; i++) gb.write(W.wEventFlags + i, 0xff);
     // All eight badges: gates and guards that check them stand aside.
     gb.write(SYMBOLS.wObtainedBadges.address, 0xff);
+    // NewBattle (home/overworld.asm, 0:0683) checks BIT_NO_BATTLES, which map loads clear
+    // (reload_tiles.asm): set it right as NewBattle reads it, so no wild or sighted-trainer battle
+    // starts in between the per-frame sets.
+    gb.addHook({ bank: 0, address: 0x0683 }, (g) => g.write(SYMBOLS.wStatusFlags4.address, g.read(SYMBOLS.wStatusFlags4.address) | NO_BATTLES));
     sim.#base = gb.saveState();
     return sim;
   }
