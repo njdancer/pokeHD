@@ -9,6 +9,7 @@ import type { StyleParams } from "./params.ts";
 import type { PlaceColours } from "./place.ts";
 import { building, cards, imageTexture, terrain, voxelProps, voxelTerrain } from "./parts.ts";
 import type { Region } from "./region.ts";
+import { hasTerraces, terraces } from "./terraces.ts";
 
 // The competing world styles for p0-styles. Each turns the same region into a THREE.Group;
 // lighting, sky and camera belong to whoever renders it.
@@ -91,11 +92,15 @@ export function buildStyle(
   const fullTex = imageTexture(c.full);
   const cutTex = imageTexture(c.cutout);
   const flatWater = id === "diorama";
+  // Caves stand on terraces: every tile at its floor level, rock a level up (./terraces.ts).
+  const levels = hasTerraces(region) ? terraces(region).levels : null;
+  const lift = (i: number) => (levels ? levels[i]! * params.terraceHeight : 0);
   group.add(
-    terrain(region, c.ground, groundTex, (l) =>
-      l === "ledge" ? params.ledgeHeight
+    terrain(region, c.ground, groundTex, (l, i) =>
+      l === "water" ? lift(i) + (flatWater ? -0.1 : -0.3)
+      : levels ? lift(i)
+      : l === "ledge" ? params.ledgeHeight
       : l === "cliff" ? params.ledgeHeight * 2
-      : l === "water" ? (flatWater ? -0.1 : -0.3)
       : 0,
     ),
   );
@@ -104,11 +109,15 @@ export function buildStyle(
   if (id === "diorama") {
     group.add(cards([...c.trees, ...c.props], c.cutout, cutTex, params, treeScale));
   } else {
-    group.add(voxelProps([...c.trees, ...c.props], region, c.cutout, cutTex, params, treeScale, (p) => p.label === "tree"));
+    group.add(
+      voxelProps([...c.trees, ...c.props], region, c.cutout, cutTex, params, treeScale, (p) => p.label === "tree", (p) =>
+        lift((p.sy * 2 + 1) * region.widthTiles + p.sx * 2),
+      ),
+    );
     const tall = tilesWith(region, new Set<Label>(["tall-grass"]));
     if (tall.length) group.add(grass(tall, params));
     const wet = tilesWith(region, new Set<Label>(["water"]));
-    if (wet.length) group.add(water(wet, -0.08));
+    if (wet.length) group.add(water(wet.map((t) => ({ ...t, y: lift(t.ty * region.widthTiles + t.tx) })), -0.08));
   }
   return group;
 }

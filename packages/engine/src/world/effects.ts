@@ -52,13 +52,16 @@ export function grass(tiles: { tx: number; ty: number }[], params: StyleParams):
 }
 
 /** Animated water over water tiles, rippling on the 16-px-per-unit pixel grid so it stays crisp. */
-export function water(tiles: { tx: number; ty: number }[], y: number): THREE.Mesh {
+/** `y` is the surface height; a tile's own `y`, where given, is added to it. */
+export function water(tiles: { tx: number; ty: number; y?: number }[], y: number): THREE.Mesh {
   const pos: number[] = [];
   const idx: number[] = [];
-  for (const { tx, ty } of tiles) {
+  for (const t of tiles) {
+    const { tx, ty } = t;
     const x0 = tx * TILE_UNITS, x1 = x0 + TILE_UNITS, z0 = ty * TILE_UNITS, z1 = z0 + TILE_UNITS;
     const s = pos.length / 3;
-    pos.push(x0, y, z0, x0, y, z1, x1, y, z1, x1, y, z0);
+    const h = y + (t.y ?? 0);
+    pos.push(x0, h, z0, x0, h, z1, x1, h, z1, x1, h, z0);
     idx.push(s, s + 1, s + 2, s, s + 2, s + 3);
   }
   const g = new THREE.BufferGeometry();
