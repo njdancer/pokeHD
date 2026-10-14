@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CELL_HUD, CELL_SCENE, CELL_UI, TEXT_WATCHES, type BattleScreen, type ScreenText, type TextWatched } from "@pokehd/emu";
-import { barColour, battleCovered, battleMenuShown, battleText, battleTextShown, maskBattleScreen } from "./battle.ts";
+import { barColour, BattleMenuCover, battleCovered, battleMenuShown, battleText, battleTextShown, maskBattleScreen } from "./battle.ts";
 
 describe("maskBattleScreen", () => {
   const screen = (origin = { x: 0, y: 0 }): BattleScreen => {
@@ -125,5 +125,41 @@ describe("battleTextShown", () => {
     expect(battleCovered(onScreen, true, false)).toEqual([type, message]);
     const other = { ...onScreen, boxes: [message] };
     expect(battleTextShown(other)).toBe(other);
+  });
+});
+
+describe("BattleMenuCover", () => {
+  const text = (over: Partial<ScreenText> = {}): ScreenText => ({
+    shown: true, boxes: [], dialog: null, menus: [], quantity: null, loose: [], pictures: false, ...over,
+  } as ScreenText);
+  const message = (lines: string[]) => text({ dialog: { box: { x: 0, y: 12, width: 20, height: 6, lines: [] }, lines, state: "printing" } as unknown as ScreenText["dialog"] });
+
+  it("covers while asked, and from an answer until a message has words (QA bug 51)", () => {
+    const cover = new BattleMenuCover();
+    expect(cover.covering(text(), false)).toBe(false);
+    expect(cover.covering(text(), true)).toBe(true);
+    cover.answered();
+    // The game clears the menu's area: a blank box, nothing to read.
+    expect(cover.covering(text(), false)).toBe(true);
+    expect(cover.covering(message(["", ""]), false)).toBe(true);
+    expect(cover.covering(message(["S", ""]), false)).toBe(false);
+    expect(cover.covering(text(), false)).toBe(false);
+  });
+
+  it("lets go off the battle screen, and in the end", () => {
+    const cover = new BattleMenuCover();
+    cover.answered();
+    expect(cover.covering(null, false)).toBe(false);
+    expect(cover.covering(text(), false)).toBe(false);
+    cover.answered();
+    let frames = 0;
+    while (cover.covering(text(), false)) frames++;
+    expect(frames).toBe(119);
+  });
+
+  it("sees the battle menu before its cursor is up (the question still on its way to the page)", () => {
+    const fight = { x: 8, y: 12, width: 12, height: 6, lines: [{ row: 14, col: 10, text: "FIGHT PKMN" }, { row: 16, col: 10, text: "ITEM  RUN" }] };
+    expect(battleMenuShown(text({ boxes: [fight] }))).toBe(true);
+    expect(new BattleMenuCover().covering(text({ boxes: [fight] }), false)).toBe(true);
   });
 });

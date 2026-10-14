@@ -328,10 +328,37 @@ export function isMoveInfo(box: TextBox): boolean {
 export function battleMenuShown(text: ScreenText): boolean {
   return (
     text.menus.some((m) => m.kind === "battle") ||
-    text.boxes.some((b) => b.lines.some((l) => l.text.includes("THROW ROCK"))) ||
+    text.boxes.some((b) => b.lines.some((l) => l.text.includes("THROW ROCK") || /^FIGHT\s+PKMN$/.test(l.text))) ||
     text.boxes.some((b) => b.width === MOVE_LIST_SIZE.width && b.height === MOVE_LIST_SIZE.height && MOVE_LISTS.some((at) => at.x === b.x && at.y === b.y)) ||
     (!text.dialog && (text.boxes.some(isMoveInfo) || text.loose.some((l) => l.col === TURN_MOVES.col && l.row >= TURN_MOVES.from && l.row <= TURN_MOVES.to)))
   );
+}
+
+/** Longest the Game Boy screen stays covered after an answer with nothing else to go on. */
+const ANSWER_HOLD_FRAMES = 120;
+
+/**
+ * Whether the HD battle menu covers the Game Boy screen (`maskBattleScreen` with `battleCovered`'s
+ * whole screen): while the game asks, while its own menus are drawn (`battleMenuShown`), and from
+ * an answer until the game shows what comes of it. Between the two the game can clear the menu's
+ * area before it draws the move list (a blank, white message box over the HD battle, with the old
+ * menu still in video memory), which no reading of the text tells from a turn's empty message box
+ * (QA bug 51). A message with words in it, the next question or leaving the battle screen ends it.
+ */
+export class BattleMenuCover {
+  #held = 0;
+
+  /** The page answered the battle menu. */
+  answered(): void {
+    this.#held = ANSWER_HOLD_FRAMES;
+  }
+
+  /** Per frame: `onScreen` is the battle screen's text, null off the battle screen. */
+  covering(onScreen: ScreenText | null, asking: boolean): boolean {
+    if (!onScreen || asking || onScreen.dialog?.lines.some((l) => l.trim() !== "")) this.#held = 0;
+    else if (this.#held > 0) this.#held--;
+    return !!onScreen && (asking || this.#held > 0 || battleMenuShown(onScreen));
+  }
 }
 
 /**

@@ -69,7 +69,7 @@ import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
 import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
-import { BattleTracker, battleCovered, battleMenuShown, battleText, battleTextShown, maskBattleScreen } from "./battle.ts";
+import { BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen } from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { BattleMenu, type BattleKey } from "./BattleMenu.tsx";
 import { battleMenusOn } from "./battle-menu-flag.ts";
@@ -369,6 +369,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     battleAskRef.current = next;
     setBattleAskState(next);
   };
+  /** Whether the HD battle menu covers the Game Boy screen, from its questions and answers. */
+  const battleCoverRef = useRef(new BattleMenuCover());
   /** The HD battle menu's key handler while it's up. */
   const battleKeysRef = useRef<((key: BattleKey) => void) | null>(null);
 
@@ -674,12 +676,12 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
             introCanvas.current.getContext("2d")!.putImageData(introImage, 0, 0);
           }
           // The HD battle menu stands in for the battle's menus: the Game Boy's are masked out
-          // while the game asks, and while it draws them either side of asking.
+          // while the game asks, while it draws them either side of asking, and from an answer until
+          // the game shows what comes of it (BattleMenuCover).
           // LearnMove's list at a level up draws its Game Boy box before the sheet asks which move
           // to forget: masked the same way (QA bug 48).
-          const choosing =
-            (BATTLE_MENUS && !!battleScreen && fight?.state?.type !== "link" && (!!battleAskRef.current || battleMenuShown(onScreen))) ||
-            (!!battleScreen && menuStateRef.current.ask === "forget-move");
+          const menuCovers = battleCoverRef.current.covering(BATTLE_MENUS && battleScreen && fight?.state?.type !== "link" ? onScreen : null, !!battleAskRef.current);
+          const choosing = menuCovers || (!!battleScreen && menuStateRef.current.ask === "forget-move");
           // A Pokédex menu action running the game's routine (a POTION from the Inventory tab): what
           // it draws (the party menu ItemUseMedicine redraws, "recovered by 20!") is the menu's to
           // report, in its own words once the action is done, so neither the HD text layer nor the
@@ -1394,6 +1396,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           bindKeys={(handler) => (battleKeysRef.current = handler)}
           onAnswer={(answer: BattleAnswer) => {
             hostRef.current?.answerBattle(battleAsk.id, answer);
+            battleCoverRef.current.answered();
             setBattleAsk(null);
           }}
         />
