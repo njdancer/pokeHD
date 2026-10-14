@@ -172,7 +172,7 @@
 /* At most what leaves the player card room for its whole team. */
 .qs .qs-bugs { top: auto; bottom: 28px; height: auto; max-height: 396px; display: flex; flex-direction: column; padding: 18px 26px 18px 26px; }
 .qs .qs-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
-.qs .qs-place { font-family:"Fredoka",sans-serif; font-weight: 700; font-size: 54px; line-height: 1.05; color: var(--ink); min-width: 0; overflow-wrap: anywhere; transition: font-size .7s var(--ease); }
+.qs .qs-place { font-family:"Fredoka",sans-serif; font-weight: 700; font-size: 54px; line-height: 1.05; color: var(--ink); flex: none; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; transition: font-size .7s var(--ease); }
 .qs .qs-facts { flex: none; margin-top: 18px; display: flex; align-items: baseline; gap: 10px; font-size: 26px; font-weight: 900; color: var(--muted); white-space: nowrap; text-transform: uppercase; letter-spacing: .05em; }
 .qs .qs-facts b { font-family:"Fredoka",sans-serif; font-weight: 700; color: var(--accent-dark); font-size: 36px; letter-spacing: 0; }
 .qs .qs-badgerow { display: flex; align-items: center; gap: 6px; }
@@ -211,6 +211,7 @@
 .qs .qs-hp i.qs-crithp { background: var(--red); }
 
 .qs .qs-stats { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 22px; font-weight: 900; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
+.qs .qs-stats .qs-time { color: var(--accent-dark); }
 .qs .qs-stats b { font-family:"Fredoka",sans-serif; font-weight: 700; font-size: 32px; color: var(--ink); letter-spacing: 0; text-transform: none; }
 .qs .qs-stats small { font-size: 20px; text-transform: none; letter-spacing: 0; }
 

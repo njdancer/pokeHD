@@ -117,14 +117,9 @@ export function StreamPage() {
           <Chat chat={bus.chat} />
 
           <section className="qs-card qs-info">
-            <div className="qs-row">
-              <span className="qs-place">{map || "—"}</span>
-              <span className="qs-facts">
-                Play <b>{playTime || "0:00"}</b>
-              </span>
-            </div>
+            <span className="qs-place">{map || "—"}</span>
             <Badges rom={rom} badges={game?.badges ?? 0} known={!!game} />
-            <Stats game={game} />
+            <Stats game={game} playTime={playTime} />
             <Party rom={rom} team={game?.team ?? []} />
           </section>
 
@@ -335,7 +330,7 @@ function Badges({ rom, badges, known }: { rom: Uint8Array | null; badges: number
 /** Poké, Great, Ultra, Master and Safari Balls. */
 const BALLS = new Set([0x01, 0x02, 0x03, 0x04, 0x08]);
 
-function Stats({ game }: { game: GameSnapshot | null }) {
+function Stats({ game, playTime }: { game: GameSnapshot | null; playTime: string }) {
   const balls = game?.bag.reduce((n, b) => n + (BALLS.has(b.item) ? b.quantity : 0), 0) ?? 0;
   return (
     <div className="qs-stats">
@@ -348,6 +343,9 @@ function Stats({ game }: { game: GameSnapshot | null }) {
       </span>
       <span>
         Balls <b>{game ? balls : "–"}</b>
+      </span>
+      <span>
+        Play <b className="qs-time">{playTime || "0:00"}</b>
       </span>
     </div>
   );
