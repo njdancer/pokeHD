@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { GameSnapshot, TeamMon } from "@pokehd/emu";
 import { MAP_NAMES } from "@pokehd/rom";
 import { useBus } from "./bus.ts";
-import type { ActionEvent, ActionKind, Bug, ChatEvent, ChatTag, StreamMode, ThoughtEvent } from "./events.ts";
+import type { ActionEvent, ActionKind, Bug, ChatEvent, ChatTag, StatusEvent, StreamMode, ThoughtEvent } from "./events.ts";
 import { badgePictures, monPic, useGameSnapshot, useRom } from "./game.ts";
 import { BUS, HANDLE, useFit, useFonts } from "./stage.ts";
 import "./stream.css";
@@ -117,7 +117,7 @@ export function StreamPage() {
                 </span>
               )}
               <span className="qs-label" style={{ marginLeft: "auto" }}>
-                {turnLabel(bus.status?.turn)}
+                {turnLabel(bus.status)}
               </span>
             </div>
             <Feed feed={bus.feed} connected={bus.connected} />
@@ -141,10 +141,12 @@ export function StreamPage() {
   );
 }
 
-function turnLabel(turn: number | undefined): string {
-  const parts: string[] = [];
-  if (turn !== undefined) parts.push(`Turn ${turn.toLocaleString("en-US")}`);
-  return parts.join(" · ");
+/** "Gen 12 · Turn 340 · 9,341 total": this generation of the player, its turns, and the run's. */
+function turnLabel(status: StatusEvent | null | undefined): string {
+  if (!status) return "";
+  const total = `${status.turn.toLocaleString("en-US")}`;
+  if (status.gen === undefined) return `Turn ${total}`;
+  return `Gen ${status.gen} · Turn ${Math.max(0, status.turn - (status.genStart ?? 0)).toLocaleString("en-US")} · ${total} total`;
 }
 
 /**

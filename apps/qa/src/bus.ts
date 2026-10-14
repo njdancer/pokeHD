@@ -72,6 +72,23 @@ export class Bus {
     return join(this.root, "chat.jsonl");
   }
 
+  /**
+   * Starts the player's next generation at `turn` (a fresh conversation), counted across harness
+   * runs in generation.json beside the runs.
+   */
+  newGeneration(turn: number): void {
+    const path = join(this.root, "generation.json");
+    let gen = 0;
+    try {
+      gen = (JSON.parse(readFileSync(path, "utf8")) as { gen: number }).gen;
+    } catch {
+      // The first generation.
+    }
+    gen += 1;
+    writeFileSync(path, JSON.stringify({ gen, start: turn }) + "\n");
+    this.setStatus({ gen, genStart: turn });
+  }
+
   get notebookPath(): string {
     return join(this.root, "notebook.md");
   }
