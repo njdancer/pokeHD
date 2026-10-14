@@ -8,6 +8,8 @@ export type Direction = "up" | "down" | "left" | "right";
 export interface Move {
   direction: Direction;
   tiles: number;
+  /** "↑*": keep walking this way until something stops you (then carry on with the next leg). */
+  run?: boolean;
 }
 
 /** What happened after an action, for the player: written from what's on screen, never from hidden state. */

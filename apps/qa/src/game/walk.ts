@@ -42,8 +42,8 @@ export function interruption(start: StateLite, s: StateLite): Stop | null {
 }
 
 export interface PathArg {
-  /** Each leg: a direction and how many steps. */
-  legs: { dx: number; dy: number; steps: number }[];
+  /** Each leg: a direction and how many steps; a run leg goes on until something stops it. */
+  legs: { dx: number; dy: number; steps: number; run?: boolean }[];
   /** The joystick's centre, where the touch went down, and how far the thumb leans (frame CSS px). */
   centre: { x: number; y: number };
   reach: number;
@@ -59,6 +59,8 @@ export interface PathResult {
   leg: number;
   /** The player's state each time the cell they're headed for changed (and the first and last). */
   trail: StateLite[];
+  /** Each run leg that ended: how far it went and where it stopped. */
+  ran?: { leg: number; steps: number; x: number; y: number }[];
 }
 
 interface WalkHook {
@@ -119,11 +121,12 @@ export function walkPath(arg: PathArg): boolean {
     let leaned = false;
     let prev = base;
     let moved = 0;
+    const ran: NonNullable<PathResult["ran"]> = [];
     const finish = (end: PathResult["end"]): PathResult => {
       thumb(null);
       const s = hook.state;
       if (s) trail.push(lite(s));
-      return { end, leg, trail };
+      return { end, leg, trail, ran };
     };
     for (;;) {
       // The touch is down: lean toward the first leg. Every move of the thumb from here on is
@@ -167,7 +170,22 @@ export function walkPath(arg: PathArg): boolean {
           lastActive = frames;
           continue;
         }
-        if (frames - lastActive > arg.stall) return finish("blocked");
+        if (frames - lastActive > arg.stall) {
+          if (!l.run) return finish("blocked");
+          // A run leg ends where something stopped it; the walk goes on from there.
+          ran.push({ leg, steps: best, x: h.x, y: h.y });
+          leg++;
+          const next = arg.legs[leg];
+          if (!next) {
+            leg--;
+            return finish("done");
+          }
+          thumb(next);
+          base = h;
+          best = 0;
+          lastActive = frames;
+          continue;
+        }
       }
       if (Date.now() - ranAt > arg.idleMs) return finish("stalled");
       await new Promise((r) => setTimeout(r, 1));

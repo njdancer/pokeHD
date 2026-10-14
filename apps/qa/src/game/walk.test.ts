@@ -155,6 +155,22 @@ describe("walkPath", () => {
     expect([game.x, game.y]).toEqual([10, 9]);
   });
 
+  it("runs a leg until something stops it, then carries on with the next", async () => {
+    const game = new Walker();
+    game.walls.add("10,6");
+    const result = await page(game, 6, 4).walk([{ ...up(40), run: true }, left(2)]);
+    expect(result).toMatchObject({ end: "done", ran: [{ leg: 0, steps: 3, x: 10, y: 7 }] });
+    expect([game.x, game.y]).toEqual([8, 7]);
+  });
+
+  it("ends a walk that finishes on a run as done, where it stopped", async () => {
+    const game = new Walker();
+    game.walls.add("7,9");
+    const result = await page(game, 6, 4).walk([up(1), { ...left(40), run: true }]);
+    expect(result).toMatchObject({ end: "done", ran: [{ leg: 1, steps: 2 }] });
+    expect([game.x, game.y]).toEqual([8, 9]);
+  });
+
   it("lets go when a battle starts", async () => {
     const game = new Walker();
     const result = await page(game, 3, 2, (g) => {
