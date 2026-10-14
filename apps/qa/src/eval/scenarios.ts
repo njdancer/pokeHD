@@ -14,7 +14,7 @@ import { DIRS } from "../game/walk.ts";
 import type { Place, Sim } from "./sim.ts";
 
 export type Area = "outdoor" | "indoor" | "cave";
-export type Kind = "short" | "multi";
+export type Kind = "short" | "multi" | "marathon";
 export type Feature = "straight" | "turn" | "detour" | "ledge" | "heights" | "door" | "people";
 
 export interface Scenario {
@@ -26,7 +26,11 @@ export interface Scenario {
   start: Place;
   /** Where an indoor map's exits lead (wLastMap). */
   lastMap?: number;
-  goal: { type: "cell"; x: number; y: number } | { type: "warp"; x: number; y: number; toMap: number };
+  goal:
+    | { type: "cell"; x: number; y: number }
+    | { type: "warp"; x: number; y: number; toMap: number }
+    /** Anywhere on a map within these bounds (a marathon's far side). */
+    | { type: "region"; map: number; xMin?: number; xMax?: number; yMin?: number; yMax?: number };
   /** What the player is told. */
   text: string;
   /** Shortest route as arrows, checked in the emulator, and its length in joystick steps. */
@@ -37,6 +41,8 @@ export interface Scenario {
   features: Feature[];
   /** Most turns the player gets. */
   turnCap: number;
+  /** Every story event set first, so trainers count as beaten and story scripts stand aside. */
+  eventsDone?: boolean;
 }
 
 const OUTDOOR = new Set(["OVERWORLD", "PLATEAU", "FOREST"]);
@@ -350,6 +356,7 @@ function candidate(sim: Sim, map: MapData, kind: Kind, area: Area, random: () =>
 /** Whether a place meets the scenario's goal. */
 export function reached(s: Pick<Scenario, "goal">, state: StateLite): boolean {
   if (s.goal.type === "warp") return state.mapId === s.goal.toMap;
+  if (s.goal.type === "region") return inRegion(s.goal, state.mapId, state.player.x, state.player.y);
   return state.player.x === s.goal.x && state.player.y === s.goal.y && state.mode === "overworld";
 }
 
@@ -388,4 +395,100 @@ function check(sim: Sim, c: Candidate): Omit<Scenario, "id"> | null {
   if (!ok) return null;
   const par = dirs.length;
   return { ...s, route: toMoves(dirs).map((m) => ARROW[m.direction].repeat(m.tiles)).join(""), par, parTurns: s.kind === "short" ? 1 : Math.max(2, Math.ceil(par / 10)) };
+}
+
+type Region = Extract<Scenario["goal"], { type: "region" }>;
+function inRegion(g: Region, map: number, x: number, y: number): boolean {
+  return map === g.map && x >= (g.xMin ?? -Infinity) && x <= (g.xMax ?? Infinity) && y >= (g.yMin ?? -Infinity) && y <= (g.yMax ?? Infinity);
+}
+
+/**
+ * The shortest route in steps across maps: a search on each map from where the player stands or
+ * lands, and every warp it reaches leading on to the warp it's paired with (one more step for an
+ * exit mat, which needs a push). Nobody in the way, so it's a floor on what a player needs.
+ */
+export function parAcross(world: WorldData, start: Place, lastMap: number, goal: Region): number | null {
+  type Node = { map: number; x: number; y: number; cost: number; last: number };
+  const best = new Map<string, number>();
+  const queue: Node[] = [{ map: start.map, x: start.x, y: start.y, cost: 0, last: lastMap }];
+  let answer: number | null = null;
+  while (queue.length) {
+    queue.sort((a, b) => a.cost - b.cost);
+    const n = queue.shift()!;
+    if (answer !== null && n.cost >= answer) break;
+    const key = `${n.map},${n.x},${n.y}`;
+    if ((best.get(key) ?? Infinity) <= n.cost) continue;
+    best.set(key, n.cost);
+    const map = world.maps[n.map];
+    if (!map) continue;
+    const state: StateLite = { mode: "overworld", mapId: n.map, fade: 0, player: { x: n.x, y: n.y, facing: "down", step: null }, npcs: [] };
+    const g = search(world, map, state, new Set());
+    const sem = world.tilesets[map.tileset]!.semantics;
+    for (let cell = 0; cell < g.w * g.h; cell++) {
+      const d = g.dist[cell]!;
+      if (d < 0) continue;
+      const x = cell % g.w;
+      const y = Math.floor(cell / g.w);
+      if (inRegion(goal, n.map, x, y)) answer = Math.min(answer ?? Infinity, n.cost + d);
+    }
+    map.warps.forEach((w) => {
+      const d = g.dist[w.y * g.w + w.x]!;
+      if (d < 0 || (d === 0 && n.cost > 0)) return;
+      const to = w.to === "last" ? n.last : w.to;
+      const there = world.maps[to];
+      const landing = there?.warps[w.toWarp];
+      if (!there || !landing) return;
+      const tile = tileAt(world, map, w.x, w.y);
+      const push = sem.doors.includes(tile) || sem.warps.includes(tile) ? 0 : 1;
+      // wLastMap follows only the game's "outside" maps (CheckIfInOutsideMap: OVERWORLD, PLATEAU).
+      const outdoors = ["OVERWORLD", "PLATEAU"].includes(TILESET_NAMES[map.tileset]!);
+      queue.push({ map: to, x: landing.x, y: landing.y, cost: n.cost + d + push, last: outdoors ? n.map : n.last });
+    });
+  }
+  return answer;
+}
+
+/** Long routes through a whole dungeon, from outside one side to outside the other. */
+export function marathons(world: WorldData): Scenario[] {
+  const id = (name: string) => MAP_NAMES.indexOf(name);
+  const specs: { id: string; area: Area; start: Place; lastMap: number; goal: Region; text: string; turnCap: number }[] = [
+    {
+      id: "marathon-mt-moon",
+      area: "cave",
+      start: { map: id("ROUTE_4"), x: 16, y: 8, facing: "up" },
+      lastMap: id("ROUTE_4"),
+      goal: { type: "region", map: id("ROUTE_4"), xMin: 24 },
+      text: "Get through Mt Moon to the far side: in at its entrance (the D 3 steps north and 2 steps east of you), through the cave's floors, and out of its other exit onto Route 4 east of the mountain, toward Cerulean City. Keep track of where you've been as you go.",
+      turnCap: 120,
+    },
+    {
+      id: "marathon-viridian-forest",
+      area: "outdoor",
+      start: { map: id("ROUTE_2"), x: 3, y: 46, facing: "up" },
+      lastMap: id("ROUTE_2"),
+      goal: { type: "region", map: id("ROUTE_2"), yMax: 11 },
+      text: "Get through Viridian Forest to the north: in at the gate just north of you, through the forest, and out of the north gate onto Route 2 beyond it, toward Pewter City. Keep track of where you've been as you go.",
+      turnCap: 80,
+    },
+  ];
+  return specs.map((m) => {
+    const par = parAcross(world, m.start, m.lastMap, m.goal) ?? 0;
+    return {
+      id: m.id,
+      kind: "marathon",
+      area: m.area,
+      map: m.start.map,
+      mapName: MAP_NAMES[m.start.map]!,
+      start: m.start,
+      lastMap: m.lastMap,
+      goal: m.goal,
+      text: m.text,
+      route: "",
+      par,
+      parTurns: Math.max(4, Math.ceil(par / 10)),
+      features: ["turn", "detour", "door"],
+      turnCap: m.turnCap,
+      eventsDone: true,
+    };
+  });
 }

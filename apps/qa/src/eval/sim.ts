@@ -128,9 +128,10 @@ export class Sim {
    * (EnterMap, from the overworld loop), then lets it settle. `lastMap` is where an indoor map's
    * exits lead (wLastMap).
    */
-  teleport(place: Place, lastMap?: number): StateLite {
+  teleport(place: Place, lastMap?: number, opts: SimOptions = {}): StateLite {
     const gb = this.gb;
     gb.loadState(this.#base);
+    if (opts.eventsDone) for (let i = 0; i < W.eventBytes; i++) gb.write(W.wEventFlags + i, 0xff);
     const map = this.rom.world.maps[place.map];
     if (!map) throw new Error(`No map ${place.map}`);
     let done = false;

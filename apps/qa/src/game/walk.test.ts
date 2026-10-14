@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StateLite } from "./screen-read.ts";
-import { countSteps, stallFrames, walkNote, walkPath, type PathArg, type PathResult } from "./walk.ts";
+import { countSteps, MapEntry, stallFrames, walkNote, walkPath, type PathArg, type PathResult } from "./walk.ts";
 
 type Dir = { dx: number; dy: number };
 
@@ -198,5 +198,17 @@ describe("walkNote", () => {
   it("owns up to going too far, and to the harness letting go", () => {
     expect(note(5, null)).toBe("You moved 5 steps (you asked for 4).");
     expect(note(3, "astray")).toBe("You moved 3 steps of the 4 you asked for: the joystick went a way you didn't ask for, so the harness let go (a harness problem).");
+  });
+});
+
+describe("MapEntry", () => {
+  const at = (mapId: number, x: number, y: number): StateLite => ({ mode: "overworld", mapId, fade: 0, player: { x, y, facing: "down", step: null }, npcs: [] });
+  it("measures from where the player came into the map, and starts again on a new one", () => {
+    const e = new MapEntry();
+    e.see(at(1, 5, 5));
+    expect(e.line(at(1, 5, 5))).toBe("You're where you came into this map (or started).");
+    expect(e.line(at(1, 8, 2))).toBe("You're 3 north and 3 east of where you came into this map (or started).");
+    expect(e.line(at(2, 0, 9))).toBe("You're where you came into this map (or started).");
+    expect(e.line(at(2, 0, 10))).toBe("You're 1 south of where you came into this map (or started).");
   });
 });
