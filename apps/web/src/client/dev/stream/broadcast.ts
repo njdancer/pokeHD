@@ -7,6 +7,21 @@ import { useEffect } from "react";
 
 /** Bits per second for the video to each viewer. */
 const MAX_BITRATE = 8_000_000;
+/** And for the sound: WebRTC's default Opus (about 32 kbit/s, mono) muddies chiptune tones. */
+const AUDIO_BITRATE = 256_000;
+
+/**
+ * The viewer's offer, asking for stereo Opus at full rate without silence suppression. The
+ * sending side (this page) configures its encoder from these parameters of the offer.
+ */
+export function musicOffer(sdp: string): string {
+  const opus = /a=rtpmap:(\d+) opus\/48000/i.exec(sdp)?.[1];
+  if (!opus) return sdp;
+  return sdp.replace(new RegExp(`a=fmtp:${opus} ([^\\r\\n]*)`), (_, params: string) => {
+    const kept = params.split(";").filter((p) => !/^(stereo|sprop-stereo|maxaveragebitrate|usedtx)=/.test(p.trim()));
+    return `a=fmtp:${opus} ${[...kept, "stereo=1", "sprop-stereo=1", `maxaveragebitrate=${AUDIO_BITRATE}`, "usedtx=0"].join(";")}`;
+  });
+}
 
 export function useBroadcast(bus: string, enabled: boolean): void {
   useEffect(() => {
@@ -29,7 +44,13 @@ export function useBroadcast(bus: string, enabled: boolean): void {
       };
       for (const track of stream.getTracks()) {
         const sender = pc.addTrack(track, stream);
-        if (track.kind !== "video") continue;
+        if (track.kind === "audio") {
+          track.contentHint = "music";
+          const params = sender.getParameters();
+          for (const encoding of params.encodings ?? []) encoding.maxBitrate = AUDIO_BITRATE;
+          void sender.setParameters(params).catch(() => {});
+          continue;
+        }
         // A screen share keeps its sharpness and sheds frames when the CPU is short (it fell to
         // under one a second); a game should do the opposite.
         track.contentHint = "motion";
@@ -39,7 +60,7 @@ export function useBroadcast(bus: string, enabled: boolean): void {
         params.degradationPreference = "maintain-framerate";
         void sender.setParameters(params).catch(() => {});
       }
-      await pc.setRemoteDescription({ type: "offer", sdp });
+      await pc.setRemoteDescription({ type: "offer", sdp: musicOffer(sdp) });
       await pc.setLocalDescription(await pc.createAnswer());
       await new Promise<void>((resolve) => {
         if (pc.iceGatheringState === "complete") return resolve();
@@ -55,7 +76,8 @@ export function useBroadcast(bus: string, enabled: boolean): void {
           // 720p is what OBS sends on, and a retina window would otherwise capture at twice its
           // size. Encoding 1080p cost the busy Mac its frame rate.
           video: { frameRate: 30, width: { max: 1280 }, height: { max: 720 } },
-          audio: true,
+          // The game's sound as it plays: no call-style echo cancelling, denoising or gain riding.
+          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
           preferCurrentTab: true,
           selfBrowserSurface: "include",
         } as DisplayMediaStreamOptions);
