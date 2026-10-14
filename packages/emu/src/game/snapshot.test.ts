@@ -70,3 +70,34 @@ describe.skipIf(!existsSync(ROM_PATH))("Snapshot during StarterDex", () => {
     expect(after.onShow.size).toBe(0);
   }, 60_000);
 });
+
+describe("decodeSnapshot's team and box", () => {
+  // A blank read of every range, with the party (and box) filled in by each test.
+  const blank = () => SNAPSHOT_RANGES.map(([, n]) => new Uint8Array(n));
+  const CHARMELEON = 0xb2;
+  const GEODUDE = 0xa9;
+  const PARTY_STRUCTS = 1 + 6 + 1;
+  const BOX_STRUCTS = 1 + 20 + 1;
+
+  it("leaves out a just-caught Pokémon while the game asks for its nickname (QA bug 49)", () => {
+    // _AddPartyMon has bumped wPartyCount and written wPartySpecies, then waits in AskName
+    // before it writes the new party_struct: its species byte is still 0.
+    const bytes = blank();
+    const party = bytes[0]!;
+    party.set([2, CHARMELEON, GEODUDE, 0xff]);
+    party[PARTY_STRUCTS] = CHARMELEON;
+    party[PARTY_STRUCTS + 33] = 27;
+    expect(decodeSnapshot(bytes).team.map((m) => [m.species, m.level])).toEqual([[CHARMELEON, 27]]);
+    // Named (or not), the struct is written and the Pokémon joins the team.
+    party[PARTY_STRUCTS + 44] = GEODUDE;
+    expect(decodeSnapshot(bytes).team.map((m) => m.species)).toEqual([CHARMELEON, GEODUDE]);
+  });
+
+  it("leaves out a half-written box entry the same way", () => {
+    const bytes = blank();
+    const box = bytes[5]!;
+    box.set([2, GEODUDE, GEODUDE, 0xff]);
+    box[BOX_STRUCTS] = GEODUDE;
+    expect(decodeSnapshot(bytes).box.map((m) => m.species)).toEqual([GEODUDE]);
+  });
+});

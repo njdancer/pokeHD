@@ -167,7 +167,7 @@ export function MonScreen({ i, purpose }: { i: number; purpose?: Purpose }) {
   const nav = useNav();
   const m = env.model.team[i];
   if (!m) return null;
-  const e = env.catalogue.entries[m.dex - 1]!;
+  const e = env.catalogue.entries[m.dex - 1];
   const battle = inBattle(env.moment);
   return (
     <Page title={niceMon(m.name)} meta={`Lv ${m.level}`} banner={purposeLine(env, purpose) ?? (battle && nav.sheet && i > 0 ? "Sending it out uses your turn" : undefined)}>
@@ -182,7 +182,7 @@ export function MonScreen({ i, purpose }: { i: number; purpose?: Purpose }) {
             HP {m.hp} of {m.maxHp} <StatusPill status={m.status} />
           </span>
           <HpBar mon={m} big />
-          <Types types={e.types} />
+          {e && <Types types={e.types} />}
         </div>
       </div>
       <Verbs verbs={monVerbs(env, nav, i, purpose)} />
@@ -202,7 +202,7 @@ export function MonScreen({ i, purpose }: { i: number; purpose?: Purpose }) {
               </div>
             )}
           />
-          <Row title="Pokédex page" sub={`${e.category.charAt(0) + e.category.slice(1).toLowerCase()} Pokémon`} onClick={() => nav.tab("dex", { k: "entry", dex: m.dex })} />
+          {e && <Row title="Pokédex page" sub={`${e.category.charAt(0) + e.category.slice(1).toLowerCase()} Pokémon`} onClick={() => nav.tab("dex", { k: "entry", dex: m.dex })} />}
         </>
       )}
     </Page>

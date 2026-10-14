@@ -92,6 +92,7 @@ import { DexJournal } from "../dex/journal.ts";
 import type { DexMenuProps } from "../menu/DexMenu.tsx";
 import type { LiveActions } from "../menu/live.ts";
 import { LiveMenu } from "../menu/LiveMenu.tsx";
+import { MenuBoundary } from "../menu/MenuBoundary.tsx";
 import type { AppOptions } from "../menu/model.ts";
 import { PlayJournal } from "../menu/journal.ts";
 import { loadDexLook, saveDexLook, type DexSetting } from "../dex/settings.ts";
@@ -1431,40 +1432,42 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         />
       )}
       {menu && world && catalogue && (
-        <LiveMenu
-          rom={rom}
-          world={world}
-          catalogue={catalogue}
-          game={liveGame}
-          bind={bindLive}
-          ask={ask}
-          onAskDone={() => setAsk(null)}
-          open={!!menuOpen}
-          // The modelled dex is the button: shut in the corner, it opens with the menu on its screen.
-          onOpen={() => setMenuOpen({ tab: "dex" })}
-          away={!ready || !!ask || !!onboarding || !!nameAsk}
-          {...(menuOpen ? { start: menuOpen } : {})}
-          onClose={closeMenu}
-          journal={playJournal}
-          friends={menuFriends}
-          savedAt={savedAt}
-          app={appOptions}
-          setApp={setApp}
-          sendGift={gifts && room?.status === "open" ? sendGift : undefined}
-          grownUps={
-            <div className="game-settings">
-              {(resumed || cloudNewer) && (
-                <div className="game-menu-notes">
-                  {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
-                  {cloudNewer && <p>There's a newer save in the cloud. Load it below.</p>}
-                </div>
-              )}
-              {admin && <AdminTools />}
-              {input && <KeyBindingsPanel input={input} />}
-              {grownUpControls}
-            </div>
-          }
-        />
+        <MenuBoundary>
+          <LiveMenu
+            rom={rom}
+            world={world}
+            catalogue={catalogue}
+            game={liveGame}
+            bind={bindLive}
+            ask={ask}
+            onAskDone={() => setAsk(null)}
+            open={!!menuOpen}
+            // The modelled dex is the button: shut in the corner, it opens with the menu on its screen.
+            onOpen={() => setMenuOpen({ tab: "dex" })}
+            away={!ready || !!ask || !!onboarding || !!nameAsk}
+            {...(menuOpen ? { start: menuOpen } : {})}
+            onClose={closeMenu}
+            journal={playJournal}
+            friends={menuFriends}
+            savedAt={savedAt}
+            app={appOptions}
+            setApp={setApp}
+            sendGift={gifts && room?.status === "open" ? sendGift : undefined}
+            grownUps={
+              <div className="game-settings">
+                {(resumed || cloudNewer) && (
+                  <div className="game-menu-notes">
+                    {resumed && <button type="button" onClick={startFromSave}>Go back to my last save instead</button>}
+                    {cloudNewer && <p>There's a newer save in the cloud. Load it below.</p>}
+                  </div>
+                )}
+                {admin && <AdminTools />}
+                {input && <KeyBindingsPanel input={input} />}
+                {grownUpControls}
+              </div>
+            }
+          />
+        </MenuBoundary>
       )}
       {savedAt > 0 && <SavedToast shownAt={savedAt} />}
       {erasing && <EraseConfirm old={erasing.old} onAnswer={answerErase} />}
