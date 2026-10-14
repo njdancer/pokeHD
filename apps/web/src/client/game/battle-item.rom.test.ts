@@ -2,7 +2,9 @@
 // POTION from the bag sheet, on the Pokémon picked in the party sheet. The game's ItemUseMedicine
 // then draws its party screen over the battle, counts the HP bar up and says "SQUIRTLE recovered
 // by 20!". None of that party screen may show over the HD battle; its message shows in HD and a
-// tap on it reads on, back to the battle menu. Skips without the ROM.
+// tap on it reads on, back to the battle menu. The HD bag picks the Pokémon up front ("Use POTION
+// on GEODUDE"): the menu answers the game's party question itself, and that answer too must start
+// the item's screens (QA bug 57). Skips without the ROM.
 import { existsSync, readFileSync } from "node:fs";
 import { GameBoy, type AskAnswer, type GameAsk } from "@pokehd/emu";
 import { SYMBOLS } from "@pokehd/rom";
@@ -15,6 +17,9 @@ const WASM_PATH = new URL("../../../../../packages/emu/src/generated/sameboy.was
 const SQUIRTLE = 0xb1;
 const PIKACHU = 0x54;
 const RATTATA = 0xa5;
+const GEODUDE = 0xa9;
+const CHARMELEON = 0xb2;
+const ZUBAT = 0x6b;
 const ANTIDOTE = 0x0b;
 const POTION = 0x14;
 /** party_struct's HP, after the species (big-endian). */
@@ -63,6 +68,38 @@ describe.skipIf(!existsSync(ROM_PATH))("an item used in a battle from the HD bag
     expect(shown.hd).toContain(`${name} / recovered by 20!`);
     // 25, less what the Rattata took off on its turn if it was the one fighting.
     expect(hp()).toBeGreaterThan(15);
+    expect(p.asked()).toMatchObject({ ask: { kind: "menu" } });
+  });
+
+  // QA bug 57: Mt Moon, GEODUDE (the leader, in the battle) at 8/31 against a ZUBAT, the bag's
+  // "Use POTION on GEODUDE". The party question never reaches a sheet: the menu answers it.
+  it.each([0, 4, 15])("keeps the party screen behind the HD battle with the Pokémon picked in the bag: lag %i (QA bug 57)", { timeout: 120_000 }, async (lag) => {
+    const setup = await GameBoy.create({ rom, wasmBinary: wasm });
+    setup.loadState(start);
+    setParty(setup, rom, [{ species: GEODUDE, level: 11 }, { species: CHARMELEON, level: 30 }]);
+    setBag(setup, [[ANTIDOTE, 1], [POTION, 3]]);
+    setup.write(SYMBOLS.wPartyMons.address + PARTY_HP + 1, 8);
+    setup.write(SYMBOLS.wCurOpponent.address, ZUBAT);
+    setup.write(SYMBOLS.wCurEnemyLevel.address, 11);
+    const sheets: GameAsk[] = [];
+    const p = await battlePage(setup.saveState(), {
+      rom,
+      wasm,
+      lag,
+      bag: { item: POTION, mon: 0 },
+      sheet: (ask) => (sheets.push(ask), null),
+    });
+    p.play(() => p.asked() !== null);
+    const hp = () => p.gb.read(SYMBOLS.wPartyMons.address + PARTY_HP + 1);
+    expect(hp()).toBe(8);
+
+    const shown = p.answer({ choice: "item" });
+    expect(sheets).toEqual([]);
+    expect(p.gameAsks.map((a) => a.kind)).toEqual(["items", "party"]);
+    expect(p.gameAsks[1]).toMatchObject({ purpose: "item", inBattle: true });
+    expect(shown.leaks).toEqual([]);
+    expect(shown.hd).toContain("GEODUDE / recovered by 20!");
+    expect(hp()).toBeGreaterThan(8);
     expect(p.asked()).toMatchObject({ ask: { kind: "menu" } });
   });
 });

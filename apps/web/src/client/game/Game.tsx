@@ -261,12 +261,15 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     if (menuUpRef.current) hostRef.current?.setButtons(0);
     setMenuOpenState(next);
   };
-  /** The game's last question for a sheet, for what its answer starts (BattleItemUse). */
+  /**
+   * The game's last question, for what its answer starts (BattleItemUse): every one, including
+   * those the menu answers itself from what it was told up front (the bag's "Use POTION on
+   * GEODUDE" answers the party question the game asks next, QA bug 57).
+   */
   const lastAskRef = useRef<{ id: number; ask: GameAsk } | null>(null);
   /** An item used in a battle: its party screen stays behind the HD battle (QA bug 55). */
   const battleItemRef = useRef(new BattleItemUse());
   const setAsk = (next: { id: number; ask: GameAsk; game: GameSnapshot | null } | null) => {
-    if (next) lastAskRef.current = { id: next.id, ask: next.ask };
     menuStateRef.current.ask = next?.ask.kind ?? null;
     menuUpRef.current = menuStateRef.current.open || !!menuStateRef.current.ask;
     if (menuUpRef.current) hostRef.current?.setButtons(0);
@@ -785,7 +788,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
         ...(menuRef.current
           ? {
               onAsk: (id: number, question: GameAsk) => {
-                // The menu may already know the answer (a purchase's quantity, its "OK?").
+                lastAskRef.current = { id, ask: question };
+                // The menu may already know the answer (a purchase's quantity, its "OK?", a battle
+                // item's Pokémon).
                 if (liveActionsRef.current?.asked(id, question)) return;
                 setAsk({ id, ask: question, game: null });
                 void hostRef.current?.read(SNAPSHOT_RANGES).then((bytes) => {
