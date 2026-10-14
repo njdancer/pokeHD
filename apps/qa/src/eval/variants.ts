@@ -171,6 +171,24 @@ function clippedMap(sim: Sim, walk: WalkResult, ground: boolean): string | null 
   return `${strips.join("\n")}\nYou're the @ at 0,0 (columns count east, rows count south${ground ? "; the row or column marked seen before, or the first column of a side strip, was already in your last view" : ""}).`;
 }
 
+/**
+ * The text map with a space between cells. Run together, a row like "##########" is about three
+ * tokens to the model (90 cells cost ~43 tokens), so it can't see columns one by one; spaced,
+ * each cell is its own token (~100 tokens for the 90).
+ */
+function spaceCells(text: string): string {
+  const lines = text.split("\n");
+  const head = lines.findIndex((l) => /^(Turn \d+\. .*\n?)?\s*0123456789$/.test(l) || /0123456789$/.test(l));
+  if (head < 0) return text;
+  const legend = lines.findIndex((l, i) => i > head && l.startsWith("Legend:"));
+  for (let i = head; i < legend; i++) {
+    const l = lines[i]!;
+    if (i === head) lines[i] = l.replace(/0123456789$/, "0 1 2 3 4 5 6 7 8 9");
+    else lines[i] = `${l.slice(0, 2)}${[...l.slice(2)].join(" ")}`;
+  }
+  return lines.join("\n");
+}
+
 /** The pieces a variant can switch on; each variant is its parent plus one more. */
 export interface Features {
   exitNote?: boolean;
@@ -182,6 +200,8 @@ export interface Features {
   exploredMap?: boolean;
   /** Only the strips a walk revealed, in place of the full text map; "ground" adds one seen row/column. */
   clip?: "plain" | "ground";
+  /** A space between the text map's cells, one token each. */
+  spaced?: boolean;
 }
 
 function build(id: string, note: string, parent: string | null, f: Features): Variant {
@@ -198,7 +218,13 @@ function build(id: string, note: string, parent: string | null, f: Features): Va
     // The exit note is in the text map itself now (textmap.ts underfoot), so only the rest is added.
     [f.netMove ? netMove(walk, before, sim) : null, tracking(sim)].filter(Boolean).join("\n") || null;
   const base = joystick({ ...(f.description && { description: f.description }), extra });
-  const tool: VariantTool = !f.clip
+  const spaced: VariantTool = { ...base, run: (sim, input, turn) => {
+    const out = base.run(sim, input, turn);
+    return { ...out, text: spaceCells(out.text) };
+  } };
+  const tool: VariantTool = f.spaced
+    ? spaced
+    : !f.clip
     ? base
     : {
         ...base,
@@ -225,7 +251,8 @@ function build(id: string, note: string, parent: string | null, f: Features): Va
     tools: { joystick: tool },
     opening: (sim) => {
       memory.set(sim, new Explored());
-      return withExtra(sim.opening(), tracking(sim));
+      const opening = withExtra(sim.opening(), tracking(sim));
+      return f.spaced ? spaceCells(opening) : opening;
     },
   };
 }
@@ -243,4 +270,5 @@ export const VARIANTS: Record<string, Variant> = {
   "explored-map": build("explored-map", "Adds a fixed map of everything seen on this map so far (E where you came in), with the from-entry line.", "from-entry", { exitNote: true, fromEntry: true, exploredMap: true }),
   clipped: build("clipped", "Text map clipped to the strips a walk revealed (no repeats of tiles in the last view).", "from-entry", { exitNote: true, fromEntry: true, clip: "plain" }),
   "clipped-ground": build("clipped-ground", "Clipped text map plus one already-seen row or column to line the new strips up against.", "from-entry", { exitNote: true, fromEntry: true, clip: "ground" }),
+  spaced: build("spaced", "A space between the text map's cells, so each cell is one token (run together, 10 cells are ~3 tokens).", "from-entry", { exitNote: true, fromEntry: true, spaced: true }),
 };
