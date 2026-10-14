@@ -164,15 +164,32 @@ function teamMon(struct: Uint8Array, ot: Uint8Array, nick: Uint8Array): TeamMon 
   };
 }
 
+/**
+ * How many entries of a mon list are whole: the count, cut at the first entry whose struct's
+ * species isn't the species list's. _AddPartyMon (engine/pokemon/add_mon.asm) bumps the count and
+ * writes the species list first, then asks for a nickname (AskName) and only then writes the
+ * struct, so for the whole "give a nickname?" prompt after a catch the new last entry's struct is
+ * stale (species 0 for a fresh slot). SwitchPartyMon and the box's add/remove are just as stepwise.
+ */
+function wholeCount(list: Uint8Array, capacity: number, structLength: number): number {
+  const count = Math.min(list[0] ?? 0, capacity);
+  const structs = 1 + capacity + 1;
+  for (let i = 0; i < count; i++) {
+    const species = list[1 + i] ?? 0;
+    if (species === 0 || species === 0xff || list[structs + i * structLength] !== species) return i;
+  }
+  return count;
+}
+
 export function decodeSnapshot(bytes: readonly Uint8Array[]): GameSnapshot {
   const [party, partyOt, partyNicks, bag, pcItems, box, boxNicks, player, rival, id, money, badges, owned, seen, options, time, repel, transport, map, coords, battle, boxNumber] =
     bytes as Uint8Array[];
-  const teamCount = Math.min(party![0] ?? 0, PARTY_LENGTH);
+  const teamCount = wholeCount(party!, PARTY_LENGTH, PARTYMON);
   const mons = 1 + PARTY_LENGTH + 1;
   const team = Array.from({ length: teamCount }, (_, i) =>
     teamMon(party!.subarray(mons + i * PARTYMON, mons + (i + 1) * PARTYMON), partyOt!.subarray(i * NAME, (i + 1) * NAME), partyNicks!.subarray(i * NAME, (i + 1) * NAME)),
   );
-  const boxCount = Math.min(box![0] ?? 0, MONS_PER_BOX);
+  const boxCount = wholeCount(box!, MONS_PER_BOX, BOXMON);
   const boxMons = 1 + MONS_PER_BOX + 1;
   return {
     player: decodeText(player!),

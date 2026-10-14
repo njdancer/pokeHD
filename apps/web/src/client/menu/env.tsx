@@ -29,10 +29,13 @@ export function useEnv(): MenuEnv {
   return env;
 }
 
-/** A Pokémon's front picture from the ROM, facing right as the Pokédex shows it. */
+/**
+ * A Pokémon's front picture from the ROM, facing right as the Pokédex shows it. None ("") for a
+ * number outside the Pokédex (a glitch Pokémon's 0), rather than taking the menu down.
+ */
 export function monPic(env: MenuEnv, dex: number): string {
-  const e = env.catalogue.entries[dex - 1]!;
-  return monPicture(env.rom, e.species, e.picture);
+  const e = env.catalogue.entries[dex - 1];
+  return e ? monPicture(env.rom, e.species, e.picture) : "";
 }
 
 /**
