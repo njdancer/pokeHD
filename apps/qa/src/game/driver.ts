@@ -26,7 +26,11 @@ export interface DriverOptions {
   /** This run's folder; the browser profile (the game's saves) lives next to it, in ../profile. */
   runDir: string;
   headless?: boolean;
-  /** The game page's query in "game" mode (default "stats&qa"); e.g. add "&render=0" where there's no GPU. */
+  /**
+   * The game page's query, in both modes (the stream page gets it as `?game=`). Default
+   * "stats&qa&maxfps=60": a 120 Hz display would otherwise draw 120 fps and starve the stream's
+   * encoder. E.g. add "&render=0" where there's no GPU.
+   */
   gameQuery?: string;
   /** The ROM for the text map (default rom/pokeblue.gb in the repo). */
   romPath?: string;
@@ -80,8 +84,10 @@ function loadRom(path: string): Rom | null {
 export function createDriver(opts: DriverOptions): GameDriver {
   const direct = opts.streamPath === "game";
   const appUrl = opts.appUrl.replace(/\/$/, "");
-  const gameUrl = `${appUrl}/?${opts.gameQuery ?? "stats&qa"}`;
-  const pageUrl = direct ? gameUrl : `${appUrl}${opts.streamPath ?? "/dev/stream"}`;
+  const gamePath = `/?${opts.gameQuery ?? "stats&qa&maxfps=60"}`;
+  const gameUrl = `${appUrl}${gamePath}`;
+  const streamPath = opts.streamPath ?? "/dev/stream";
+  const pageUrl = direct ? gameUrl : `${appUrl}${streamPath}${streamPath.includes("?") ? "&" : "?"}game=${encodeURIComponent(gamePath)}`;
   const profileDir = resolve(opts.runDir, "..", "profile");
   const rom = loadRom(opts.romPath ?? DEFAULT_ROM);
   const watcher = new GlitchWatcher();
