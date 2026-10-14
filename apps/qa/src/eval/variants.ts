@@ -387,4 +387,18 @@ export const VARIANTS: Record<string, Variant> = {
       return [id, { ...v, system: (base: string) => `${base}\n- ${advice}` }];
     }),
   ),
+  // Without the stream-commentary rule ("Viewers are watching… under 20 words… Don't write anything
+  // else outside tool calls…"), and/or with the notebook, plus the netlist advice.
+  ...(() => {
+    const NETLIST =
+      "In caves, forests and buildings with several floors, build up a list of connections as you explore, one line per door, ladder or stairway you've used, e.g. \"B1F: ladder 12S 16E of where I came in -> B2F (arrived at its north-west)\". Write each one down as soon as you use it, and check the list before taking a ladder.";
+    const noRule = (base: string) => base.replace(/\n*Viewers are watching\.[^\n]*$/, "");
+    const inNotebook = NETLIST.replace("build up a list", "build up a list in your notebook");
+    const v = (id: string, note: string, notebook: boolean, system: (b: string) => string) => [id, { ...build(id, note, "from-entry", { exitNote: true, fromEntry: true, notebook }), system }] as const;
+    return Object.fromEntries([
+      v("netlist-norule", "Netlist advice, without the 20-word commentary rule.", false, (b) => `${noRule(b)}\n\n${NETLIST}`),
+      v("netlist-notebook", "Netlist advice to keep in the notebook (tool given), commentary rule kept.", true, (b) => `${b}\n- ${inNotebook}`),
+      v("netlist-notebook-norule", "Netlist advice in the notebook, without the commentary rule.", true, (b) => `${noRule(b)}\n\n${inNotebook}`),
+    ]);
+  })(),
 };

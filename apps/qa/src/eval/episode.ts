@@ -123,7 +123,7 @@ export async function playEpisode(sim: Sim, scenario: Scenario, variant: Variant
       result.success = true;
       result.end = "success";
       finished = true;
-    } else if (turn >= scenario.turnCap) {
+    } else if (result.log.filter((t) => t.tool !== "notebook").length >= scenario.turnCap) {
       result.end = "cap";
       finished = true;
     }
