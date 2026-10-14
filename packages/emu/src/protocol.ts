@@ -7,6 +7,7 @@ import type { GiftSpec, TakeResult } from "./gifts/gifts.ts";
 import type { DexOpened } from "./dex-guard.ts";
 import type { JournalEvent } from "./journal-hooks.ts";
 import type { LinkRole } from "./link.ts";
+import type { GameInputWait } from "./input-wait.ts";
 import type { ActionResult, GameAction } from "./game/actions.ts";
 import type { AskAnswer, GameAsk } from "./game/asks.ts";
 import type { BattleAnswer, BattleAsk } from "./game/battle-menus.ts";
@@ -86,6 +87,8 @@ export interface FrameMessage {
    * the menu reports in its own words when the action is done.
    */
   acting?: boolean;
+  /** The game waits for the player's buttons at the end of this frame, and where (input-wait.ts). */
+  wait?: GameInputWait;
 }
 
 export type FromWorker =

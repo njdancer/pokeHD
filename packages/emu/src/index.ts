@@ -8,6 +8,7 @@ export * from "./dex-guard.ts";
 export * from "./journal-hooks.ts";
 export * from "./erase-guard.ts";
 export * from "./link.ts";
+export * from "./input-wait.ts";
 export type { FrameMessage, Watch } from "./protocol.ts";
 export * from "./state/overworld.ts";
 export * from "./state/decode.ts";

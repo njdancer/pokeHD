@@ -200,6 +200,13 @@ export const ALLOWLIST: readonly string[] = [
   "PrintText_NoCreatingTextBox",
   "WaitForTextScrollButtonPress",
   "WaitForSoundToFinish",
+  // Where the game waits for buttons, for scripted play (packages/emu input-wait.ts): the ends of
+  // the waits' routines, the overworld loop's second DelayFrame, and a scripted walk's pad
+  "LoadGBPal",
+  "Multiply",
+  "OverworldLoopLessDelay",
+  "PlaceMenuCursor",
+  "wSimulatedJoypadStatesIndex",
   "hLoadedROMBank",
   "ChooseRivalName",
   "DefaultNamesPlayerList",

@@ -27,14 +27,17 @@ export function mapName(id: number): string {
 
 const centre = (b: ScreenButton) => `(${Math.round(b.x + b.w / 2)},${Math.round(b.y + b.h / 2)})`;
 
-/** The visible text panels, one per line. */
-export function describePanels(panels: readonly Panel[]): string {
+/**
+ * The visible text panels, one per line. `tapReady`: the game takes a tap now, which a message
+ * box with no ▼ can still mean (the game's own wait under its stats box after a level).
+ */
+export function describePanels(panels: readonly Panel[], tapReady = false): string {
   return panels
     .map((p) => {
       const text = p.text.replace(/\n/g, " / ");
       const cursor = p.cursor ? ` (cursor on ${p.cursor.replace(/\n/g, " ")})` : "";
       // Whether a tap on the message reads on yet: the game keeps some up a while by itself.
-      const waiting = p.waiting === undefined ? "" : p.waiting ? " (▼: a tap reads on)" : " (no ▼: the game isn't waiting for a tap yet)";
+      const waiting = p.waiting === undefined ? "" : p.waiting ? " (▼: a tap reads on)" : tapReady ? " (no ▼, but a tap reads on)" : " (no ▼: the game isn't waiting for a tap yet)";
       return `${p.kind}: "${text}"${cursor}${waiting}`;
     })
     .join("\n");

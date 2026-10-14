@@ -26,7 +26,8 @@ const MAX_STEPS = 40;
 
 export const TOOLS = {
   tap: {
-    description: "Tap the screen at (x, y) in screen pixels (528×1000, origin top left). Returns what's on screen afterwards.",
+    description:
+      "Tap the screen at (x, y) in screen pixels (528×1000, origin top left). Waits until the game takes input before tapping, and returns once it's ready for the next, with what's on screen then and any messages that went by on the way.",
     shape: { x: z.number(), y: z.number(), what: z.string().describe('What you\'re tapping, e.g. "YES" or "the Pokédex".') },
   },
   swipe: {
@@ -49,10 +50,6 @@ export const TOOLS = {
       // used it when merely offered; here it's the recommended way, for a Sonnet player).
       "Walk with the on-screen joystick: one arrow per step, in order, e.g. \"↑↑↑→→\" walks 3 up then 2 right in one go, keeping your finger on the stick. U/D/L/R work too. Put * after an arrow to keep walking that way until something stops you, e.g. \"↑*\" or \"→→↑*\" (two right, then up until something's in the way); the walk carries on with any arrows after it. This uses fewer tokens and is generally preferred over ending a walk with the same arrow repeated. To explore, run a corridor to its end this way, then look at the new map and turn. Stops early if something interrupts you (a wall, a door, someone talking, a battle), and says what stopped you. Returns what's on screen afterwards.",
     shape: { moves: z.string().describe(`Arrows in order, e.g. "↑↑→→→↓" or "→→↑*". At most ${MAX_STEPS} steps besides runs.`) },
-  },
-  wait: {
-    description: "Do nothing for a few seconds (e.g. while text prints or an animation plays). Returns what's on screen afterwards.",
-    shape: { seconds: z.number().min(0.5).max(10) },
   },
   screenshot: { description: "See the screen as it is now.", shape: {} },
   contact_sheet: {
@@ -182,11 +179,6 @@ export class Toolbox {
           if (typeof moves === "string") return text(moves, true);
           act("joystick", `joystick ${moves.map((m) => ARROWS[m.direction].repeat(m.tiles)).join("")}`);
           return text((await this.driver.joystick(moves)).text);
-        }
-        case "wait": {
-          const seconds = Math.max(0.5, Math.min(10, Number(input["seconds"]) || 1));
-          act("wait", `wait ${seconds}s`);
-          return text((await this.driver.wait(seconds * 1000)).text);
         }
         case "screenshot":
           act("screenshot", "screenshot");
