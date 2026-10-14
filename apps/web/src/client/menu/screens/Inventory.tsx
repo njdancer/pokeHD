@@ -11,10 +11,14 @@ import { canLearn, itemVerbs, monVerbs, onMon } from "../verbs.ts";
 
 type Kind = "all" | "Pokémon" | ItemKind;
 
-export function MonRow({ m, i, grip, onClick, off, active }: { m: Mon; i: number; grip?: React.ReactNode; onClick?: () => void; off?: boolean; active?: boolean }) {
+/**
+ * One of the team as a row. `off` greys it out and it can't be tapped; `why` greys it out too but
+ * says why, under its name and when tapped (a TM it can't learn, QA bug 53).
+ */
+export function MonRow({ m, i, grip, onClick, off, active, why }: { m: Mon; i: number; grip?: React.ReactNode; onClick?: () => void; off?: boolean; active?: boolean; why?: { line: string; said: string } }) {
   const env = useEnv();
   return (
-    <div className={`m-monrow${off ? " off" : ""}${active ? " active" : ""}`}>
+    <div className={`m-monrow${off || why ? " off" : ""}${active ? " active" : ""}`}>
       {grip}
       <Row
         media={
@@ -31,7 +35,7 @@ export function MonRow({ m, i, grip, onClick, off, active }: { m: Mon; i: number
             {active && <span className="m-lead now">In battle</span>}
           </>
         }
-        sub={<HpBar mon={m} />}
+        sub={why ? why.line : <HpBar mon={m} />}
         right={
           <>
             <b>Lv {m.level}</b>
@@ -40,8 +44,8 @@ export function MonRow({ m, i, grip, onClick, off, active }: { m: Mon; i: number
             </span>
           </>
         }
-        onClick={onClick}
-        off={off}
+        onClick={why ? () => env.toast(why.said) : onClick}
+        off={off && !why}
       />
     </div>
   );
@@ -274,7 +278,14 @@ export function TeamPick({ purpose, title = "Your team" }: { purpose?: Purpose; 
   const nav = useNav();
   const { model, moment } = env;
   const it = purpose && "use" in purpose ? model.bag.find((b) => b.id === purpose.use) : undefined;
-  const offFor = (m: Mon) => (purpose && "teach" in purpose ? !canLearn(env, m, purpose.teach) : moment === "fainted" ? m.hp === 0 : false);
+  const offFor = (m: Mon) => (moment === "fainted" ? m.hp === 0 : false);
+  // A machine it can't learn: the game's own words for it ("… is not compatible with …").
+  const machine = purpose && "teach" in purpose ? (model.bag.find((b) => b.id === purpose.teach) ?? model.past.find((b) => b.id === purpose.teach)) : undefined;
+  const move = machine?.sub ? niceItem(machine.sub) : "this move";
+  const whyFor = (m: Mon) =>
+    purpose && "teach" in purpose && !canLearn(env, m, purpose.teach)
+      ? { line: `Can't learn ${move}`, said: `${niceMon(m.name)} is not compatible with ${move}. It can't learn ${move}.` }
+      : undefined;
   const banner =
     purposeLine(env, purpose) ??
     (moment === "fainted" ? `${niceMon(model.team[0]!.name)} fainted! Who's next?` : moment === "pc" ? "Put which Pokémon in the PC?" : inBattle(moment) ? "Sending one out uses your turn" : undefined);
@@ -282,7 +293,7 @@ export function TeamPick({ purpose, title = "Your team" }: { purpose?: Purpose; 
     <Page title={title} meta={`${model.team.length} of 6`} banner={banner}>
       <div className="m-list">
         {model.team.map((m, i) => (
-          <MonRow key={m.key} m={m} i={i} off={offFor(m)} active={inBattle(moment) && moment !== "fainted" && i === 0} onClick={() => nav.go({ k: "mon", i, for: purpose })} />
+          <MonRow key={m.key} m={m} i={i} off={offFor(m)} why={whyFor(m)} active={inBattle(moment) && moment !== "fainted" && i === 0} onClick={() => nav.go({ k: "mon", i, for: purpose })} />
         ))}
       </div>
       {it && <p className="m-foot">{niceItem(it.name)}: {it.text}</p>}
