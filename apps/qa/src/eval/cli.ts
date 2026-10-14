@@ -38,6 +38,12 @@ export function loadRun(id: string): { meta: RunMeta; episodes: EpisodeResult[] 
   return { meta, episodes };
 }
 
+/** Several runs of one variant on one set (comma-separated IDs), as one: extra repeats add up. */
+function loadRuns(ids: string): { meta: RunMeta; episodes: EpisodeResult[] } {
+  const runs = ids.split(",").map(loadRun);
+  return { meta: runs[0]!.meta, episodes: runs.flatMap((r) => r.episodes) };
+}
+
 export interface RunMeta {
   id: string;
   variant: string;
@@ -62,6 +68,7 @@ async function main(): Promise<void> {
       only: { type: "string" },
       kind: { type: "string" },
       tag: { type: "string" },
+      feature: { type: "string" },
     },
   });
   if (command === "gen") {
@@ -92,6 +99,7 @@ async function main(): Promise<void> {
     let set = loadSet(values.set!);
     if (values.only) set = set.filter((s) => values.only!.split(",").includes(s.id));
     if (values.kind) set = set.filter((s) => s.kind === values.kind);
+    if (values.feature) set = set.filter((s) => s.features.includes(values.feature as never));
     const reps = Number(values.reps);
     const parallel = Math.max(1, Math.min(3, Number(values.parallel)));
     const id = `${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}-${variant.id}-${values.set}${values.tag ? `-${values.tag}` : ""}`;
@@ -126,8 +134,8 @@ async function main(): Promise<void> {
   }
   if (command === "compare") {
     const [a, b] = positionals;
-    const ra = loadRun(a!);
-    const rb = loadRun(b!);
+    const ra = loadRuns(a!);
+    const rb = loadRuns(b!);
     const set = loadSet(ra.meta.set);
     console.log(JSON.stringify(compare(ra.episodes, rb.episodes, set), null, 1));
     return;
@@ -135,9 +143,15 @@ async function main(): Promise<void> {
   if (command === "decide") {
     // Records a hill-climb step: run B (a variant) against run A (the variant it was built on).
     const [a, b] = positionals;
-    const ra = loadRun(a!);
-    const rb = loadRun(b!);
-    const c = compare(ra.episodes, rb.episodes, loadSet(rb.meta.set));
+    const ra = loadRuns(a!);
+    const rb = loadRuns(b!);
+    // --feature: a change that only acts on some goals (an exit note acts only at exits) is judged
+    // on those, and checked for harm on the rest.
+    const all = loadSet(rb.meta.set);
+    const scoped = values.feature ? all.filter((s) => s.features.includes(values.feature as never)) : all;
+    const c = compare(ra.episodes, rb.episodes, scoped);
+    const rest = values.feature ? compare(ra.episodes, rb.episodes, all.filter((s) => !scoped.includes(s))) : null;
+    if (rest?.verdict === "worse") [c.verdict, c.reason] = ["worse", `better on ${values.feature} goals but worse on the rest`];
     const v = VARIANTS[rb.meta.variant];
     const entry: ClimbEntry = {
       at: new Date().toISOString(),
@@ -149,7 +163,8 @@ async function main(): Promise<void> {
       set: rb.meta.set,
       verdict: c.verdict,
       kept: c.verdict === "better",
-      reason: c.reason,
+      reason: values.feature ? `${c.reason} (on ${values.feature} goals; rest ${rest!.verdict}, ${(rest!.success.diff * 100).toFixed(1)} pts)` : c.reason,
+      ...(values.feature && { scope: values.feature }),
       success: c.success,
       turns: c.turns,
       tokens: c.tokens,

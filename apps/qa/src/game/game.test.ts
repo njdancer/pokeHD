@@ -66,7 +66,8 @@ const state = (x: number, y: number, npcs: StateLite["npcs"] = []): StateLite =>
 const grid = (text: string) =>
   text
     .split("\n")
-    .slice(1, -1)
+    .slice(1)
+    .filter((_, i, all) => i < all.findIndex((l) => l.startsWith("Legend:")))
     .map((l) => l.slice(2));
 
 describe("buildTextMap", () => {
@@ -101,6 +102,18 @@ describe("buildTextMap", () => {
     );
     expect(grid(text)[0]).toBe("o@.");
     expect(text).toContain("o ball on the ground");
+  });
+});
+
+describe("standing on a warp", () => {
+  const edge = { ...map, warps: [{ x: 1, y: 5, to: 1, toWarp: 0 }] } as MapData;
+  const edgeWorld = { ...world, maps: [edge] } as unknown as WorldData;
+  it("says an exit mat is under the @ and which way walks out", () => {
+    const text = buildTextMap(edgeWorld, null, state(1, 5));
+    expect(text.split("\n").at(-1)).toBe("You're standing on an exit (D, under the @). To go through it, walk down once more.");
+  });
+  it("says nothing off a warp", () => {
+    expect(buildTextMap(edgeWorld, null, state(1, 4))).not.toContain("standing on");
   });
 });
 

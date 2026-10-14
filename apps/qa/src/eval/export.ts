@@ -21,6 +21,7 @@ export interface ClimbEntry {
   verdict: string;
   kept: boolean;
   reason: string;
+  scope?: string;
   success: Delta;
   turns: Delta;
   tokens: Delta;
@@ -57,13 +58,14 @@ export function exportDashboard(out: string): void {
     const eps = readFileSync(join(results, id, "episodes.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l) as EpisodeResult);
     const scen = set(meta.set);
     const sum = summarise(eps, scen);
-    const decided = climb.find((c) => c.runB === id);
+    const decided = climb.find((c) => c.runB.split(",").includes(id));
     runs.push({
       run: id,
       variant: meta.variant,
       parent: VARIANTS[meta.variant]?.parent ?? decided?.parent ?? null,
       change: VARIANTS[meta.variant]?.note ?? decided?.change ?? "",
       set: meta.set,
+      scope: Object.keys(sum.scenarios).length < scen.length ? `${Object.keys(sum.scenarios).length} of ${scen.length} scenarios (extra repeats)` : "all",
       model: meta.model,
       started: meta.startedAt,
       ...row(sum.overall),

@@ -239,7 +239,34 @@ export function buildTextMap(world: WorldData, stitched: StitchedWorld | null, s
     .filter(([c]) => used.has(c))
     .map(([c, what]) => `${c} ${what}`)
     .join(", ");
-  return `${rows.join("\n")}\nLegend: ${legend}. You're at column ${view.left}, row ${view.up}, facing ${state.player.facing}; north is up.`;
+  const under = underfoot(world, state);
+  return `${rows.join("\n")}\nLegend: ${legend}. You're at column ${view.left}, row ${view.up}, facing ${state.player.facing}; north is up.${under ? `\n${under}` : ""}`;
+}
+
+/**
+ * Standing on a warp, the "@" covers its "D", though a person sees the mat or doorway under their
+ * feet. A doorway, stairs or ladder (a tile the game warps from as you step onto it) needs a step
+ * off and back on; an exit mat needs one more step the way out: off the map's edge, or into the
+ * wall tile the game treats as that exit (WarpTileListPointers, by the way you face). The movement
+ * eval found the player stopping on a mat and taking itself to be outside (exit goals 52% → 88%).
+ */
+export function underfoot(world: WorldData, state: StateLite): string | null {
+  const map = world.maps[state.mapId];
+  const { x, y } = state.player;
+  if (!map || !map.warps.some((w) => w.x === x && w.y === y)) return null;
+  const sem = world.tilesets[map.tileset]!.semantics;
+  const here = tileAt(world, map, x, y);
+  if (sem.doors.includes(here) || sem.warps.includes(here)) return "You're standing on a door/stairs/exit (D, under the @); it takes you through as you step onto it, so step off and back on to use it.";
+  const w = map.widthBlocks * 2;
+  const h = map.heightBlocks * 2;
+  const ways = (["down", "up", "left", "right"] as const).filter((d) => {
+    const [dx, dy] = d === "down" ? [0, 1] : d === "up" ? [0, -1] : d === "left" ? [-1, 0] : [1, 0];
+    const nx = x + dx;
+    const ny = y + dy;
+    if (nx < 0 || ny < 0 || nx >= w || ny >= h) return true;
+    return sem.warpCarpets.find((c) => c.facing === d)?.tiles.includes(tileAt(world, map, nx, ny)) ?? false;
+  });
+  return `You're standing on an exit (D, under the @). To go through it, walk ${ways.length ? ways.join(" or ") : "off it toward the wall it's set in"} once more.`;
 }
 
 const BLOCKERS: Record<string, string> = {
