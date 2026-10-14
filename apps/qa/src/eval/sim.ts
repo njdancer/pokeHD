@@ -10,7 +10,7 @@ import { setParty } from "@pokehd/emu/testing";
 import { parseWorld, readGlyphs, stitchOverworld, SYMBOLS, type MapData, type StitchedWorld, type WorldData } from "@pokehd/rom";
 import { describeGameBoyText, mapName } from "../game/outcome.ts";
 import type { StateLite } from "../game/screen-read.ts";
-import { blockerAt, buildTextMap } from "../game/textmap.ts";
+import { blockerAt, buildTextMap, type View } from "../game/textmap.ts";
 import type { Direction, Move } from "../game/types.ts";
 import { countSteps, DIRS, interruption, stallFrames, walkNote, type Stop } from "../game/walk.ts";
 
@@ -65,6 +65,9 @@ export interface WalkResult {
   maps: number[];
   /** Text that came up and was cleared (only joystick here, so the harness clears it). */
   textSeen: string | null;
+  /** Every cell the player stood on or stepped into on the starting map, in order. */
+  cells: { x: number; y: number }[];
+  startMap: number;
 }
 
 export interface SimOptions {
@@ -207,8 +210,8 @@ export class Sim {
   }
 
   /** The text map around the player now, with the legend (what a result shows after a plain move). */
-  textMap(s = this.state()): string {
-    return buildTextMap(this.rom.world, this.rom.stitched, s);
+  textMap(s = this.state(), view?: View): string {
+    return buildTextMap(this.rom.world, this.rom.stitched, s, view);
   }
 
   /**
@@ -305,7 +308,8 @@ export class Sim {
     if (fought) parts.push("(A battle started, and the harness fought it for you: this drill is only about walking.)");
     if (textSeen) parts.push(`${textSeen}\n(The text was closed for you.)`);
     parts.push(this.textMap(to), PAD_LINES);
-    return { text: parts.filter(Boolean).join("\n"), asked: total, walked, stop: why, frames: this.frames - startFrames, maps, textSeen };
+    const cells = [first, ...trail, to].filter((s) => s.mapId === first.mapId).map((s) => ({ x: s.player.x, y: s.player.y }));
+    return { text: parts.filter(Boolean).join("\n"), asked: total, walked, stop: why, frames: this.frames - startFrames, maps, textSeen, cells, startMap: first.mapId };
   }
 
   /** The opening screen description for an episode, as the live player sees one after a warp. */
