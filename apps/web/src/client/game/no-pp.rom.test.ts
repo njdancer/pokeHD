@@ -8,16 +8,11 @@
 // asking (QA bug 51). The page plays as Game does: whole messages from the script, read on with a
 // tap on the message box, and a game resumed in the middle of the battle. Skips without the ROM.
 import { existsSync, readFileSync } from "node:fs";
-import {
-  BATTLE_WATCHES, BattleMenus, Button, Controls, GameBoy, OVERWORLD_WATCHES, ScreenTextDecoder, TEXT_WATCHES,
-  type BattleAnswer, type BattleAsk, type TextWatched, type Watch,
-} from "@pokehd/emu";
-import { readGlyphs, SYMBOLS } from "@pokehd/rom";
+import { GameBoy, type BattleAnswer } from "@pokehd/emu";
+import { SYMBOLS } from "@pokehd/rom";
 import { beforeAll, describe, expect, it } from "vitest";
 import { playIntro, setParty } from "../../../../../packages/emu/src/testing.ts";
-import { BattleTracker, BattleMenuCover, battleCovered, battleText, battleTextShown, maskBattleScreen } from "./battle.ts";
-import { battleTextFits } from "./hd-text.ts";
-import { newScriptView, scriptTap, scriptView, type ScriptView } from "./script-view.ts";
+import { battlePage } from "./battle-page.testing.ts";
 
 const ROM_PATH = new URL("../../../../../rom/pokeblue.gb", import.meta.url);
 const WASM_PATH = new URL("../../../../../packages/emu/src/generated/sameboy.wasm", import.meta.url);
@@ -34,8 +29,6 @@ const EMBER = 0x34;
 /** party_struct: the moves, then the PP (PARTYMON_STRUCT_LENGTH 44). */
 const PARTY_MOVES = 8;
 const PARTY_PP = 29;
-/** Frames between the player's taps on a message: a person reading, not mashing. */
-const READ_FRAMES = 40;
 
 interface Options {
   /** Frames the page's questions and answers take to cross to the emulator worker and back. */
@@ -46,126 +39,15 @@ interface Options {
 
 describe.skipIf(!existsSync(ROM_PATH))("moves with no PP from the HD battle menu", () => {
   let rom: Uint8Array;
+  let wasm: Uint8Array;
   let start: Uint8Array;
   beforeAll(async () => {
     rom = new Uint8Array(readFileSync(ROM_PATH));
+    wasm = new Uint8Array(readFileSync(WASM_PATH));
     const gb = await GameBoy.create({ rom, wasmBinary: readFileSync(WASM_PATH) });
     playIntro(gb);
     start = gb.saveState();
   }, 240_000);
-
-  /** One emulator with the page's side of a battle over it, as Game runs them. */
-  async function page(state: Uint8Array, lag: number) {
-    const gb = await GameBoy.create({ rom, wasmBinary: readFileSync(WASM_PATH) });
-    gb.loadState(state);
-    const menus = new BattleMenus(gb, { rom, onAsk: () => {} });
-    const script: { current: ScriptView | null } = { current: null };
-    const controls: Controls = new Controls(gb, {
-      setButtons: (m) => gb.setButtons(m),
-      script: {
-        message: ({ id, message, letterFrames }) => {
-          script.current = newScriptView(id, message, letterFrames);
-          if (script.current.boxes.length <= 1) controls.readOn(id);
-        },
-        end: (id) => {
-          if (script.current?.id === id) script.current.ended = true;
-        },
-        press: () => {},
-      },
-    });
-    controls.setScriptText(rom);
-    let watches: Record<string, Watch> = {};
-    const battles = new BattleTracker(rom, { ...OVERWORLD_WATCHES, ...TEXT_WATCHES, ...BATTLE_WATCHES }, (w) => (watches = w));
-    const decoder = new ScreenTextDecoder(readGlyphs(rom));
-    const cover = new BattleMenuCover();
-
-    /** The question as the page has it. */
-    let asked: { id: number; ask: BattleAsk } | null = null;
-    let askAge = 0;
-    let sending: { id: number; answer: BattleAnswer; in: number } | null = null;
-    const answered = new Set<number>();
-    /** What the HD message box shows. */
-    let hd: string | null = null;
-
-    /**
-     * One frame as Game shows it: the Game Boy pixels left over the HD battle (with what the screen
-     * read as, for a failure), and the HD text.
-     */
-    const step = () => {
-      controls.frame();
-      gb.runFrame();
-      if (sending && --sending.in < 0) {
-        menus.answer(sending.id, sending.answer);
-        sending = null;
-      }
-      const asking = menus.asking;
-      if (asking && asked?.id !== asking.id && !answered.has(asking.id) && ++askAge > lag) {
-        asked = asking;
-        askAge = 0;
-      }
-      const watched = Object.fromEntries(Object.entries(watches).map(([k, [a, n]]) => [k, gb.readBytes(a, n)]));
-      const fight = battles.frame(watched);
-      const screen = fight.scene === "scene" ? fight.screen : null;
-      hd = null;
-      if (!screen) {
-        cover.covering(null, !!asked);
-        // The Game Boy's own screen in a battle (a menu, or the way in) shows whole.
-        return { visible: fight.state ? -1 : 0, read: String(fight.scene) };
-      }
-      const onScreen = decoder.decode(battleText(watched as unknown as TextWatched, screen));
-      const text = battleTextShown(onScreen);
-      const choosing = cover.covering(onScreen, !!asked);
-      const fits = !choosing && battleTextFits(text);
-      const data = new Uint8ClampedArray(gb.frame);
-      maskBattleScreen(data, screen, battleCovered(onScreen, fits, choosing));
-      let visible = 0;
-      for (let i = 3; i < data.length; i += 4) if (data[i]) visible++;
-      const view = scriptView(script, text, fits, (id) => controls.releaseMessage(id));
-      hd = view ? (view.lines ?? []).join(" / ") : fits ? text.boxes.flatMap((b) => b.lines.map((l) => l.text)).join(" / ") : null;
-      const read = JSON.stringify({ boxes: onScreen.boxes.map((b) => [b.x, b.y, b.width, b.height, b.lines.map((l) => l.text).join("|")]), loose: onScreen.loose.map((l) => l.text) });
-      return { visible, read };
-    };
-
-    /** A tap on the HD message box (Game's textActions.press("A")). */
-    const tapMessage = () => {
-      const s = script.current;
-      const tap = scriptTap(s);
-      if (tap === "next" && s!.index === s!.boxes.length - 1) controls.readOn(s!.id);
-      if (tap === "close") controls.closeMessage(s!.id);
-      if (tap === "none") controls.tap(Button.A);
-    };
-
-    /**
-     * Plays on, the player tapping each message box a while after it shows, until `done`: what
-     * showed meanwhile.
-     */
-    const play = (done: () => boolean) => {
-      const shown = { leaks: [] as string[], hd: [] as string[] };
-      for (let f = 0, reading = 0; !done(); f++) {
-        if (f > 3000) throw new Error(`Stuck: ${shown.hd.join(" | ")}`);
-        const s = step();
-        if (s.visible) shown.leaks.push(`frame ${f}: ${s.read}`);
-        if (hd && shown.hd.at(-1) !== hd) shown.hd.push(hd);
-        reading = hd && !asked ? reading + 1 : 0;
-        if (reading === READ_FRAMES) {
-          tapMessage();
-          reading = 0;
-        }
-      }
-      return shown;
-    };
-
-    /** Answers the question (the page drops its menu at once), then plays on to the next. */
-    const answer = (a: BattleAnswer, done: () => boolean = () => asked !== null) => {
-      const id = asked!.id;
-      asked = null;
-      answered.add(id);
-      sending = { id, answer: a, in: lag };
-      cover.answered();
-      return play(done);
-    };
-    return { gb, play, answer, asked: () => asked, hd: () => hd };
-  }
 
   /**
    * A wild battle: `mon` with `moves` and their `pp`, against `foe`, played as Game shows it up to
@@ -182,11 +64,11 @@ describe.skipIf(!existsSync(ROM_PATH))("moves with no PP from the HD battle menu
     }
     setup.write(SYMBOLS.wCurOpponent.address, foe);
     setup.write(SYMBOLS.wCurEnemyLevel.address, 2);
-    let p = await page(setup.saveState(), lag);
+    let p = await battlePage(setup.saveState(), { rom, wasm, lag });
     p.play(() => p.asked() !== null);
     expect(p.asked()).toMatchObject({ ask: { kind: "menu" } });
     if (resume) {
-      p = await page(p.gb.saveState(), lag);
+      p = await battlePage(p.gb.saveState(), { rom, wasm, lag });
       const shown = p.play(() => p.asked() !== null);
       expect(shown.leaks.filter((l) => !l.includes("transition"))).toEqual([]);
     }

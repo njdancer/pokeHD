@@ -415,3 +415,55 @@ export function barColour(hp: number, maxHp: number): "green" | "yellow" | "red"
   const pixels = maxHp > 0 ? Math.floor((hp * BAR_PIXELS) / maxHp) : 0;
   return pixels >= GREEN_FROM ? "green" : pixels >= YELLOW_FROM ? "yellow" : "red";
 }
+
+/** Longest an item used in a battle keeps the Game Boy screen behind the HD battle, with nothing to read (10 s). */
+const ITEM_USE_FRAMES = 600;
+
+/**
+ * An item used on a Pokémon in a battle (a POTION from the bag, QA bug 55). The page chose the
+ * item and the Pokémon (GameAsks' sheets: the game's own party menu is never drawn), then the
+ * game's ItemUseMedicine counts the HP up where the party menu would have it, over the battle
+ * screen (the numbers land on the opponent's HUD), or redraws a party menu it never set up (rows
+ * of "Lv0 FNT 0/C80"), and says "GEODUDE recovered by 20!". None of that is the battle: from the
+ * answer until the battle screen is back, the Game Boy screen stays behind the HD battle and only
+ * the message shows, in HD (`partyScreenMessage`), read on with a tap like any other.
+ *
+ * It ends once the message has been read and both HUDs are back, at the battle menu's next
+ * question, with the battle, or after ITEM_USE_FRAMES with nothing to read.
+ */
+export class BattleItemUse {
+  #on = false;
+  #frames = 0;
+  #told = false;
+
+  /** An item's screens may be up (`using` decides). */
+  get active(): boolean {
+    return this.#on;
+  }
+
+  /** The page answered one of the game's questions (`answer` null for cancelled). */
+  answered(ask: { kind: string; purpose?: string; inBattle?: boolean }, answer: unknown): void {
+    this.#on = ask.kind === "party" && ask.purpose === "item" && ask.inBattle === true && answer !== null;
+    this.#frames = 0;
+    this.#told = false;
+  }
+
+  /**
+   * Per frame: whether the item's screens are up. `fight` is the BattleTracker's frame, `text`
+   * the whole Game Boy screen's, `asking` whether the HD battle menu is up.
+   */
+  using(fight: Pick<BattleFrame, "state" | "scene" | "huds">, text: ScreenText, asking: boolean): boolean {
+    if (!this.#on) return false;
+    const words = !!text.dialog?.lines.some((l) => l.trim() !== "");
+    if (words) this.#told = true;
+    else this.#frames++;
+    const back = this.#told && !words && fight.scene === "scene" && !!fight.huds?.player && !!fight.huds.enemy;
+    if (!fight.state || asking || back || this.#frames > ITEM_USE_FRAMES) this.#on = false;
+    return this.#on;
+  }
+}
+
+/** The party screen's message alone ("GEODUDE recovered by 20!"), for the HD text layer. */
+export function partyScreenMessage(text: ScreenText): ScreenText {
+  return { ...text, boxes: text.dialog ? [text.dialog.box] : [], menus: [], quantity: null, loose: [], pictures: false };
+}

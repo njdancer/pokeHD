@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CELL_HUD, CELL_SCENE, CELL_UI, TEXT_WATCHES, type BattleScreen, type ScreenText, type TextWatched } from "@pokehd/emu";
-import { barColour, BattleMenuCover, battleCovered, battleMenuShown, battleText, battleTextShown, maskBattleScreen } from "./battle.ts";
+import { CELL_HUD, CELL_SCENE, CELL_UI, TEXT_WATCHES, type BattleScreen, type BattleState, type ScreenText, type TextWatched } from "@pokehd/emu";
+import { barColour, BattleItemUse, BattleMenuCover, battleCovered, battleMenuShown, battleText, battleTextShown, maskBattleScreen, partyScreenMessage } from "./battle.ts";
 
 describe("maskBattleScreen", () => {
   const screen = (origin = { x: 0, y: 0 }): BattleScreen => {
@@ -166,5 +166,44 @@ describe("BattleMenuCover", () => {
     const fight = { x: 8, y: 12, width: 12, height: 6, lines: [{ row: 14, col: 10, text: "FIGHT PKMN" }, { row: 16, col: 10, text: "ITEM  RUN" }] };
     expect(battleMenuShown(text({ boxes: [fight] }))).toBe(true);
     expect(new BattleMenuCover().covering(text({ boxes: [fight] }), false)).toBe(true);
+  });
+});
+
+describe("BattleItemUse", () => {
+  const text = (lines: string[] | null): ScreenText => ({
+    shown: true, boxes: [], menus: [], quantity: null, loose: [], pictures: false,
+    dialog: lines ? { box: { x: 0, y: 12, width: 20, height: 6, lines: [] }, lines, state: "waiting" } : null,
+  } as unknown as ScreenText);
+  const fight = (scene: "scene" | "menu", huds = true) => ({ state: {} as BattleState, scene, huds: { player: huds, enemy: huds } });
+  const potion = { kind: "party", purpose: "item", inBattle: true };
+
+  it("holds from the Pokémon chosen for a POTION until its message is read and the battle screen is back (QA bug 55)", () => {
+    const use = new BattleItemUse();
+    use.answered(potion, { index: 1 });
+    // The HP counts up over the battle screen (the opponent's HUD gone under it), or on a party menu.
+    expect(use.using(fight("scene", false), text(null), false)).toBe(true);
+    expect(use.using(fight("menu", false), text(null), false)).toBe(true);
+    expect(use.using(fight("menu", false), text(["GEODUDE", "recovered by 20!"]), false)).toBe(true);
+    // Read, and both HUDs back.
+    expect(use.using(fight("scene"), text(null), false)).toBe(false);
+    expect(use.active).toBe(false);
+  });
+
+  it("isn't for a switch, a cancelled POTION or outside a battle, and ends at the battle menu", () => {
+    const use = new BattleItemUse();
+    use.answered({ kind: "party", purpose: "switch", inBattle: true }, { index: 1 });
+    expect(use.active).toBe(false);
+    use.answered(potion, null);
+    expect(use.active).toBe(false);
+    use.answered({ ...potion, inBattle: false }, { index: 0 });
+    expect(use.active).toBe(false);
+    use.answered(potion, { index: 0 });
+    expect(use.using(fight("scene"), text(null), true)).toBe(false);
+  });
+
+  it("keeps only the party screen's message for the HD text", () => {
+    const box = { x: 0, y: 12, width: 20, height: 6, lines: [] };
+    const screen = { ...text(["GEODUDE", "recovered by 20!"]), boxes: [{ x: 0, y: 0, width: 20, height: 12, lines: [] }, box], loose: [{ row: 1, col: 3, text: "CHARMELEON" }], pictures: true };
+    expect(partyScreenMessage(screen)).toMatchObject({ boxes: [box], loose: [], pictures: false });
   });
 });
