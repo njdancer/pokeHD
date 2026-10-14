@@ -51,14 +51,17 @@ class Walker {
  * A busy page: its main thread sees the game's state only every `burst` frames, and a move of the
  * thumb reaches the emulator `latency` frames later.
  */
-function page(game: Walker, burst: number, latency: number, onFrame?: (g: Walker) => void) {
+function page(game: Walker, burst: number, latency: number, onFrame?: (g: Walker) => void, rogue?: { dir: Dir; late: number }) {
   const centre = { x: 100, y: 100 };
   const listeners: ((e: { target: unknown; pointerId: number }) => void)[] = [];
+  let moves = 0;
   const stick = {
     contains: () => true,
     dispatchEvent(e: { type: string; clientX: number; clientY: number }) {
       const dir = e.type === "pointerup" ? null : { dx: Math.sign(e.clientX - centre.x), dy: Math.sign(e.clientY - centre.y) };
       game.hold(dir && (dir.dx || dir.dy) ? dir : null, latency);
+      // Something else moving the thumb back after the first turn (as the harness's own slide could).
+      if (dir && ++moves === 2 && rogue) game.hold(rogue.dir, latency + rogue.late);
       return true;
     },
   };
@@ -87,10 +90,10 @@ function page(game: Walker, burst: number, latency: number, onFrame?: (g: Walker
   });
   return {
     async walk(legs: PathArg["legs"]): Promise<PathResult> {
+      delete (globalThis as { __qaStickArmed?: boolean }).__qaStickArmed; // a new fake document
       expect(walkPath({ legs, centre, reach: 40, stall: stallFrames(16), idleMs: 2000 })).toBe(true);
-      // The touch goes down and leans toward the first leg, through the browser (slower).
+      // The touch goes down on the stick's centre (walkPath leans it).
       for (const fn of listeners) fn({ target: stick, pointerId: 3 });
-      game.hold(legs[0]!, latency * 2);
       const result = await (globalThis as typeof globalThis & { __qaWalk: Promise<PathResult> }).__qaWalk;
       for (let i = 0; i < 64; i++) game.tick(); // whatever the game does next on its own
       return result;
@@ -131,6 +134,17 @@ describe("walkPath", () => {
     expect(result).toMatchObject({ end: "done", leg: 3 });
     expect([game.x, game.y]).toEqual([8, 6]);
     expect(countSteps([...result.trail, game.state])).toBe(6);
+  });
+
+  it("lets go at once when the thumb is moved back the old way after a turn", async () => {
+    // Up 2 then left 4, with something leaning the thumb up again just after the turn: without the
+    // fail safe the player walks up until a wall stops them.
+    const game = new Walker();
+    const result = await page(game, 6, 4, undefined, { dir: { dx: 0, dy: -1 }, late: 2 }).walk([up(2), left(4)]);
+    expect(result.end).toBe("astray");
+    const steps = countSteps([...result.trail, game.state]);
+    expect(steps).toBeLessThanOrEqual(6);
+    expect(game.y).toBeGreaterThanOrEqual(7);
   });
 
   it("stops at a wall, after the game has run a while without a step", async () => {
@@ -181,7 +195,8 @@ describe("walkNote", () => {
     expect(note(3, "map")).toBe("You moved 3 of 4 steps: the map changed.");
     expect(note(2, "blocked")).toBe("You moved 2 of 4 steps; something stopped you going up.");
   });
-  it("owns up to going too far", () => {
+  it("owns up to going too far, and to the harness letting go", () => {
     expect(note(5, null)).toBe("You moved 5 steps (you asked for 4).");
+    expect(note(3, "astray")).toBe("You moved 3 steps of the 4 you asked for: the joystick went a way you didn't ask for, so the harness let go (a harness problem).");
   });
 });
