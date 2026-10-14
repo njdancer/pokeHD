@@ -111,7 +111,7 @@
 .qs[data-mode="talk"] .qs-paused-pill { display: inline-flex; animation: qs-pop .5s var(--ease); }
 
 /* ---------- play: interleaved stream ---------- */
-.qs .qs-stream { left: 604px; top: 200px; width: 744px; height: 468px; display: flex; flex-direction: column; padding: 20px 26px 22px 30px; }
+.qs .qs-stream { left: 604px; top: 200px; width: 744px; height: 360px; display: flex; flex-direction: column; padding: 20px 26px 22px 30px; }
 .qs .qs-streamhead { display: flex; align-items: center; gap: 14px; flex: none; margin-bottom: 8px; }
 .qs .qs-streamhead .qs-who { font-family:"Fredoka",sans-serif; font-weight:700; font-size: 36px; color: var(--blue); }
 .qs .qs-dots { display: inline-flex; gap: 7px; }
@@ -123,14 +123,14 @@
   -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px); mask-image: linear-gradient(to bottom, transparent 0, #000 40px);
 }
 .qs .qs-flow li { flex: none; }
-.qs .qs-t { font-size: 30px; line-height: 1.22; padding: 2px 0 2px 22px; border-left: 6px solid #b9d8f0; color: var(--muted); }
+.qs .qs-t { font-size: 25px; line-height: 1.22; padding: 2px 0 2px 22px; border-left: 6px solid #b9d8f0; color: var(--muted); }
 /* Older thoughts keep to two lines, so the shorter feed (the dev chat sits under it) still shows a few. */
 .qs .qs-t:not(.qs-now, .qs-cut) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .qs .qs-t.qs-now {
-  color: var(--ink); font-size: 35px; font-weight: 800; border-left-color: var(--blue);
+  color: var(--ink); font-size: 29px; font-weight: 800; border-left-color: var(--blue);
   background: var(--haiku-tint); border-radius: 0 18px 18px 0; padding: 10px 16px 12px 22px;
 }
-.qs .qs-a { display: flex; align-items: center; gap: 12px; padding-left: 8px; font-size: 26px; font-weight: 800; color: var(--ink); white-space: nowrap; }
+.qs .qs-a { display: flex; align-items: center; gap: 12px; padding-left: 8px; font-size: 22px; font-weight: 800; color: var(--ink); white-space: nowrap; }
 .qs .qs-a .qs-ic {
   flex: none; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
   background: var(--paper); border: 3px solid var(--edge); font-size: 22px; color: var(--accent-dark);
@@ -141,7 +141,7 @@
 .qs .qs-a.qs-new .qs-tagnew { font-size: 22px; background: var(--accent); color: #fff; border-radius: 10px; padding: 1px 10px; letter-spacing: .06em; }
 
 /* ---------- play: the dev chat under the feed (Haiku and Opus, latest few messages) ---------- */
-.qs .qs-threadcard { left: 604px; top: 692px; width: 744px; height: 360px; display: flex; flex-direction: column; padding: 16px 26px 20px 26px; }
+.qs .qs-threadcard { left: 604px; top: 584px; width: 744px; height: 468px; display: flex; flex-direction: column; padding: 16px 26px 20px 26px; }
 .qs .qs-threadcard .qs-streamhead { gap: 10px; margin-bottom: 6px; }
 .qs .qs-threadcard .qs-who.qs-o { color: var(--accent); }
 .qs .qs-amp { font-family:"Fredoka",sans-serif; font-weight: 600; font-size: 30px; color: var(--muted); }
@@ -158,11 +158,12 @@
 .qs .qs-tm.qs-latest.qs-from-opus { border-color: var(--accent); }
 .qs .qs-tm .qs-av { width: 40px; height: 40px; font-size: 22px; border-width: 3px; box-shadow: 0 0 0 3px var(--edge); margin-top: 1px; }
 .qs .qs-tmtext {
-  margin: 0; min-width: 0; font-size: 27px; line-height: 1.25; font-weight: 700; color: var(--ink);
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  margin: 0; min-width: 0; font-size: 23px; line-height: 1.25; font-weight: 700; color: var(--ink);
+  /* Whole messages; the clamp only guards against one that couldn't fit the card at all. */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 12; overflow: hidden;
 }
-.qs .qs-tm.qs-latest .qs-tmtext { -webkit-line-clamp: 3; }
-.qs .qs-tmtext .qs-chip { display: inline-block; font-size: 20px; line-height: 1.35; margin-right: 10px; vertical-align: 3px; font-weight: 900; }
+.qs .qs-tm.qs-latest .qs-tmtext { -webkit-line-clamp: 12; }
+.qs .qs-tmtext .qs-chip { display: inline-block; font-size: 17px; line-height: 1.35; margin-right: 10px; vertical-align: 3px; font-weight: 900; }
 .qs .qs-thread .qs-none { padding: 2px 0 2px 4px; }
 
 /* ---------- right column ---------- */

@@ -30,9 +30,13 @@ export function useBroadcast(bus: string, enabled: boolean): void {
       for (const track of stream.getTracks()) {
         const sender = pc.addTrack(track, stream);
         if (track.kind !== "video") continue;
-        // WebRTC starts low and ramps up; let it reach a clean 1080p picture on the local network.
+        // A screen share keeps its sharpness and sheds frames when the CPU is short (it fell to
+        // under one a second); a game should do the opposite.
+        track.contentHint = "motion";
+        // WebRTC starts low and ramps up; let it reach a clean picture on the local network.
         const params = sender.getParameters();
         for (const encoding of params.encodings ?? []) encoding.maxBitrate = MAX_BITRATE;
+        params.degradationPreference = "maintain-framerate";
         void sender.setParameters(params).catch(() => {});
       }
       await pc.setRemoteDescription({ type: "offer", sdp });
@@ -48,8 +52,9 @@ export function useBroadcast(bus: string, enabled: boolean): void {
     void (async () => {
       try {
         stream = await navigator.mediaDevices.getDisplayMedia({
-          // A retina window would otherwise capture at twice its size (3200×1780 on the Mac).
-          video: { frameRate: 30, width: { max: 1920 }, height: { max: 1080 } },
+          // 720p is what OBS sends on, and a retina window would otherwise capture at twice its
+          // size. Encoding 1080p cost the busy Mac its frame rate.
+          video: { frameRate: 30, width: { max: 1280 }, height: { max: 720 } },
           audio: true,
           preferCurrentTab: true,
           selfBrowserSurface: "include",
