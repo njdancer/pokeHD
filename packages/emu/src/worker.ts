@@ -16,6 +16,7 @@ import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
 import { JournalHooks } from "./journal-hooks.ts";
 import { LinkPort } from "./link.ts";
+import { BlockWatch } from "./block-watch.ts";
 import { gameInputWait } from "./input-wait.ts";
 import type { FromWorker, FromWorklet, ToWorker, ToWorklet, Watch } from "./protocol.ts";
 
@@ -54,6 +55,7 @@ let actions: GameActions | undefined;
 const cancels = new Map<number, () => void>();
 let asks: GameAsks | undefined;
 let battleMenus: BattleMenus | undefined;
+let blockWatch: BlockWatch | undefined;
 let scriptText = false;
 
 const post = (message: FromWorker, transfer?: Transferable[]) => scope.postMessage(message, transfer);
@@ -66,6 +68,7 @@ function runOneFrame() {
   gb.runFrame();
   frames++;
   autosave?.frame();
+  blockWatch?.frame();
 
   const pcm = gb.drainAudio();
   if (audio) {
@@ -197,6 +200,9 @@ async function handle(data: ToWorker) {
           const act = (actions = new GameActions(gb, { rom: data.rom }));
           asks = new GameAsks(gb, { rom: data.rom, busy: () => act.pending > 0 && SafePoint.of(g).calling, onAsk: (id, ask) => post({ type: "ask", id, ask }) });
         }
+        blockWatch = data.blocks ? new BlockWatch(gb, (blocks) => post({ type: "blocks", blocks })) : undefined;
+        // A resume point holds whatever the game had changed: send it as it is.
+        blockWatch?.refresh();
         battleMenus = data.battleMenus ? new BattleMenus(gb, { rom: data.rom, onAsk: (id, ask) => post({ type: "battle-ask", id, ask }) }) : undefined;
         rom = data.rom;
         if (scriptText) controls.setScriptText(rom);
@@ -270,6 +276,7 @@ async function handle(data: ToWorker) {
       case "load-state":
         gb?.loadState(data.state);
         journal?.resync();
+        blockWatch?.refresh();
         break;
       case "resume-point": {
         // Not mid-way through one of our calls, a link session, or a gift the room would resend.

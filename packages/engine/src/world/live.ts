@@ -79,6 +79,11 @@ const BATTLE_SWING = 1.1;
 const LEAVE_WAIT = 0.5;
 /** Neighbouring maps nearer the player than this (steps) must be drawn before the view shows. */
 const HOLD_STEPS = 20;
+/**
+ * More blocks than this changed from the ROM's is no change the game makes (its biggest are a
+ * few doors at once) but blocks read mid-load: ignored (see `setBlocks`).
+ */
+const MAX_CHANGED_BLOCKS = 64;
 
 /** The look's camera when there's no look to read it from. */
 const DEFAULT_VIEW: CameraView = { pitch: 38, yaw: 0, distance: 30, fov: 24 };
@@ -105,6 +110,16 @@ type LookLike = Pick<LookController, "params">;
 export interface LiveWorld extends WorldContent {
   /** Hands over the state decoded after an emulator frame. `at` is in seconds (performance clock). */
   push(state: LiveState, at?: number): void;
+  /**
+   * The game's current map's blocks as it has them now (wOverworldMap, through the emulator's
+   * BlockWatch), row-major and the size of the ROM's. Where they differ from the ROM's (a tree cut
+   * down, a door opened) the map's chunk is built again with them; every other map is as the ROM
+   * has it, as in the game, which builds each map afresh from the ROM when it loads it (so cut
+   * trees grow back).
+   */
+  setBlocks(mapId: number, blocks: Uint8Array): void;
+  /** Map ID → the blocks the game has changed from the ROM's, for debugging and tests. */
+  readonly liveBlocks: ReadonlyMap<MapId, Uint8Array>;
   /**
    * Friends present now, from the room's presence; anyone missing has left. A friend is drawn
    * only while their map is loaded. `at` is in seconds (performance clock).
@@ -158,6 +173,8 @@ interface Chunk {
   group: THREE.Group | null;
   /** Where the group sits relative to the map origin, in world units. */
   offset: { x: number; z: number };
+  /** The live blocks the group was built with (`setBlocks`); null for the ROM's. */
+  blocks: Uint8Array | null;
 }
 
 export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}): LiveWorld {
@@ -244,7 +261,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
   /** A chunk for `map` at a new placement: a spare one if there is one, else one to build. */
   const revive = (map: MapData, bx: number, by: number, hops: number): Chunk => {
     const old = spare.get(map.id);
-    if (!old?.group) return { map, bx, by, hops, group: null, offset: { x: 0, z: 0 } };
+    if (!old?.group) return { map, bx, by, hops, group: null, offset: { x: 0, z: 0 }, blocks: null };
     spare.delete(map.id);
     const c = { ...old, bx, by, hops };
     c.group!.position.set(bx * 2 + c.offset.x, 0, by * 2 + c.offset.z);
@@ -259,6 +276,18 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     c.group = null;
   };
 
+  /**
+   * Blocks the game has changed from the ROM's, for its current map only (`setBlocks`). A chunk
+   * whose `blocks` isn't its map's entry here (by reference) is stale and gets built again.
+   */
+  const liveBlocks = new Map<MapId, Uint8Array>();
+  const wanted = (id: MapId) => liveBlocks.get(id) ?? null;
+  /** The map as the game has it now, for whatever reads its blocks outside the chunk build. */
+  const liveMap = (map: MapData): MapData => {
+    const blocks = liveBlocks.get(map.id);
+    return blocks ? { ...map, blocks } : map;
+  };
+
   const builder = options.builder ?? createChunkBuilder(world);
   /** The chunk being built in the background; one at a time, nearest first. */
   let building: Chunk | null = null;
@@ -267,6 +296,9 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     const rect = (m: { map: MapData; bx: number; by: number }): BlockRect => ({
       id: m.map.id, x0: m.bx, y0: m.by, x1: m.bx + m.map.widthBlocks, y1: m.by + m.map.heightBlocks,
     });
+    const blocks = wanted(c.map.id);
+    /** A chunk built before: its group stays drawn until the new one is ready to take its place. */
+    const old = c.group;
     const result = builder.build({
       map: c.map.id,
       rects: [rect(c), ...neighbours(c).map(rect)],
@@ -274,26 +306,54 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       style,
       params,
       colours: placeColours(world, c.map.id, outside),
+      ...(blocks ? { blocks } : {}),
     });
-    if (!(result instanceof Promise)) return finish(c, result);
+    const done = (r: ChunkResult) => (old ? replace(old, r, blocks) : finish(c, r, blocks));
+    if (!(result instanceof Promise)) return done(result);
     building = c;
     result.then(
       (r) => {
         building = null;
-        if (!disposed) finish(c, r);
+        if (!disposed) done(r);
       },
       (e: unknown) => {
         building = null;
         console.warn(`[pokeHD] couldn't build map ${c.map.id}`, e);
         // Don't try again, and don't hold the view black waiting for it.
+        if (old) {
+          const h = holder(old);
+          if (h) h.blocks = blocks;
+          return;
+        }
         c.group = new THREE.Group();
+        c.blocks = blocks;
         compiled.add(c.group);
         show(c);
       },
     );
   };
+  const noteBuild = (map: MapId, r: ChunkResult) => {
+    const at = performance.now() - r.mainMs;
+    builds.push({ map, ms: r.mainMs, at, totalMs: r.totalMs });
+    if (builds.length > 16) builds.shift();
+  };
+  /** Once `group`'s shaders are compiled (at once without a compiler). */
+  const whenCompiled = (group: THREE.Group, then: () => void) => {
+    if (!compile) {
+      compiled.add(group);
+      return then();
+    }
+    const ready = () => {
+      compiled.add(group);
+      then();
+    };
+    compile(group).then(ready, (e: unknown) => {
+      console.warn("[pokeHD] couldn't precompile a map chunk", e);
+      ready();
+    });
+  };
   /** Takes a built chunk on: into the scene once compiled, or kept spare if it's no longer loaded. */
-  const finish = (c: Chunk, r: ChunkResult) => {
+  const finish = (c: Chunk, r: ChunkResult, blocks: Uint8Array | null) => {
     // The map may have been left and come back since (a new Chunk, still unbuilt); its border
     // doesn't depend on placement, so the build serves it.
     const now = chunks.get(c.map.id);
@@ -302,26 +362,49 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     owner.offset = { x: -r.rootX * TILE_UNITS, z: -r.rootY * TILE_UNITS };
     group.position.set(owner.bx * 2 + owner.offset.x, 0, owner.by * 2 + owner.offset.z);
     owner.group = group;
-    if (!compile) {
-      compiled.add(group);
-      show(owner);
-    } else {
-      const ready = () => {
-        compiled.add(group);
-        // It may have been dropped, or retired and revived (a new Chunk with the same group).
-        const current = chunks.get(owner.map.id);
-        if (current?.group === group) show(current);
-      };
-      compile(group).then(ready, (e: unknown) => {
-        console.warn("[pokeHD] couldn't precompile a map chunk", e);
-        ready();
-      });
-    }
+    owner.blocks = blocks;
+    whenCompiled(group, () => {
+      // It may have been dropped, or retired and revived (a new Chunk with the same group).
+      const current = chunks.get(owner.map.id);
+      if (current?.group === group) show(current);
+    });
     if (chunks.get(owner.map.id) !== owner) retire(owner);
-    const at = performance.now() - r.mainMs;
-    builds.push({ map: owner.map.id, ms: r.mainMs, at, totalMs: r.totalMs });
-    if (builds.length > 16) builds.shift();
+    noteBuild(owner.map.id, r);
   };
+  /** The chunk, loaded or spare, that holds `group`. */
+  const holder = (group: THREE.Group): Chunk | undefined => {
+    for (const c of [...chunks.values(), ...spare.values()]) if (c.group === group) return c;
+    return undefined;
+  };
+  /**
+   * A chunk built again with the game's live blocks: it takes the old group's place once its
+   * shaders are compiled, so the map never goes missing in between.
+   */
+  const replace = (old: THREE.Group, r: ChunkResult, blocks: Uint8Array | null) => {
+    const group = r.group;
+    noteBuild(holder(old)?.map.id ?? (-1 as MapId), r);
+    replacing.add(old);
+    whenCompiled(group, () => {
+      replacing.delete(old);
+      // Retired and revived since is the same group in a new Chunk; dropped is none.
+      const c = disposed ? undefined : holder(old);
+      if (!c) return disposeTree(group);
+      c.offset = { x: -r.rootX * TILE_UNITS, z: -r.rootY * TILE_UNITS };
+      group.position.set(c.bx * 2 + c.offset.x, 0, c.by * 2 + c.offset.z);
+      group.visible = old.visible;
+      const drawn = old.parent === root;
+      root.remove(old);
+      disposeTree(old);
+      c.group = group;
+      c.blocks = blocks;
+      if (drawn) root.add(group);
+    });
+  };
+  /** Old groups whose replacement is built and compiling. */
+  const replacing = new Set<THREE.Group>();
+  /** A built chunk whose blocks aren't the game's: the player's map first, then the rest loaded (or spare ones). */
+  const stale = (among: Iterable<Chunk>): Chunk | undefined =>
+    [...among].sort((a, b) => a.hops - b.hops).find((c) => c.group && !replacing.has(c.group) && c.blocks !== wanted(c.map.id));
 
   /**
    * Maps behind the doors near the player, built ahead and kept spare, so going through one
@@ -346,7 +429,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
       if (doorTried.has(to) || chunks.has(to) || spare.has(to)) continue;
       const map = world.maps[to];
       doorTried.add(to);
-      if (map) return { map, bx: 0, by: 0, hops: KEEP_HOPS + 1, group: null, offset: { x: 0, z: 0 } };
+      if (map) return { map, bx: 0, by: 0, hops: KEEP_HOPS + 1, group: null, offset: { x: 0, z: 0 }, blocks: null };
     }
     return undefined;
   };
@@ -400,12 +483,13 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
    * terraces (./terraces.ts), read from the same region the chunk is built from; elsewhere 0.
    * Blended between steps, so walking down stone steps glides.
    */
-  const grounds = new Map<MapId, (x: number, z: number) => number>();
+  const grounds = new Map<MapId, { blocks: Uint8Array | null; f: (x: number, z: number) => number }>();
   const groundOf = (map: MapData) => {
-    let f = grounds.get(map.id);
-    if (f) return f;
-    f = () => 0;
-    const region = style === "voxel" ? null : buildRegion(world, map.id, { marginBlocks: MARGIN_BLOCKS });
+    const blocks = wanted(map.id);
+    const known = grounds.get(map.id);
+    if (known?.blocks === blocks) return known.f;
+    let f = (_x: number, _z: number) => 0;
+    const region = style === "voxel" ? null : buildRegion(world, map.id, { marginBlocks: MARGIN_BLOCKS, ...(blocks ? { blocks } : {}) });
     if (region && hasTerraces(region)) {
       const t = terraces(region);
       const at = (sx: number, sy: number) => stepLevel(t, region, region.rootX, region.rootY, sx, sy) * params.terraceHeight;
@@ -421,7 +505,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         return top * (1 - fy) + bottom * fy;
       };
     }
-    grounds.set(map.id, f);
+    grounds.set(map.id, { blocks, f });
     return f;
   };
 
@@ -452,7 +536,7 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     if (!here || !p) return;
     battle ??= createBattleLayer(arenaStyle);
     if (!battle.root.parent) root.add(battle.root);
-    const placed = arenaPlacement(world, here.map, { x: p.x, y: p.y, facing: p.facing ?? "down" }, p.transport === "surf");
+    const placed = arenaPlacement(world, liveMap(here.map), { x: p.x, y: p.y, facing: p.facing ?? "down" }, p.transport === "surf");
     const ox = here.bx * 2;
     const oz = here.by * 2;
     battle.place({
@@ -518,6 +602,22 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
     get placeTint() {
       return current === null ? null : placeColours(world, current, outside).tint;
     },
+    setBlocks(mapId, blocks) {
+      const map = world.maps[mapId];
+      if (!map || blocks.length !== map.blocks.length) return;
+      let changed = 0;
+      for (let i = 0; i < blocks.length; i++) if (blocks[i] !== map.blocks[i]) changed++;
+      // Read while the game was part-way through loading a map: the next load sends them again.
+      if (changed > MAX_CHANGED_BLOCKS) return;
+      const had = liveBlocks.get(map.id);
+      const same = had && had.every((b, i) => b === blocks[i]);
+      // The game holds only its current map: every other one is the ROM's again.
+      liveBlocks.clear();
+      if (changed) liveBlocks.set(map.id, same ? had : blocks.slice());
+    },
+    get liveBlocks() {
+      return liveBlocks;
+    },
     push(state, at = clock()) {
       const before = current;
       if (state.lastMap !== undefined) outside = state.lastMap;
@@ -545,9 +645,13 @@ export function createLiveWorld(world: WorldData, options: LiveWorldOptions = {}
         const pending = [...chunks.values()].filter((c) => !c.group && (c.hops <= 1 || inside));
         pending.sort((a, b) => a.hops - b.hops);
         // Doors come before maps two connections out: going through one is the likelier next step.
-        const door = pending[0] && pending[0].hops <= 1 ? undefined : nextDoor();
-        if (door) build(door);
-        else if (pending[0]) build(pending[0]);
+        const near = !!pending[0] && pending[0].hops <= 1;
+        // A loaded map the game has changed (a tree cut down) comes next; maps kept spare that it
+        // has put back as they were (the tree grown again) only when there's nothing else.
+        const changed = near ? undefined : stale(chunks.values());
+        const door = near || changed ? undefined : nextDoor();
+        const next = door ?? changed ?? pending[0] ?? stale(spare.values());
+        if (next) build(next);
       }
 
       if (latest && here && prev && last) {

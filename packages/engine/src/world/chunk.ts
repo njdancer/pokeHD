@@ -29,6 +29,8 @@ export interface ChunkJob {
   style: StyleId;
   params: StyleParams;
   colours: PlaceColours;
+  /** The map's live blocks, where the game has changed them from the ROM's (see `RegionOptions.blocks`). */
+  blocks?: Uint8Array;
 }
 
 export interface BuiltChunk {
@@ -58,7 +60,7 @@ export function buildChunk(world: WorldData, job: ChunkJob): BuiltChunk {
     }
     return best.id === self.id;
   };
-  const region = buildRegion(world, job.map, { marginBlocks: job.marginBlocks, drawBorder });
+  const region = buildRegion(world, job.map, { marginBlocks: job.marginBlocks, drawBorder, ...(job.blocks ? { blocks: job.blocks } : {}) });
   const labelled = LABEL_TABLES[world.tilesets[world.maps[job.map]!.tileset]!.name] !== undefined;
   const group = labelled ? buildStyle(job.style, region, job.params, job.colours) : buildFlat(region);
   return { group, rootX: region.rootX, rootY: region.rootY };

@@ -265,6 +265,11 @@ export const ALLOWLIST: readonly string[] = [
   // and where on it the player stands: the block map view a warp sets (event_displacement)
   "wCurrentTileBlockMapViewPointer",
   "wOverworldMap",
+  // The routines that write wOverworldMap, so the HD view follows the game's live blocks (cut
+  // trees, opened doors): packages/emu/src/block-watch.ts
+  "LoadTileBlockMap",
+  "ReplaceTileBlock",
+  "ReplaceTreeTileBlock",
   "EvosMovesPointerTable",
   "Moves",
   "TechnicalMachines",

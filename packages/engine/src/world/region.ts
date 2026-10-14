@@ -51,6 +51,11 @@ export interface RegionOptions {
    * Map blocks are always drawn.
    */
   drawBorder?: (bx: number, by: number) => boolean;
+  /**
+   * The root map's blocks as the game has them now (a tree cut down, a door opened), in place of
+   * the ROM's; the same size as `MapData.blocks`. Other maps always take the ROM's.
+   */
+  blocks?: Uint8Array;
 }
 
 /** Map origins in blocks, relative to the root, following connections between included maps. */
@@ -97,9 +102,10 @@ export function buildRegion(world: WorldData, root: MapId, options: RegionOption
   const drawBorder = options.drawBorder ?? (() => true);
   for (let y = 0; y < hb; y++) for (let x = 0; x < wb; x++) drawn[y * wb + x] = drawBorder(x + minX, y + minY) ? 1 : 0;
   for (const { map, bx, by } of placed) {
+    const blocks = map.id === root && options.blocks?.length === map.blocks.length ? options.blocks : map.blocks;
     for (let y = 0; y < map.heightBlocks; y++) {
       for (let x = 0; x < map.widthBlocks; x++) {
-        grid[(by - minY + y) * wb + bx - minX + x] = map.blocks[y * map.widthBlocks + x]!;
+        grid[(by - minY + y) * wb + bx - minX + x] = blocks[y * map.widthBlocks + x]!;
         drawn[(by - minY + y) * wb + bx - minX + x] = 1;
       }
     }

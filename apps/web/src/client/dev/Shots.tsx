@@ -3,7 +3,9 @@
 // Open /dev/shots. URL options: ?map=VIRIDIAN_CITY (default Pallet Town), ?at=x,y (the player's
 // cell; default in front of the map's first door), ?phase=0.5 (time of day, 0 morning to 1
 // evening), ?dusk=1 (0 none to 1 full dusk, after the evening), ?quality=mobile (default full),
-// ?size=WxH (default 960x540).
+// ?size=WxH (default 960x540), ?blocks=7,9:4c;… (blocks the game has changed, as the live world
+// gets them from the game: x,y in blocks, then the new block in hex; Vermilion's cut tree is
+// map=VERMILION_CITY&at=14,18&blocks=7,9:4c).
 // Once every nearby map is built, window.__shots.capture() renders a frame and returns it as a
 // PNG data URL.
 import { useEffect, useRef, useState } from "react";
@@ -68,6 +70,16 @@ export function Shots() {
 
       // Stand still and let every nearby map build, then let the grade's place tint settle.
       const state = standingState(world, map, at && at.length === 2 ? { x: at[0]!, y: at[1]! } : undefined);
+      const changes = query.get("blocks");
+      if (changes) {
+        const m = world.maps[map]!;
+        const blocks = m.blocks.slice();
+        for (const change of changes.split(";")) {
+          const [x, y, block] = change.split(/[,:]/);
+          blocks[Number(y) * m.widthBlocks + Number(x)] = parseInt(block!, 16);
+        }
+        live.setBlocks(map, blocks);
+      }
       setStatus("Building the map…");
       let built = false;
       for (let i = 0; i < 900 && !disposed; i++) {

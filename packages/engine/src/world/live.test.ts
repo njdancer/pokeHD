@@ -145,6 +145,102 @@ describe("createLiveWorld with a background builder", () => {
   });
 });
 
+describe("createLiveWorld with the game's live blocks", () => {
+  const camera = new THREE.PerspectiveCamera();
+  camera.position.set(0, 20, 20);
+  const setup = () => {
+    const world = fakeWorld();
+    const local = inPlaceBuilder(world);
+    const queue: { job: ChunkJob; resolve: (r: ChunkResult) => void }[] = [];
+    const builder: ChunkBuilder = { build: (job) => new Promise((resolve) => queue.push({ job, resolve })), dispose() {} };
+    /** The newest group built for each map. */
+    const groups = new Map<number, THREE.Group>();
+    const flush = async () => {
+      for (const q of queue.splice(0)) {
+        const r = local.build(q.job) as ChunkResult;
+        groups.set(q.job.map, r.group);
+        q.resolve(r);
+      }
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+    };
+    const live = createLiveWorld(world, { builder });
+    const update = () => live.update(0, camera, new THREE.Vector3(), false);
+    return { world, live, queue, flush, groups, update };
+  };
+  /** Map A's ROM blocks with its top-right block (a roof) cut down to ground. */
+  const cut = () => new Uint8Array([0, 0, 0, 0]);
+
+  it("builds the player's map again with the blocks the game changed, keeping the old one drawn until then", async () => {
+    const { live, queue, flush, groups, update } = setup();
+    const pending: (() => void)[] = [];
+    live.setCompiler(() => new Promise<void>((resolve) => pending.push(resolve)));
+    live.push(walk()[0]!, 0);
+    update();
+    await flush();
+    pending.splice(0).forEach((go) => go());
+    await flush();
+    const before = groups.get(0)!;
+    expect(before.parent).toBe(live.root);
+    // B, the neighbour, is next in line; it goes first (it's needed to draw the view).
+    update();
+    expect(queue.map((q) => q.job.map)).toEqual([1]);
+    await flush();
+    pending.splice(0).forEach((go) => go());
+    await flush();
+
+    live.setBlocks(0, cut());
+    expect([...live.liveBlocks.keys()]).toEqual([0]);
+    update();
+    expect(queue.map((q) => [q.job.map, [...(q.job.blocks ?? [])]])).toEqual([[0, [0, 0, 0, 0]]]);
+    await flush();
+    const after = groups.get(0)!;
+    // Built, still compiling: the old map stays.
+    expect(before.parent).toBe(live.root);
+    expect(after.parent).toBeNull();
+    update();
+    expect(queue).toHaveLength(0); // not built twice while it compiles
+    pending.splice(0).forEach((go) => go());
+    await flush();
+    expect(after.parent).toBe(live.root);
+    expect(before.parent).toBeNull();
+    update();
+    expect(queue).toHaveLength(0);
+    live.dispose();
+  });
+
+  it("puts a map back as the ROM has it once the game loads it (or another map) afresh", async () => {
+    const { world, live, queue, flush, update } = setup();
+    live.push(walk()[0]!, 0);
+    update();
+    await flush();
+    update();
+    await flush();
+    live.setBlocks(0, cut());
+    update();
+    await flush();
+    expect(queue).toHaveLength(0);
+    // The game loads map B: A is the ROM's again.
+    live.setBlocks(1, world.maps[1]!.blocks);
+    expect(live.liveBlocks.size).toBe(0);
+    update();
+    expect(queue.map((q) => [q.job.map, q.job.blocks])).toEqual([[0, undefined]]);
+    await flush();
+    // The same blocks again change nothing.
+    live.setBlocks(0, world.maps[0]!.blocks);
+    update();
+    expect(queue).toHaveLength(0);
+    live.dispose();
+  });
+
+  it("ignores blocks that aren't the map's size", () => {
+    const { live } = setup();
+    live.setBlocks(0, new Uint8Array(3));
+    live.setBlocks(9, new Uint8Array(4));
+    expect(live.liveBlocks.size).toBe(0);
+    live.dispose();
+  });
+});
+
 describe("createLiveWorld readiness", () => {
   const camera = new THREE.PerspectiveCamera();
   camera.position.set(0, 20, 20);
