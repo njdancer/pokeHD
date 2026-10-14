@@ -62,19 +62,94 @@ function netMove(walk: WalkResult, before: { x: number; y: number; map: number }
   return `This turn took you ${parts.length ? parts.join(" and ") : "back where you started"}.`;
 }
 
+/**
+ * What the player has seen of the map it's on, kept from each turn's text map, measured from where
+ * it came in (a fixed origin, which the live player asked for: "the text map recentres after every
+ * move, so I can't keep absolute coordinates"). Starts again on a new map.
+ */
+class Explored {
+  map = -1;
+  entry = { x: 0, y: 0 };
+  cells = new Map<string, string>();
+
+  see(sim: Sim): void {
+    const s = sim.state();
+    if (s.mapId !== this.map) {
+      this.map = s.mapId;
+      this.entry = { x: s.player.x, y: s.player.y };
+      this.cells.clear();
+    }
+    const rows = sim.textMap(s).split("\n").slice(1, 10).map((l) => l.slice(2));
+    rows.forEach((row, dy) =>
+      [...row].forEach((c, dx) => {
+        // People move: remember the floor under them as floor.
+        this.cells.set(`${s.player.x + dx - 4},${s.player.y + dy - 4}`, c === "@" || c === "N" ? "." : c);
+      }),
+    );
+  }
+
+  where(sim: Sim): string {
+    const s = sim.state();
+    const dx = s.player.x - this.entry.x;
+    const dy = s.player.y - this.entry.y;
+    const parts = [dy ? `${Math.abs(dy)} ${dy < 0 ? "north" : "south"}` : "", dx ? `${Math.abs(dx)} ${dx < 0 ? "west" : "east"}` : ""].filter(Boolean);
+    return parts.length ? `You're ${parts.join(" and ")} of where you came into this map (or started).` : "You're where you came into this map (or started).";
+  }
+
+  draw(sim: Sim): string {
+    const s = sim.state();
+    const keys = [...this.cells.keys()].map((k) => k.split(",").map(Number) as [number, number]);
+    const xs = keys.map((k) => k[0]);
+    const ys = keys.map((k) => k[1]);
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+    const lines: string[] = [];
+    for (let y = y0; y <= y1; y++) {
+      let line = "";
+      for (let x = x0; x <= x1; x++) {
+        line += x === s.player.x && y === s.player.y ? "@" : x === this.entry.x && y === this.entry.y ? "E" : (this.cells.get(`${x},${y}`) ?? " ");
+      }
+      lines.push(line.trimEnd());
+    }
+    return `Everything you've seen of this map so far (fixed: north up, E where you came in or started, @ you, blank not seen yet):\n${lines.join("\n")}`;
+  }
+}
+
 /** The pieces a variant can switch on; each variant is its parent plus one more. */
 export interface Features {
   exitNote?: boolean;
   netMove?: boolean;
   description?: string;
+  /** A line saying where you are from where you came into the map. */
+  fromEntry?: boolean;
+  /** A fixed map of everything seen on this map so far. */
+  exploredMap?: boolean;
 }
 
 function build(id: string, note: string, parent: string | null, f: Features): Variant {
+  // One memory per game, started again with each episode's opening.
+  const memory = new WeakMap<Sim, Explored>();
+  const explored = (sim: Sim) => memory.get(sim) ?? memory.set(sim, new Explored()).get(sim)!;
+  const tracking = (sim: Sim): string | null => {
+    if (!f.fromEntry && !f.exploredMap) return null;
+    const e = explored(sim);
+    e.see(sim);
+    return [f.exploredMap ? e.draw(sim) : null, e.where(sim)].filter(Boolean).join("\n");
+  };
   const extra = (sim: Sim, walk: WalkResult, before: { x: number; y: number; map: number }) =>
     // The exit note is in the text map itself now (textmap.ts underfoot), so only the rest is added.
-    [f.netMove ? netMove(walk, before, sim) : null].filter(Boolean).join("\n") || null;
+    [f.netMove ? netMove(walk, before, sim) : null, tracking(sim)].filter(Boolean).join("\n") || null;
   const tool = joystick({ ...(f.description && { description: f.description }), extra });
-  return { id, note, parent, features: f, tools: { joystick: tool }, opening: (sim) => sim.opening() };
+  return {
+    id,
+    note,
+    parent,
+    features: f,
+    tools: { joystick: tool },
+    opening: (sim) => {
+      memory.set(sim, new Explored());
+      return withExtra(sim.opening(), tracking(sim));
+    },
+  };
 }
 
 const RECENTRE =
@@ -86,4 +161,6 @@ export const VARIANTS: Record<string, Variant> = {
   "exit-note": build("exit-note", "When you stop on an exit mat (D under the @), the result says so and which way walks out.", "baseline", { exitNote: true }),
   "exit-net": build("exit-net", "Adds a line saying how far the turn took you (e.g. 3 north and 2 east).", "exit-note", { exitNote: true, netMove: true }),
   "exit-recentre": build("exit-recentre", "Description explains the map recentres on you each step, and how to turn a column and row into arrows.", "exit-note", { exitNote: true, description: RECENTRE }),
+  "from-entry": build("from-entry", "Adds a line saying where you are from where you came into the map (a fixed origin).", "exit-note", { exitNote: true, fromEntry: true }),
+  "explored-map": build("explored-map", "Adds a fixed map of everything seen on this map so far (E where you came in), with the from-entry line.", "from-entry", { exitNote: true, fromEntry: true, exploredMap: true }),
 };
