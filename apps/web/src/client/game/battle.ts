@@ -3,7 +3,7 @@
 import {
   BATTLE_SCREEN_WATCHES, BattleDecoder, BattleScreenReader, CELL_SCENE, CELL_UI, EVOLUTION_WATCHES, EvolutionReader, battleTransition, evolutionShown,
   type BattleScreen, type BattleScreenWatched, type BattleState, type BattleWatched, type EvolutionScreen, type EvolutionWatched, type ScreenText, type TextBox,
-  type TextWatched, type Watch,
+  type DexOpened, type TextWatched, type Watch,
 } from "@pokehd/emu";
 import type { BattleView, Side } from "@pokehd/engine/battle";
 import { battlePalette, pokedexNumber, readSgbPalettes, SGB_PAL, type SgbPalette } from "@pokehd/rom";
@@ -522,6 +522,16 @@ export class BattleDexPage {
     }
     return this.#on;
   }
+}
+
+/**
+ * Where the Pokédex menu opens when the game opens its own Pokédex (DexGuard): the Pokémon tab's
+ * list, or the Pokémon's page the game waits on (after a catch, QA bugs 68 and 73), where backing
+ * out shuts the menu so one tap goes on (to the nickname). A DexMenu `start`.
+ */
+export function dexMenuStart(rom: Uint8Array, opened: DexOpened): { tab: "dex"; screen?: { k: "entry"; dex: number }; backCloses?: true } {
+  const dex = opened.kind === "data" ? pokedexNumber(rom, opened.species) : 0;
+  return dex ? { tab: "dex", screen: { k: "entry", dex }, backCloses: true } : { tab: "dex" };
 }
 
 /** The party screen's message alone ("GEODUDE recovered by 20!"), for the HD text layer. */

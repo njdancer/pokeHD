@@ -106,6 +106,7 @@ export class GameActions {
   readonly #rom: Uint8Array;
   readonly #safe: SafePoint;
   readonly #standIns: StandIn[];
+  readonly #removePause: () => void;
   /** Set while one of our calls is running: its answers and what it printed. */
   #running: { mon?: number; yesNo: boolean[]; messages: string[] } | null = null;
   #queued = 0;
@@ -143,6 +144,11 @@ export class GameActions {
       new StandIn(gb, "WaitForTextScrollButtonPress", ours, (g) => (keep(g), {})),
       new StandIn(gb, "ManualTextScroll", ours, (g) => (keep(g), {})),
     ];
+    // Words the game shows for a moment and moves on from, waiting for no button: FishingInit's
+    // "<PLAYER> used OLD ROD!" sits there for DelayFrames (QA bug 73).
+    this.#removePause = gb.addHook("DelayFrames", (g) => {
+      if (ours()) keep(g);
+    });
   }
 
   /** Keeps the text box's words for the result, unless it still shows the last kept. */
@@ -203,6 +209,7 @@ export class GameActions {
 
   dispose(): void {
     for (const s of this.#standIns) s.dispose();
+    this.#removePause();
   }
 
   #job(action: GameAction, done: (result: ActionResult) => void): Job {
@@ -258,6 +265,10 @@ export class GameActions {
               before: (g) => g.write(addr("hTextID"), TEXT_BOX),
               registers: () => ({ bc: SYMBOLS.DisplayTextIDInit.bank << 8, hl: SYMBOLS.DisplayTextIDInit.address }),
             },
+            // As the bag's "USE" does (StartMenu_Item) before UseItem: the item's name in
+            // wStringBuffer, where "<PLAYER> used OLD ROD!" reads it (QA bug 73: "used !").
+            { routine: "GetItemName", before: (g) => g.write(addr("wNamedObjectIndex"), item) },
+            { routine: "CopyToStringBuffer", registers: () => ({ de: addr("wNameBuffer") }) },
             {
               routine: "UseItem",
               before: (g) => {

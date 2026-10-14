@@ -1,12 +1,14 @@
 // ROM test for fishing from the Pokédex menu's bag (QA bug 72: the OLD ROD had no Use, so there was
 // no way to fish). The live menu's action (what the item page's "Use it" calls, verbs.test.ts) to
 // the game's own UseItem → ItemUseOldRod, at Vermilion's water where the QA player stood, facing it
-// and facing away. Skips without the dev ROM.
+// and facing away. The game's "<PLAYER> used OLD ROD!" names the rod, as from the start menu's bag
+// (QA bug 73: "used !"). Skips without the dev ROM.
 import { existsSync, readFileSync } from "node:fs";
 import { SYMBOLS, type SymbolName } from "@pokehd/rom";
 import { describe, expect, it } from "vitest";
 import { Button, GameBoy } from "../../../../../packages/emu/src/core.ts";
 import { GameActions } from "../../../../../packages/emu/src/game/actions.ts";
+import { textBoxText } from "../../../../../packages/emu/src/game/asks.ts";
 import { playIntro, setBag, setParty } from "../../../../../packages/emu/src/testing.ts";
 import { LiveActions, type LiveHost } from "./live.ts";
 
@@ -64,22 +66,29 @@ async function standAt(x: number, y: number, face: number) {
     game: null,
   };
   const actions = new LiveActions(rom, { current: host });
+  /** Every text box the game showed on the way, as the HD text layer reads the screen. */
+  const boxes: string[] = [];
   const use = async () => {
     expect(actions.useItem(OLD_ROD)).toBe("");
     for (let i = 0; i < 1800 && notices.length === 0; i++) {
       gb.runFrame();
+      const box = textBoxText(gb).replace(/\s+/g, " ").trim();
+      if (box && boxes.at(-1) !== box) boxes.push(box);
       await Promise.resolve();
     }
     return notices;
   };
-  return { gb, use };
+  return { gb, use, boxes };
 }
 
 describe.skipIf(!existsSync(ROM_PATH))("fishing from the menu (ROM)", () => {
   it("hooks a MAGIKARP with the OLD ROD facing Vermilion's water", async () => {
     // Where the QA player stood: (6, 4), the water to the left.
-    const { gb, use } = await standAt(6, 4, Button.Left);
-    expect(await use()).toEqual([expect.stringMatching(/bite/i)]);
+    const { gb, use, boxes } = await standAt(6, 4, Button.Left);
+    // The rod's name, as the bag's USE leaves it in wStringBuffer (QA bug 73: "used !"), on the
+    // screen and in what the menu says afterwards.
+    expect(await use()).toEqual([expect.stringMatching(/^\S+ used OLD ROD! Oh! It's a bite!$/)]);
+    expect(boxes).toContainEqual(expect.stringMatching(/^\S+ used OLD ROD!$/));
     expect(gb.read(addr("wCurOpponent"))).toBe(MAGIKARP);
     expect(gb.read(addr("wCurEnemyLevel"))).toBe(5);
     // And OverworldLoop starts the battle with it, as after the start menu.

@@ -35,3 +35,26 @@ export function freshTapGuard(): FreshTapGuard {
 export function useFreshTapGuard(): FreshTapGuard {
   return useState(freshTapGuard)[0];
 }
+
+/**
+ * The Pokédex the game opens by itself (a new Pokémon's page after a catch, QA bug 73) flies in
+ * over the battle while the player is tapping through its messages, and a tap meant for the next
+ * message lands on it: mid-flight its tab bar sweeps across the middle of the screen, so the tap
+ * went to the Me tab and the caught Pokémon's page was gone. It takes no tap whose press began
+ * before `quietMs` had passed since it opened (its flight and a beat more); a keyboard click (no
+ * press) counts at once.
+ */
+export function quietTapGuard(quietMs: number, now: () => number = () => performance.now()): FreshTapGuard {
+  const from = now();
+  let pressed = false;
+  return {
+    onPointerDownCapture: () => {
+      pressed = now() - from >= quietMs;
+    },
+    onClickCapture: (e) => {
+      if (pressed || e.detail === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+  };
+}
