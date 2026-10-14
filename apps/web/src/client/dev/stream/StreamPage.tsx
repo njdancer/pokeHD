@@ -1,4 +1,4 @@
-// The QA stream's overlay (/dev/stream/overlay, framed by StreamHost at /dev/stream): Haiku plays pokeHD in the game gap while the
+// The QA stream's overlay (/dev/stream/overlay, framed by StreamHost at /dev/stream): the player (Haiku, Sonnet) plays pokeHD in the game gap while the
 // overlay shows its thoughts and taps, its chat with Opus, the bug tracker, and the team and
 // badges from the game itself. A port of the approved design (qa-stream v3, "Side Stage").
 // The stage is 1920×1080, scaled to fit the window (1:1 at 1920×1080, for OBS).
@@ -40,6 +40,9 @@ export function StreamPage() {
   const game = useGameSnapshot(frame);
   const stage = useRef<HTMLDivElement>(null);
   const mode: StreamMode = bus.status?.mode === "talk" ? "talk" : "play";
+  // Who plays, as the harness names it from the model ("Sonnet 5.5"); the family alone on cards.
+  const player = bus.status?.player ?? "Haiku 5.5";
+  const who = player.split(" ")[0]!;
   const [settled, setSettled] = useState(mode);
 
   // Lists show whole rows only: once the slide between modes is over, and whenever they change.
@@ -83,7 +86,7 @@ export function StreamPage() {
                 Claude QA's <b>pokeHD</b>
               </h1>
               <div className="qs-sub">
-                <span className="qs-h">Haiku 5.5 plays</span> · <span className="qs-o">Opus 5.5 fixes</span>
+                <span className="qs-h">{player} plays</span> · <span className="qs-o">Opus 5.5 fixes</span>
               </div>
             </div>
             <div className="qs-headright">
@@ -108,7 +111,7 @@ export function StreamPage() {
           <section className="qs-card qs-stream">
             <span className="qs-ball qs-tr" />
             <div className="qs-streamhead">
-              <span className="qs-who">Haiku</span>
+              <span className="qs-who">{who}</span>
               {bus.connected && mode === "play" && (
                 <span className="qs-dots">
                   <i />
@@ -120,12 +123,12 @@ export function StreamPage() {
                 {turnLabel(bus.status)}
               </span>
             </div>
-            <Feed feed={bus.feed} connected={bus.connected} />
+            <Feed feed={bus.feed} connected={bus.connected} who={who} />
           </section>
 
-          <Thread chat={bus.chat} />
+          <Thread chat={bus.chat} who={who} />
 
-          <Chat chat={bus.chat} />
+          <Chat chat={bus.chat} who={who} />
 
           <section className="qs-card qs-info">
             <span className="qs-place">{map || "—"}</span>
@@ -186,12 +189,12 @@ function actionIcon(a: ActionEvent): string {
   return ICON[a.kind];
 }
 
-function Feed({ feed, connected }: { feed: (ThoughtEvent | ActionEvent)[]; connected: boolean }) {
+function Feed({ feed, connected, who }: { feed: (ThoughtEvent | ActionEvent)[]; connected: boolean; who: string }) {
   const lastThought = feed.findLastIndex((f) => f.t === "thought");
   if (!feed.length) {
     return (
       <ol className="qs-flow">
-        <li className="qs-none">{connected ? "Haiku is getting ready to play." : "Waiting for the player to join…"}</li>
+        <li className="qs-none">{connected ? `${who} is getting ready to play.` : "Waiting for the player to join…"}</li>
       </ol>
     );
   }
@@ -237,17 +240,17 @@ function chipOf(m: ChatEvent): [string, string] | null {
 }
 
 /**
- * The conversation while Haiku plays (most of Opus's replies arrive then): a compact card under
+ * The conversation while the player plays (most of Opus's replies arrive then): a compact card under
  * the feed with the latest messages, newest at the bottom, each clamped to a few lines. In talk
  * mode it makes way for the full chat.
  */
-function Thread({ chat }: { chat: ChatEvent[] }) {
+function Thread({ chat, who }: { chat: ChatEvent[]; who: string }) {
   const shown = chat.slice(-6);
   return (
-    <section className="qs-card qs-threadcard" aria-label="Haiku and Opus, latest messages">
+    <section className="qs-card qs-threadcard" aria-label={`${who} and Opus, latest messages`}>
       <span className="qs-ball qs-tr" />
       <div className="qs-streamhead">
-        <span className="qs-who qs-h">Haiku</span>
+        <span className="qs-who qs-h">{who}</span>
         <span className="qs-amp">&amp;</span>
         <span className="qs-who qs-o">Opus</span>
         <span className="qs-label" style={{ marginLeft: "auto" }}>
@@ -261,7 +264,7 @@ function Thread({ chat }: { chat: ChatEvent[] }) {
           const chip = chipOf(m);
           return (
             <li key={m.id} className={`qs-tm ${haiku ? "qs-from-haiku" : "qs-from-opus"}${i === shown.length - 1 ? " qs-latest" : ""}`}>
-              <span className="qs-av">{haiku ? "H" : "O"}</span>
+              <span className="qs-av">{haiku ? who[0] : "O"}</span>
               <p className="qs-tmtext">
                 {chip && <span className={`qs-chip ${chip[0]}`}>{chip[1]}</span>}
                 {m.text}
@@ -291,20 +294,20 @@ function useNow(every: number): number {
   return now;
 }
 
-function Chat({ chat }: { chat: ChatEvent[] }) {
+function Chat({ chat, who }: { chat: ChatEvent[]; who: string }) {
   const now = useNow(15_000);
   const shown = chat.slice(-8);
   return (
-    <section className="qs-chat" aria-label="Haiku and Opus conversation">
+    <section className="qs-chat" aria-label={`${who} and Opus conversation`}>
       {shown.map((m, i) => {
         const haiku = m.from === "player";
         const chip = chipOf(m);
         return (
           <div key={m.id} className={`qs-msg ${haiku ? "qs-from-haiku" : "qs-from-opus"}${i === shown.length - 1 ? " qs-latest" : ""}`}>
-            <div className="qs-av">{haiku ? "H" : "O"}</div>
+            <div className="qs-av">{haiku ? who[0] : "O"}</div>
             <div className="qs-bubble">
               <div className="qs-meta">
-                {haiku ? "Haiku" : "Opus"} {chip && <span className={`qs-chip ${chip[0]}`}>{chip[1]}</span>}
+                {haiku ? who : "Opus"} {chip && <span className={`qs-chip ${chip[0]}`}>{chip[1]}</span>}
                 <span className="qs-time">{timeOf(m.at, now)}</span>
               </div>
               {m.text}

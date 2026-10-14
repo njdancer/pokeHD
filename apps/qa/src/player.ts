@@ -21,6 +21,14 @@ import type { Outcome } from "./game/types.ts";
 import { systemPrompt, TOOLS, type Part, type ToolName, Toolbox, type ToolOutput } from "./toolbox.ts";
 
 export const DEFAULT_MODEL = "claude-haiku-5-5";
+
+/** "claude-sonnet-5-5" → "Sonnet 5.5", "claude-haiku-5-5-20261001" → "Haiku 5.5": the player's name on the stream. */
+export function playerName(model: string): string {
+  const m = /^claude-([a-z]+)-(\d+)(?:-(\d))?(?:-\d{8})?$/.exec(model);
+  if (!m) return model;
+  const family = m[1]!.charAt(0).toUpperCase() + m[1]!.slice(1);
+  return `${family} ${m[2]}${m[3] ? `.${m[3]}` : ""}`;
+}
 export type Backend = "claude" | "api";
 
 export interface PlayerOptions {

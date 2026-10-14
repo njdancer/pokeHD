@@ -23,7 +23,7 @@ import { fileURLToPath } from "node:url";
 import { Bus } from "./bus.ts";
 import type { Bug, ChatEvent, QaEvent, Snapshot } from "./events.ts";
 import { createDriver } from "./game/driver.ts";
-import { DEFAULT_MODEL, Player, type Backend } from "./player.ts";
+import { DEFAULT_MODEL, Player, playerName, type Backend } from "./player.ts";
 import { Toolbox } from "./toolbox.ts";
 
 const RUNS = fileURLToPath(new URL("../runs/", import.meta.url));
@@ -60,7 +60,8 @@ function lanAddresses(): string[] {
 }
 
 const time = (at: number) => new Date(at).toTimeString().slice(0, 5);
-const chatLine = (c: ChatEvent) => `${time(c.at)} ${c.from === "player" ? "Haiku" : "Opus "}${c.tag ? ` [${c.tag}${c.bug !== undefined ? ` #${c.bug}` : ""}]` : ""}: ${c.text}`;
+let player = "Player";
+const chatLine = (c: ChatEvent) => `${time(c.at)} ${c.from === "player" ? player : "Opus "}${c.tag ? ` [${c.tag}${c.bug !== undefined ? ` #${c.bug}` : ""}]` : ""}: ${c.text}`;
 const bugLine = (b: Bug) => `#${b.id} ${b.severity.padEnd(4)} ${b.status.padEnd(7)} turn ${b.turn}: ${b.title}`;
 
 switch (command) {
@@ -69,6 +70,8 @@ switch (command) {
     if (backend !== "claude" && backend !== "api") throw new Error("--via is claude or api.");
     if (backend === "api" && !process.env["ANTHROPIC_API_KEY"]) throw new Error("Set ANTHROPIC_API_KEY first, or use --via claude.");
     const run = new Bus(RUNS);
+    player = playerName(values.model);
+    run.setStatus({ player });
     await run.listen(Number(values.port), values.lan ? "0.0.0.0" : "127.0.0.1");
     const streamUrl = `${values.app}/dev/stream?bus=${encodeURIComponent(bus)}`;
     console.log(`Run folder ${run.dir}\nBus ${bus}\nStream ${streamUrl}`);
@@ -77,8 +80,8 @@ switch (command) {
     const streamPath = values.game ? "game" : `/dev/stream?bus=${encodeURIComponent(bus)}&broadcast`;
     const driver = createDriver({ appUrl: values.app, runDir: run.dir, headless: values.headless, streamPath });
     run.setLive((listener) => driver.onFrame(listener));
-    const player = new Player({ toolbox: new Toolbox(run, driver), backend, model: values.model, ...(values.turns && { maxTurns: Number(values.turns) }) });
-    const stop = () => player.stop();
+    const qa = new Player({ toolbox: new Toolbox(run, driver), backend, model: values.model, ...(values.turns && { maxTurns: Number(values.turns) }) });
+    const stop = () => qa.stop();
     process.on("SIGINT", stop);
     process.on("SIGTERM", stop);
     run.on((e) => {
@@ -89,7 +92,7 @@ switch (command) {
     });
     try {
       run.setStatus({ mode: "play" });
-      await player.run(await driver.start());
+      await qa.run(await driver.start());
     } finally {
       await driver.close();
       run.close();
@@ -98,6 +101,7 @@ switch (command) {
   }
   case "inbox": {
     const snap = await api<Snapshot>("/snapshot");
+    player = snap.status?.player ?? player;
     for (const c of snap.chat.slice(-12)) console.log(chatLine(c));
     if (!values.wait) break;
     // Waits on the event stream for the player's next message.

@@ -18,6 +18,8 @@ export interface StatusEvent {
   gen?: number;
   /** The run's turn when this generation began. */
   genStart?: number;
+  /** Who plays, from the model: "Haiku 5.5", "Sonnet 5.5". */
+  player?: string;
 }
 
 /** The player's one-line note before an action (the stream's "thinking" rows). */
