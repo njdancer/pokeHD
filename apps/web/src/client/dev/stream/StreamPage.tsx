@@ -369,7 +369,9 @@ function BugTracker({ bugs }: { bugs: Bug[] }) {
       <span className="qs-ball qs-tr" />
       <div className="qs-labelrow">
         <span className="qs-label">Bug tracker</span>
-        <span className="qs-label">{bugs.length} found</span>
+        <span className="qs-label">
+          {bugs.length - count("wontfix")} found{count("wontfix") ? ` · ${count("wontfix")} not bugs` : ""}
+        </span>
       </div>
       <div className="qs-counts">
         <div className="qs-count qs-c-open">
