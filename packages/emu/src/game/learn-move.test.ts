@@ -35,6 +35,8 @@ const PROMPT_FRAMES = 150;
 
 const addr = (name: SymbolName) => SYMBOLS[name].address;
 const moves = (gb: GameBoy, slot = 0) => [...gb.readBytes(addr("wPartyMons") + slot * PARTYMON + 8, 4)];
+/** Each move's PP (the low 6 bits; the top 2 are PP Ups). */
+const pp = (gb: GameBoy, slot = 0) => [...gb.readBytes(addr("wPartyMons") + slot * PARTYMON + 29, 4)].map((b) => b & 0x3f);
 const bag = (gb: GameBoy) => Array.from({ length: gb.read(addr("wNumBagItems")) }, (_, i) => gb.read(addr("wNumBagItems") + 1 + i * 2));
 
 describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
@@ -56,7 +58,8 @@ describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
       { species: PIDGEY, level: 8 },
     ]);
     known.forEach((m, i) => gb.write(addr("wPartyMons") + 8 + i, m));
-    [20, 20, 20, 20].forEach((pp, i) => gb.write(addr("wPartyMons") + 29 + i, pp));
+    // Moves part used, some all used: the one learned in a slot gets its full PP (QA bug 52).
+    [5, 0, 5, 0].forEach((pp, i) => gb.write(addr("wPartyMons") + 29 + i, pp));
     setBag(gb, [[POTION, 1], [TM01, 1], [RARE_CANDY, 1]]);
     const actions = new GameActions(gb, { rom });
     const asked: { id: number; ask: GameAsk }[] = [];
@@ -103,6 +106,8 @@ describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
     expect(result.messages.join(" ")).toMatch(/forgot\s+GROWL/);
     expect(result.messages.join(" ")).toMatch(/learned\s+MEGA PUNCH/);
     expect(moves(gb)).toEqual([SCRATCH, MEGA_PUNCH, EMBER, LEER]);
+    // MEGA PUNCH comes with its full 20 PP (QA bug 52); the others keep theirs.
+    expect(pp(gb)).toEqual([5, 20, 5, 0]);
     expect(bag(gb)).not.toContain(TM01);
   }, 60_000);
 
@@ -148,6 +153,7 @@ describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
     answer({ index: 3 });
     expect(finish().ok).toBe(true);
     expect(moves(gb)).toEqual([CUT, GROWL, EMBER, MEGA_PUNCH]);
+    expect(pp(gb)).toEqual([5, 0, 5, 20]);
   }, 60_000);
 
   it("from the menu, asks the same at a level up from a Rare Candy", async () => {
@@ -161,6 +167,7 @@ describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
     answer({ index: 3 });
     expect(finish().ok).toBe(true);
     expect(moves(gb)).toEqual([SCRATCH, GROWL, LEER, EMBER]);
+    expect(pp(gb)).toEqual([5, 0, 5, 25]);
     expect(gb.read(addr("wPartyMons") + 33)).toBe(9);
   }, 60_000);
 
@@ -209,5 +216,6 @@ describe.skipIf(!existsSync(ROM_PATH))("learning a fifth move (ROM)", () => {
     expect(asked[2]).toMatchObject({ kind: "yes-no", text: expect.stringMatching(/Delete an older\s+move/) });
     expect(asked[3]).toMatchObject({ kind: "forget-move", mon: "CHARMANDER", move: MEGA_PUNCH, moves: [SCRATCH, GROWL, EMBER, LEER] });
     expect(moves(gb)).toEqual([SCRATCH, MEGA_PUNCH, EMBER, LEER]);
+    expect(pp(gb)).toEqual([5, 20, 5, 0]);
   }, 60_000);
 });
