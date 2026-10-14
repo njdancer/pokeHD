@@ -264,7 +264,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
   }
 
   /** Text boxes decoded from the Game Boy screen, for screens the page draws none of its own for. */
-  async function gameBoyText(): Promise<string> {
+  async function gameBoyText(shown: boolean): Promise<string> {
     if (!rom) return "";
     const frame = await gameFrame();
     const watches = Object.entries(TEXT_WATCHES) as [keyof TextWatched, readonly [number, number]][];
@@ -275,7 +275,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
     }, watches.map(([, w]) => [w[0], w[1]] as [number, number]));
     if (!bytes) return "";
     const watched = Object.fromEntries(watches.map(([name], i) => [name, new Uint8Array(bytes[i]!)])) as TextWatched;
-    return describeGameBoyText(rom.decoder.decode(watched).boxes);
+    return describeGameBoyText(rom.decoder.decode(watched).boxes, shown);
   }
 
   async function outcome(before: ScreenRead | null, after: ScreenRead): Promise<Outcome> {
@@ -297,9 +297,10 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const textual = panels.filter((p) => p.kind !== "toast");
       if (panels.length) parts.push(describePanels(panels));
       // The game's own screen in front (or a dialog the page has no HD box for): read its tiles.
-      const gameBoyUp = after.layout === "full" || after.layout === "dialog" || (s && s.mode !== "overworld");
+      const gameBoyShown = after.layout === "full" || after.layout === "dialog";
+      const gameBoyUp = gameBoyShown || (s && s.mode !== "overworld");
       if (!textual.length && gameBoyUp) {
-        const text = await gameBoyText().catch(() => "");
+        const text = await gameBoyText(gameBoyShown).catch(() => "");
         if (text) parts.push(text);
       }
       if (s && after.inWorld && s.mode === "overworld" && !textual.length && after.layout !== "full") {

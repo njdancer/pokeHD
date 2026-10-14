@@ -73,8 +73,12 @@ export function startingUp(read: Pick<ScreenRead, "panels" | "buttons">): boolea
   return onStartScreen(read) && choices(read).length === 0;
 }
 
-/** Text boxes from the Game Boy screen (decoded tiles), for when the page draws none of its own. */
-export function describeGameBoyText(boxes: readonly { lines: readonly { text: string }[] }[]): string {
+/**
+ * Text boxes from the Game Boy screen (decoded tiles), for when the page draws none of its own.
+ * `shown` is whether the Game Boy screen is what's on show; if not (a battle's HD screen still
+ * coming in, say), the words are the game's but nothing on screen shows them yet.
+ */
+export function describeGameBoyText(boxes: readonly { lines: readonly { text: string }[] }[], shown = true): string {
   const lines = boxes
     .map((b) =>
       b.lines
@@ -83,5 +87,6 @@ export function describeGameBoyText(boxes: readonly { lines: readonly { text: st
         .join(" / "),
     )
     .filter(Boolean);
-  return lines.length ? `Game Boy screen text:\n${lines.map((l) => `"${l}"`).join("\n")}` : "";
+  const label = shown ? "Game Boy screen text:" : "The game's text (its HD screen hasn't drawn it yet):";
+  return lines.length ? `${label}\n${lines.map((l) => `"${l}"`).join("\n")}` : "";
 }
