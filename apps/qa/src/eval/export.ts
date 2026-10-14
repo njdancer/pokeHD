@@ -51,6 +51,7 @@ export function exportDashboard(out: string): void {
   const runs: Record<string, unknown>[] = [];
   const splits: Record<string, unknown>[] = [];
   const scenarios: Record<string, unknown>[] = [];
+  const pooled = new Map<string, { eps: EpisodeResult[]; started: string; model: string }>();
   for (const id of readdirSync(results).sort()) {
     if (id.includes("smoke")) continue;
     const meta = JSON.parse(readFileSync(join(results, id, "meta.json"), "utf8")) as { variant: string; set: string; model: string; startedAt: string; endedAt?: string };
@@ -59,6 +60,11 @@ export function exportDashboard(out: string): void {
     const scen = set(meta.set);
     const sum = summarise(eps, scen);
     const decided = climb.find((c) => c.runB.split(",").includes(id));
+    if (meta.set === "dev") {
+      const p = pooled.get(meta.variant) ?? { eps: [], started: meta.startedAt, model: meta.model };
+      p.eps.push(...eps);
+      pooled.set(meta.variant, p);
+    }
     runs.push({
       run: id,
       variant: meta.variant,
@@ -106,6 +112,53 @@ export function exportDashboard(out: string): void {
         steps_vs_par: s.stepRatio === null ? null : round(s.stepRatio),
         episodes: s.episodes,
       });
+    }
+  }
+  // Every dev run of a variant pooled into one row: its extra repeats on some goals included.
+  const dev = set("dev");
+  const byId = new Map(dev.map((s) => [s.id, s]));
+  for (const [variant, p] of [...pooled].sort((a, b) => a[1].started.localeCompare(b[1].started))) {
+    const sum = summarise(p.eps, dev);
+    const decided = [...climb].reverse().find((c) => c.variant === variant);
+    const run = `${variant} (all dev runs)`;
+    // Extra repeats went to some goals only (exits, multi-turn), so weigh each scenario once.
+    const per = (keep: (sc: Scenario) => boolean) => {
+      const rates = Object.entries(sum.scenarios).filter(([sid]) => byId.get(sid) && keep(byId.get(sid)!)).map(([, v]) => v.success);
+      return rates.length ? round(rates.reduce((a, b) => a + b, 0) / rates.length) : null;
+    };
+    runs.push({
+      run,
+      variant,
+      parent: VARIANTS[variant]?.parent ?? decided?.parent ?? null,
+      change: VARIANTS[variant]?.note ?? decided?.change ?? "",
+      set: "dev",
+      scope: "pooled",
+      model: p.model,
+      started: p.started,
+      ...row(sum.overall),
+      success: per(() => true),
+      short_success: per((x) => x.kind === "short"),
+      multi_success: per((x) => x.kind === "multi"),
+      outdoor_success: per((x) => x.area === "outdoor"),
+      indoor_success: per((x) => x.area === "indoor"),
+      cave_success: per((x) => x.area === "cave"),
+      scenarios_covered: Object.keys(sum.scenarios).length,
+      decision: decided ? (decided.kept ? "kept" : "rejected") : variant === "baseline" ? "baseline" : "undecided",
+      verdict: decided?.verdict ?? null,
+      reason: decided?.reason ?? null,
+      vs_run: decided?.runA ?? null,
+      success_delta: decided ? round(decided.success.diff) : null,
+      success_delta_low: decided ? round(decided.success.low) : null,
+      success_delta_high: decided ? round(decided.success.high) : null,
+      turns_delta: decided ? round(decided.turns.diff) : null,
+      tokens_delta: decided ? Math.round(decided.tokens.diff) : null,
+    });
+    for (const [group, table] of [["kind", sum.byKind], ["area", sum.byArea], ["split", sum.bySplit], ["feature", sum.byFeature]] as const) {
+      for (const [name, sc] of Object.entries(table)) splits.push({ run, variant, group, name, ...row(sc) });
+    }
+    for (const [sid, sc] of Object.entries(sum.scenarios)) {
+      const x = byId.get(sid);
+      scenarios.push({ key: `${run}|${sid}`, run, variant, scenario: sid, kind: x?.kind ?? null, area: x?.area ?? null, place: x?.mapName ?? null, features: x?.features.join(" ") ?? "", par: x?.par ?? null, par_turns: x?.parTurns ?? null, success: round(sc.success), turns: round(sc.turns, 2), steps_vs_par: sc.stepRatio === null ? null : round(sc.stepRatio), episodes: sc.episodes });
     }
   }
   writeFileSync(join(out, "runs.json"), JSON.stringify(runs));
