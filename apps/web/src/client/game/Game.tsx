@@ -69,7 +69,9 @@ import { GiftNotices, GiftPanel } from "../room/GiftPanel.tsx";
 import { decodeGiftables, describeGift, GIFT_REASONS, GIFTABLE_RANGES } from "../room/giftables.ts";
 import { toGhosts, toPresence } from "./presence.ts";
 import { inWorldTracker, mapOnlyTracker, screenLayout, type BattleScene, type ScreenLayout } from "./screen.ts";
-import { BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen } from "./battle.ts";
+import {
+  BattleItemUse, BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen, partyScreenMessage, type BattleFrame,
+} from "./battle.ts";
 import { BattleHud } from "./BattleHud.tsx";
 import { BattleMenu, type BattleKey } from "./BattleMenu.tsx";
 import { battleMenusOn } from "./battle-menu-flag.ts";
@@ -259,7 +261,12 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     if (menuUpRef.current) hostRef.current?.setButtons(0);
     setMenuOpenState(next);
   };
+  /** The game's last question for a sheet, for what its answer starts (BattleItemUse). */
+  const lastAskRef = useRef<{ id: number; ask: GameAsk } | null>(null);
+  /** An item used in a battle: its party screen stays behind the HD battle (QA bug 55). */
+  const battleItemRef = useRef(new BattleItemUse());
   const setAsk = (next: { id: number; ask: GameAsk; game: GameSnapshot | null } | null) => {
+    if (next) lastAskRef.current = { id: next.id, ask: next.ask };
     menuStateRef.current.ask = next?.ask.kind ?? null;
     menuUpRef.current = menuStateRef.current.open || !!menuStateRef.current.ask;
     if (menuUpRef.current) hostRef.current?.setButtons(0);
@@ -557,6 +564,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       let hd = false;
       let battles: BattleTracker | null = null;
       let shownHud = "";
+      /** The battle screen's last HD view and HUDs, kept while an item's screens are behind them. */
+      let lastBattle: { view: NonNullable<BattleFrame["view"]>; huds: BattleFrame["huds"] } | null = null;
       let trackInWorld = inWorldTracker();
       /** The window up over just the map, before the game draws its box (see mapOnlyTracker). */
       const trackMapOnly = mapOnlyTracker();
@@ -632,10 +641,19 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           if (inWorld) playJournalRef.current?.position(state.mapId, state.player.x, state.player.y);
           // Battles: the scene in 3D, the screen masked down to its menus and text.
           const fight = battles?.frame(watched);
-          const battle = hd && inWorld ? fight?.scene : undefined;
-          live!.setBattle(battle ? (fight?.view ?? null) : null);
-          const battleScreen = battle === "scene" || battle === "evolution" ? (fight?.screen ?? null) : null;
-          const huds = battle === "scene" && fight?.state && fight.huds ? { state: fight.state, huds: fight.huds } : null;
+          const actual = hd && inWorld ? fight?.scene : undefined;
+          const textBytes = bytes as unknown as TextWatched;
+          // An item used in the battle (a POTION): what the game draws for it stays behind the HD
+          // battle as it last was, and only its message shows (BattleItemUse, QA bug 55).
+          const item = battleItemRef.current;
+          const wholeText = actual && fight && item.active ? textDecoder.decode(textBytes) : null;
+          const itemUse = !!wholeText && item.using(fight!, wholeText, !!battleAskRef.current);
+          const battle = itemUse ? "scene" : actual;
+          if (actual === "scene" && fight?.view) lastBattle = { view: fight.view, huds: fight.huds };
+          live!.setBattle(battle ? ((itemUse ? lastBattle?.view : fight?.view) ?? null) : null);
+          const battleScreen = !itemUse && (battle === "scene" || battle === "evolution") ? (fight?.screen ?? null) : null;
+          const hudsShown = itemUse ? lastBattle?.huds : fight?.huds;
+          const huds = battle === "scene" && fight?.state && hudsShown ? { state: fight.state, huds: hudsShown } : null;
           const hudKey = huds ? JSON.stringify([huds.huds, huds.state.player.mon, huds.state.enemy.mon]) : "";
           if (hudKey !== shownHud) {
             shownHud = hudKey;
@@ -644,10 +662,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           roomClient?.sendPresence(toPresence(state, inWorld));
           // Text and menus: drawn by the HD text layer when it can show all of them. On the battle
           // screen only its text and menu cells are read (the HUDs and pictures are drawn in HD).
-          const textBytes = bytes as unknown as TextWatched;
-          const onScreen = textDecoder.decode(battleScreen ? battleText(textBytes, battleScreen) : textBytes);
+          const onScreen = wholeText ?? textDecoder.decode(battleScreen ? battleText(textBytes, battleScreen) : textBytes);
           // On the battle screen, less the move's TYPE box: under "No PP left!" only the message shows.
-          const text = battleScreen ? battleTextShown(onScreen) : onScreen;
+          const text = itemUse ? partyScreenMessage(onScreen) : battleScreen ? battleTextShown(onScreen) : onScreen;
           if (talking) {
             const d = text.dialog;
             if (!d) {
@@ -686,8 +703,9 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           // it draws (the party menu ItemUseMedicine redraws, "recovered by 20!") is the menu's to
           // report, in its own words once the action is done, so neither the HD text layer nor the
           // Game Boy screen shows it.
-          const fits = acting || choosing ? false : intro ? introTextFits(text) : battleScreen ? battleTextFits(text) : hdTextFits(text, state.mode, inWorld);
+          const fits = acting || choosing ? false : intro ? introTextFits(text) : battleScreen || itemUse ? battleTextFits(text) : hdTextFits(text, state.mode, inWorld);
           if (battleScreen) maskBattleScreen(image.data, battleScreen, battleCovered(onScreen, fits, choosing));
+          if (itemUse) image.data.fill(0);
           ctx.putImageData(image, 0, 0);
           // Nothing on the Game Boy screen the HD view doesn't show: keep it down.
           const mapOnly = trackMapOnly((bytes as unknown as TextWatched).tileMap, state.mode, inWorld);
@@ -696,8 +714,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           const script = scriptView(scriptRef, text, fits, (id) => host?.releaseMessage(id));
           // Otherwise whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
           // Not in battle, where the game moves on by itself between some messages.
-          if (!fits || script || battleScreen) joiner.reset();
-          const joined = script ? { lines: script.lines, press: false } : fits && !battleScreen ? joiner.frame(text) : { lines: null, press: false };
+          if (!fits || script || battleScreen || itemUse) joiner.reset();
+          const joined = script ? { lines: script.lines, press: false } : fits && !battleScreen && !itemUse ? joiner.frame(text) : { lines: null, press: false };
           if (joined.press) host?.tap(Button.A);
           const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}` : "";
           if (key !== shownText) {
@@ -1250,7 +1268,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     () => ({
       read: async () => decodeSnapshot(await hostRef.current!.read(SNAPSHOT_RANGES)),
       act: (action: Parameters<EmulatorHost["act"]>[0], signal?: AbortSignal) => hostRef.current!.act(action, signal),
-      answer: (id: number, answer: AskAnswer) => hostRef.current?.answerAsk(id, answer),
+      answer: (id: number, answer: AskAnswer) => {
+        const asked = lastAskRef.current;
+        if (asked?.id === id) battleItemRef.current.answered(asked.ask, answer);
+        hostRef.current?.answerAsk(id, answer);
+      },
     }),
     [],
   );
