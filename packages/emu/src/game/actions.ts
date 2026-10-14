@@ -15,7 +15,7 @@
 // | save | `SaveGameData` |
 import { isKeyItem, romOffset, SYMBOLS, type SymbolName } from "@pokehd/rom";
 import type { GameBoy } from "../core.ts";
-import { StandIn } from "../ffi.ts";
+import { readWord, StandIn } from "../ffi.ts";
 import { learnMoveCall, textBoxText } from "./asks.ts";
 import { saveGame } from "../gifts/gifts.ts";
 import { type Job, SafePoint, type Step } from "../gifts/safepoint.ts";
@@ -103,12 +103,13 @@ export class GameActions {
         return { carry: false };
       }),
       // A yes/no: a TM's "Teach … to a POKéMON?" and the like. Answered from the action, else no.
-      // LearnMove's ("Delete an older move…?", "Abandon learning…?") and its move list are the
-      // page's to ask (GameAsks): answering them ourselves went round and round (QA bug 48). What
-      // the action printed until then goes with the question, so the result starts afresh.
-      new StandIn(gb, "DisplayTextBoxID", (g) => ours() && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU && !this.#leftToPage(g), (g) => {
+      // LearnMove's for a Pokémon that knows four moves always end it: no to "Delete an older
+      // move…?", yes to "Abandon learning…?" (no to both went round and round, QA bug 48; asking
+      // the page mid-action left the menu's teach queued behind questions it couldn't see, QA bug
+      // 47). The result says "… did not learn …", and the TM stays in the bag.
+      new StandIn(gb, "DisplayTextBoxID", (g) => ours() && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU, (g) => {
         keep(g);
-        const yes = this.#running?.yesNo.shift() ?? false;
+        const yes = learnMoveCall(g) ? abandonQuestion(g) : (this.#running?.yesNo.shift() ?? false);
         g.write(addr("wCurrentMenuItem"), yes ? 0 : 1);
         g.write(addr("wMenuExitMethod"), yes ? CHOSE_FIRST_ITEM : CHOSE_SECOND_ITEM);
         return {};
@@ -124,13 +125,6 @@ export class GameActions {
     const text = textBoxText(g);
     const messages = this.#running?.messages;
     if (text && messages && messages.at(-1) !== text) messages.push(text);
-  }
-
-  /** LearnMove asks the page (GameAsks), not the action: true, with what was printed so far dropped. */
-  #leftToPage(g: GameBoy): boolean {
-    if (!learnMoveCall(g)) return false;
-    if (this.#running) this.#running.messages = [];
-    return true;
   }
 
   /** Whether one of the actions is running in the game right now (not just queued). */
@@ -356,6 +350,12 @@ function direct(change: (gb: GameBoy) => string | undefined, done: (result: Acti
     steps: [],
     done: () => done(reason ? { ok: false, reason, messages: [] } : { ok: true, messages: [] }),
   };
+}
+
+/** LearnMove's yes/no is AbandonLearning's ("Abandon learning …?"), not TryingToLearn's ("Delete …?"). */
+function abandonQuestion(g: GameBoy): boolean {
+  const back = readWord(g, g.registers.sp);
+  return back > addr("AbandonLearning") && back <= addr("TryingToLearn");
 }
 
 function bagIndex(gb: GameBoy, item: number): number {
