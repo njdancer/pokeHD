@@ -55,6 +55,8 @@ export interface Item {
   /** Where to buy it, where it was found: encyclopedia facts, from the journal and ROM. */
   buy?: string;
   found?: string;
+  /** The game's own price (GetItemPrice), for a sale's sum; none for things the Mart won't take. */
+  price?: number;
   /** Half the price, as the Mart pays. */
   sell?: number;
   /** Once owned, now used up or handed over. */

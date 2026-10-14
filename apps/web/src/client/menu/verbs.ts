@@ -25,6 +25,7 @@ export const ID = {
   GOOD_ROD: 0x4d,
   SUPER_ROD: 0x4e,
   HM01: 0xc4,
+  TM01: 0xc9,
 } as const;
 
 const REPELS = new Set<number>([ID.REPEL, ID.SUPER_REPEL, ID.MAX_REPEL]);
@@ -91,7 +92,10 @@ export function monVerbs(env: MenuEnv, nav: Nav, i: number, purpose?: Purpose): 
   return v;
 }
 
-export function itemVerbs(env: MenuEnv, nav: Nav, it: Item, purpose?: Purpose, count = 1): VerbSpec[] {
+/** What the Mart buys back: not key items (IsKeyItem) nor HMs (IsItemHM, priceless), only what has a price. */
+export const sellable = (it: Item) => it.kind !== "Key" && !!it.sell && !(it.id >= ID.HM01 && it.id < ID.TM01);
+
+export function itemVerbs(env: MenuEnv, nav: Nav, it: Item, purpose?: Purpose): VerbSpec[] {
   const { model, moment, actions } = env;
   const battle = inBattle(moment);
   // Run out of (the journal's past items, count 0). Not "no count": key items have none, and the
@@ -99,7 +103,7 @@ export function itemVerbs(env: MenuEnv, nav: Nav, it: Item, purpose?: Purpose, c
   // and offered nothing (QA bug 72).
   if (it.count === 0 && !isMachine(it)) return [];
   if (moment === "shop" && nav.sheet)
-    return it.kind === "Key" || !it.sell ? [{ label: "Can't sell this", off: "Important" }] : [{ label: `Sell ${count} for ₽${(it.sell * count).toLocaleString()}`, run: () => (done(env, nav, actions.sell(it.id, count)), nav.reset()) }];
+    return sellable(it) ? [{ label: "Sell some", note: `₽${it.sell!.toLocaleString("en")} each`, run: () => nav.replace({ k: "sell", id: it.id }) }] : [{ label: "Can't sell this", off: "Important" }];
   if (purpose && "giftTo" in purpose) {
     const f = model.friends.find((x) => x.id === purpose.giftTo)!;
     return it.kind === "Key" ? [{ label: "Can't send this", off: "Important" }] : [{ label: `Send one to ${f.name}`, run: () => (done(env, nav, actions.gift(f.id, { item: it.id })), nav.reset({ k: "friend", id: f.id })) }];

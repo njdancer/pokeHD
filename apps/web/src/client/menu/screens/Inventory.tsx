@@ -7,7 +7,9 @@ import { BallMark, ItemIcon } from "../icons.tsx";
 import { useNav, type Purpose } from "../nav.tsx";
 import { battleMonOf, inBattle, ITEM_KINDS, type Item, type ItemKind, type Mon } from "../model.ts";
 import { HpBar, Page, Pixel, ReadButton, Row, Section, SortList, StatusPill, Switch, Types, Verbs } from "../ui.tsx";
-import { canLearn, itemVerbs, monVerbs, onMon } from "../verbs.ts";
+import { buyMax, limitOf } from "../quantity.ts";
+import { canLearn, itemVerbs, monVerbs, onMon, sellable } from "../verbs.ts";
+import type { StockItem } from "./Quantity.tsx";
 
 type Kind = "all" | "Pokémon" | ItemKind;
 
@@ -217,7 +219,6 @@ export function ItemScreen({ id, purpose }: { id: number; purpose?: Purpose }) {
   const env = useEnv();
   const nav = useNav();
   const it = env.model.bag.find((b) => b.id === id) ?? env.model.past.find((b) => b.id === id);
-  const [count, setCount] = useState(1);
   if (!it) return null;
   const selling = env.moment === "shop" && nav.sheet;
   const have = it.count === undefined ? (it.gone ? "Not any more" : "Yes") : it.count ? `${it.count}` : it.gone ?? "None left";
@@ -236,14 +237,7 @@ export function ItemScreen({ id, purpose }: { id: number; purpose?: Purpose }) {
           <p className="m-sub">{it.text}</p>
         </div>
       </div>
-      {selling && it.sell && it.count ? (
-        <div className="m-card m-qty">
-          <button type="button" className="m-round" aria-label="One fewer" onClick={() => setCount(Math.max(1, count - 1))}>−</button>
-          <b>{count}</b>
-          <button type="button" className="m-round" aria-label="One more" onClick={() => setCount(Math.min(it.count ?? 1, count + 1))}>+</button>
-        </div>
-      ) : null}
-      <Verbs verbs={itemVerbs(env, nav, it, purpose, count)} />
+      <Verbs verbs={itemVerbs(env, nav, it, purpose)} />
       {!purpose && !selling && (
         <>
           <dl className="m-card m-kv">
@@ -322,8 +316,8 @@ export function BagPick({ purpose }: { purpose?: Purpose }) {
           <ItemRow
             key={it.id}
             it={it}
-            right={selling ? (it.sell && it.kind !== "Key" ? <b className="m-count">₽{it.sell}</b> : <span className="m-faint">Keep</span>) : undefined}
-            onClick={() => nav.go({ k: "item", id: it.id, for: purpose })}
+            right={selling ? (sellable(it) ? <b className="m-count">₽{it.sell}</b> : <span className="m-faint">Keep</span>) : undefined}
+            onClick={() => nav.go(selling && sellable(it) ? { k: "sell", id: it.id } : { k: "item", id: it.id, for: purpose })}
           />
         ))}
       </div>
@@ -359,15 +353,18 @@ export function BoxPick() {
   );
 }
 
-/** The Poké Mart's counter (the buy sheet). */
-export function ShopPick({ stock }: { stock: { id: number; name: string; price: number; kind: ItemKind }[] }) {
+/** The Poké Mart's counter (the buy sheet): a tap on a row asks how many (BuyScreen). */
+export function ShopPick({ stock }: { stock: StockItem[] }) {
   const env = useEnv();
-  const { model, actions } = env;
+  const nav = useNav();
+  const { model } = env;
+  const bag = model.bag.map((b) => ({ item: b.id, quantity: b.count ?? 1 }));
   return (
-    <Page title="Poké Mart" meta={`₽${model.trainer.money.toLocaleString()}`} banner="What would you like?">
+    <Page title="Poké Mart" meta={`₽${model.trainer.money.toLocaleString("en")}`} banner="What would you like?">
       <div className="m-list">
         {stock.map((s) => {
-          const have = model.bag.find((b) => b.id === s.id)?.count ?? 0;
+          const have = model.bag.filter((b) => b.id === s.id).reduce((n, b) => n + (b.count ?? 0), 0);
+          const max = buyMax(model.trainer.money, s.price, bag, s.id);
           return (
             <Row
               key={s.id}
@@ -377,12 +374,10 @@ export function ShopPick({ stock }: { stock: { id: number; name: string; price: 
                 </span>
               }
               title={niceItem(s.name)}
-              sub={have ? `You have ${have}` : "You have none"}
-              right={
-                <button type="button" className="m-pill" disabled={model.trainer.money < s.price} onClick={() => env.toast(actions.buy(s.id, 1))}>
-                  ₽{s.price}
-                </button>
-              }
+              sub={max === 0 ? limitOf("buy", 0, model.trainer.money, s.price, have) : have ? `You have ${have}` : "You have none"}
+              right={<b className="m-count">₽{s.price.toLocaleString("en")}</b>}
+              off={max === 0}
+              onClick={() => nav.go({ k: "buy", item: s })}
             />
           );
         })}

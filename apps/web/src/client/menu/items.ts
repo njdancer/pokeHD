@@ -8,6 +8,7 @@ export type Shelf = "Healing" | "Balls" | "Battle" | "Travel" | "Machines" | "Ke
 export const SHELVES: Shelf[] = ["Healing", "Balls", "Battle", "Travel", "Machines", "Key", "Other"];
 
 const HM01 = 0xc4;
+const TM01 = 0xc9;
 const BALLS = new Set([0x01, 0x02, 0x03, 0x04, 0x08]);
 const HEALING = new Set([0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x34, 0x35, 0x36, 0x3c, 0x3d, 0x3e, 0x50, 0x51, 0x52, 0x53]);
 const BATTLE = new Set([0x2e, 0x37, 0x3a, 0x41, 0x42, 0x43, 0x44, 0x33]);
@@ -25,8 +26,17 @@ export function shelf(rom: Uint8Array, item: number): Shelf {
   return "Other";
 }
 
-/** The game's price (`ItemPrices`, 3 BCD bytes per item), or 0 for things it won't sell. */
+/**
+ * The game's price, as its GetItemPrice finds it: `ItemPrices` (3 BCD bytes per item), or for a
+ * TM, GetMachinePrice's nybble in `TechnicalMachinePrices` (thousands: TM01's high nybble, TM02's
+ * low…). 0 for an HM (GetMachinePrice gives none: they can't be sold) or no item.
+ */
 export function itemPrice(rom: Uint8Array, item: number): number {
+  if (item >= TM01) {
+    const tm = item - TM01;
+    const byte = rom[romOffset(SYMBOLS.TechnicalMachinePrices) + (tm >> 1)]!;
+    return (tm & 1 ? byte & 0x0f : byte >> 4) * 1000;
+  }
   if (item >= HM01 || item < 1) return 0;
   const at = romOffset(SYMBOLS.ItemPrices) + (item - 1) * 3;
   return fromBcd(rom.subarray(at, at + 3));

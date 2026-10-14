@@ -251,6 +251,7 @@ export const ALLOWLIST: readonly string[] = [
   "GetItemPrice",
   "GoBackToPartyMenu",
   "ItemPrices",
+  "TechnicalMachinePrices",
   "hHalveItemPrices",
   // The Poké Mart's sell list: the only bag list whose caller is between these two
   "DisplayPokemartDialogue_.sellMenuLoop",

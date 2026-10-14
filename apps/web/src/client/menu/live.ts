@@ -115,7 +115,9 @@ function toItem(rom: Uint8Array, item: number, count: number | undefined): Item 
     count: isKeyItem(rom, item) ? undefined : count,
     ...(teaches ? { sub: teaches } : {}),
     text: teaches ? `Teaches ${nice(teaches)}. ${item >= TM01 ? "Used up once taught." : "It never runs out."}` : itemLine(rom, item),
-    ...(price ? { buy: `₽${price.toLocaleString("en")} at a Poké Mart`, sell: Math.floor(price / 2) } : {}),
+    // Only a few TMs are on any shelf (Celadon's), but the Mart buys any of them back.
+    ...(price && item < HM01 ? { buy: `₽${price.toLocaleString("en")} at a Poké Mart` } : {}),
+    ...(price ? { price, sell: Math.floor(price / 2) } : {}),
   };
 }
 

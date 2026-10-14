@@ -138,6 +138,7 @@ export const SYMBOLS = {
   SubBCDPredefPredef: { bank: 0x13, address: 0x7e9d },
   SuperPalettes: { bank: 0x1c, address: 0x6660 },
   SwitchPartyMon_InitVarOrSwapData: { bank: 0x04, address: 0x7653 },
+  TechnicalMachinePrices: { bank: 0x1e, address: 0x7fa7 },
   TechnicalMachines: { bank: 0x04, address: 0x7773 },
   TextBoxGraphics: { bank: 0x04, address: 0x6288 },
   TextBoxGraphicsEnd: { bank: 0x04, address: 0x6488 },

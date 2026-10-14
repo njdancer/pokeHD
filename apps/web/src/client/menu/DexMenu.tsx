@@ -13,6 +13,7 @@ import { EntryScreen, PokemonScreen } from "./screens/Pokemon.tsx";
 import { FriendScreen, PeopleScreen, PersonScreen } from "./screens/People.tsx";
 import { BagPick, BoxPick, InventoryScreen, ItemScreen, MonScreen, ShopPick, TeamPick } from "./screens/Inventory.tsx";
 import { MapScreen } from "./screens/MapScreen.tsx";
+import { BuyScreen, SellScreen } from "./screens/Quantity.tsx";
 import { GrownupsScreen, MeScreen, SavesScreen, SettingsScreen } from "./screens/Me.tsx";
 import "./menu.css";
 
@@ -28,6 +29,8 @@ function render(s: Screen): ReactNode {
     case "item": return <ItemScreen id={s.id} purpose={s.for} />;
     case "team": return <TeamPick purpose={s.for} />;
     case "bag": return <BagPick purpose={s.for} />;
+    case "buy": return <BuyScreen item={s.item} />;
+    case "sell": return <SellScreen id={s.id} />;
     case "map": return <MapScreen key={s.focus} focus={s.focus} />;
     case "me": return <MeScreen />;
     case "settings": return <SettingsScreen />;
