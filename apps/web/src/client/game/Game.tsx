@@ -84,7 +84,7 @@ import { IntroStage } from "./IntroStage.tsx";
 import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
 import { LockScreen } from "./LockScreen.tsx";
 import { Starter, type StartChoice } from "./onboarding.ts";
-import { newScriptView, scriptTap, scriptView, type ScriptView } from "./script-view.ts";
+import { newScriptView, scriptTap, scriptView, withScriptState, type ScriptView } from "./script-view.ts";
 import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
@@ -325,6 +325,12 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const [dialogLines, setDialogLines] = useState<string[] | null>(null);
   /** Whole messages from the script (ScriptText), in place of the game's pages. */
   const scriptRef = useRef<ScriptView | null>(null);
+  /**
+   * The HD message box shows that message this frame. Once the game prints its own words in the
+   * box ("SQUIRTLE's ATTACK fell!" after "Enemy BULBASAUR used GROWL!"), a tap on it is for those,
+   * not the message before (QA bug 56).
+   */
+  const scriptShownRef = useRef(false);
   const look = useMemo(() => uiLook(), []);
   /** The signed-in player (their name is the one Oak checks, and kept the same as theirs). */
   const [account, setAccount] = useState<Account | null>(null);
@@ -712,15 +718,18 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           const quiet = fits || mapOnly || choosing || !!acting;
           // Whole messages from the script: the page shows the message the game is printing.
           const script = scriptView(scriptRef, text, fits, (id) => host?.releaseMessage(id));
+          scriptShownRef.current = !!script;
           // Otherwise whole sentences at once: read past pages that stop mid-sentence (DialogJoiner).
           // Not in battle, where the game moves on by itself between some messages.
           if (!fits || script || battleScreen || itemUse) joiner.reset();
           const joined = script ? { lines: script.lines, press: false } : fits && !battleScreen && !itemUse ? joiner.frame(text) : { lines: null, press: false };
           if (joined.press) host?.tap(Button.A);
-          const key = fits ? `${textKey(text)}#${joined.lines?.join("|") ?? ""}` : "";
+          // A whole message's ▼ shows only when a tap reads on (QA bug 56).
+          const boxText = script ? withScriptState(text, scriptRef.current) : text;
+          const key = fits ? `${textKey(boxText)}#${joined.lines?.join("|") ?? ""}` : "";
           if (key !== shownText) {
             shownText = key;
-            setHdText(fits ? text : null);
+            setHdText(fits ? boxText : null);
             setDialogLines(joined.lines);
           }
           const scene = sceneRef.current;
@@ -1179,7 +1188,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   function readOnScript(): boolean {
     const script = scriptRef.current;
     const host = hostRef.current;
-    if (!script || !host) return false;
+    if (!script || !host || !scriptShownRef.current) return false;
     const tap = scriptTap(script);
     if (tap === "next" && script.index === script.boxes.length - 1) host.readOnMessage(script.id);
     if (tap === "close") host.closeMessage(script.id);

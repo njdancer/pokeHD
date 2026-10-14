@@ -33,7 +33,9 @@ export function describePanels(panels: readonly Panel[]): string {
     .map((p) => {
       const text = p.text.replace(/\n/g, " / ");
       const cursor = p.cursor ? ` (cursor on ${p.cursor.replace(/\n/g, " ")})` : "";
-      return `${p.kind}: "${text}"${cursor}`;
+      // Whether a tap on the message reads on yet: the game keeps some up a while by itself.
+      const waiting = p.waiting === undefined ? "" : p.waiting ? " (▼: a tap reads on)" : " (no ▼: the game isn't waiting for a tap yet)";
+      return `${p.kind}: "${text}"${cursor}${waiting}`;
     })
     .join("\n");
 }
