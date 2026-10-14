@@ -104,10 +104,21 @@ export function learnMoveCall(g: GameBoy): boolean {
   return back > start.address && back <= addr("LearnedMove1Text");
 }
 
-/** The text box's lines on the Game Boy screen (the empty ones left out). */
+/** "│", the side TextBoxBorder draws down each edge of a text box (charmap.asm: $7C). */
+const BOX_SIDE = 0x7c;
+
+/**
+ * The text box's lines on the Game Boy screen (the empty ones left out), or none when there is
+ * no text box: only where TextBoxBorder's sides frame both lines. Without that check the rows
+ * read whatever is there, the overworld's map tiles once a routine has put the map back, which
+ * decode as "??????????????????" (QA bug 60: a Potion used from the menu said that after
+ * "recovered by 20!").
+ */
 export function textBoxLines(gb: GameBoy): string[] {
   const map = addr("wTileMap");
-  return [14, 16].map((row) => decodeText(gb.readBytes(map + row * 20 + 1, 18)).trim()).filter(Boolean);
+  const rows = [14, 16];
+  if (!rows.every((row) => gb.read(map + row * 20) === BOX_SIDE && gb.read(map + row * 20 + 19) === BOX_SIDE)) return [];
+  return rows.map((row) => decodeText(gb.readBytes(map + row * 20 + 1, 18)).trim()).filter(Boolean);
 }
 
 /** The text box's two lines on the Game Boy screen. */
