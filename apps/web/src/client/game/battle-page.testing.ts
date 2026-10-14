@@ -2,12 +2,15 @@
 // messages from the script (ScriptText via Controls) read on with a tap on the HD message box, the
 // HD battle menu's questions (BattleMenus) and the Pokédex menu's sheets (GameAsks) answered a few
 // frames late as across the emulator worker, and each frame's Game Boy screen masked the way Game
-// masks it: what's left of it is what the player would see over the HD battle.
+// masks it: what's left of it is what the player would see over the HD battle. The game's questions
+// go through the menu's LiveActions first, as in Game: one it was told the answer to up front (the
+// bag's "Use POTION on GEODUDE": the party question after the bag's) never reaches a sheet.
 import {
   BATTLE_WATCHES, BattleMenus, Button, Controls, GameAsks, GameBoy, OVERWORLD_WATCHES, ScreenTextDecoder, TEXT_WATCHES,
   type AskAnswer, type BattleAnswer, type BattleAsk, type GameAsk, type TextWatched, type Watch,
 } from "@pokehd/emu";
 import { readGlyphs } from "@pokehd/rom";
+import { LiveActions, type LiveHost } from "../menu/live.ts";
 import {
   BattleItemUse, BattleMenuCover, BattleTracker, battleCovered, battleText, battleTextShown, maskBattleScreen, partyScreenMessage,
 } from "./battle.ts";
@@ -28,22 +31,51 @@ export interface BattlePageOptions {
   lag?: number;
   /** The Pokédex menu's answer to one of the game's own questions (the bag, the party). */
   sheet?: (ask: GameAsk) => AskAnswer;
+  /**
+   * The bag's "Use ITEM on MON" (verbs.ts): the bag's question answered with the item and the
+   * Pokémon's queued for the party question that follows (LiveActions.useItem), as the HD bag
+   * does in a battle. Without it each question shows its sheet (`sheet`).
+   */
+  bag?: { item: number; mon: number };
 }
 
 export type BattlePage = Awaited<ReturnType<typeof battlePage>>;
 
-export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet = () => null }: BattlePageOptions) {
+export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet = () => null, bag }: BattlePageOptions) {
   const gb = await GameBoy.create({ rom, wasmBinary: wasm });
   gb.loadState(state);
   const menus = new BattleMenus(gb, { rom, onAsk: () => {} });
   const itemUse = new BattleItemUse();
-  /** The game's questions for the sheets, each answered `lag` frames after it's asked. */
-  const sheets: { id: number; ask: GameAsk; in: number }[] = [];
+  /** The game's questions for the sheets, as the page has them. */
+  const sheets: { id: number; ask: GameAsk }[] = [];
+  /** Every question the game asked, sheet or not. */
+  const gameAsks: GameAsk[] = [];
+  /** The page's answers, reaching the game `lag` frames later. */
+  const replies: { id: number; answer: AskAnswer; in: number }[] = [];
+  /** The game's last question (Game's lastAskRef), for what its answer starts. */
+  let lastAsk: { id: number; ask: GameAsk } | null = null;
+  // Game's liveGame.answer: the menu's every answer, a sheet's or a queued one.
+  const host: { current: LiveHost } = {
+    current: {
+      act: () => Promise.reject(new Error("No menu actions on a battle page")),
+      answer: (id, answer) => {
+        if (lastAsk?.id === id) itemUse.answered(lastAsk.ask, answer);
+        replies.push({ id, answer, in: lag });
+      },
+      notice: () => {},
+      setApp: () => {},
+      game: null,
+    },
+  };
+  const live = new LiveActions(rom, host);
   const asks = new GameAsks(gb, {
     rom,
     busy: () => false,
+    // Game's onAsk: the question is the last one, then the menu may already know its answer.
     onAsk: (id, ask) => {
-      sheets.push({ id, ask, in: lag });
+      gameAsks.push(ask);
+      lastAsk = { id, ask };
+      if (!live.asked(id, ask)) sheets.push({ id, ask });
     },
   });
   const script: { current: ScriptView | null } = { current: null };
@@ -89,12 +121,18 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
       menus.answer(sending.id, sending.answer);
       sending = null;
     }
-    const due = sheets[0];
-    if (due && --due.in < 0) {
-      sheets.shift();
-      const answer = sheet(due.ask);
-      itemUse.answered(due.ask, answer);
-      asks.answer(due.id, answer);
+    // A sheet the page shows is answered at once: the round trip is in `replies`.
+    for (let due = sheets.shift(); due; due = sheets.shift()) {
+      if (bag && due.ask.kind === "items") live.useItem(bag.item, bag.mon);
+      else {
+        live.answered();
+        host.current.answer(due.id, sheet(due.ask));
+      }
+    }
+    const reply = replies[0];
+    if (reply && --reply.in < 0) {
+      replies.shift();
+      asks.answer(reply.id, reply.answer);
     }
     const asking = menus.asking;
     if (asking && asked?.id !== asking.id && !answered.has(asking.id) && ++askAge > lag) {
@@ -186,5 +224,5 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
     cover.answered();
     return play(done, options);
   };
-  return { gb, play, answer, asked: () => asked };
+  return { gb, play, answer, asked: () => asked, gameAsks };
 }
