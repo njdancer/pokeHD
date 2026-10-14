@@ -15,7 +15,7 @@ import type { Direction } from "./types.ts";
 export const DIRS: Record<Direction, { dx: number; dy: number }> = { up: { dx: 0, dy: -1 }, down: { dx: 0, dy: 1 }, left: { dx: -1, dy: 0 }, right: { dx: 1, dy: 0 } };
 
 /** Why a walk ended before it was done. */
-export type Stop = "battle" | "text" | "map" | "blocked" | "stalled";
+export type Stop = "battle" | "text" | "map" | "blocked" | "stalled" | "astray";
 
 /**
  * Emulated frames with no step under way before a walk counts as blocked: three steps' worth, at
@@ -68,10 +68,11 @@ interface WalkHook {
 
 /**
  * Runs in the game's page (serialised by Playwright: self-contained, no outer names). Call it
- * before the touch goes down: it notes the touch's pointer, then follows the walk and stores its
- * promise as `__qaWalk`. At each leg's last step it leans the thumb to the next leg's direction,
- * and after the last leg (or anything that stops the walk) it lifts it. Returns false when the
- * page has no game state to follow.
+ * before the touch goes down on the stick's centre: it notes the touch's pointer and leans the
+ * thumb toward the first leg, then follows the walk and stores its promise as `__qaWalk`. At each
+ * leg's last step it leans the thumb to the next leg's direction, and after the last leg (or
+ * anything that stops the walk) it lifts it. Any step the walk didn't ask for (the wrong way, or
+ * one too many) lifts it at once ("astray"). Returns false when the page has no state to follow.
  */
 export function walkPath(arg: PathArg): boolean {
   type G = typeof globalThis & { __pokehd?: WalkHook; __qaWalk?: Promise<PathResult>; __qaStickPointer?: number; __qaStickArmed?: boolean };
@@ -105,6 +106,9 @@ export function walkPath(arg: PathArg): boolean {
   };
   const lite = (s: StateLite): StateLite => ({ mode: s.mode, mapId: s.mapId, fade: s.fade, player: { ...s.player }, npcs: [] });
   const trail: StateLite[] = [lite(first)];
+  const asked = arg.legs.reduce((n, l) => n + l.steps, 0);
+  // This walk's touch is the next one to go down on the stick.
+  g.__qaStickPointer = undefined;
   g.__qaWalk = (async (): Promise<PathResult> => {
     let leg = 0;
     let base = at(first);
@@ -112,7 +116,9 @@ export function walkPath(arg: PathArg): boolean {
     let lastFrames = hook.frames;
     let lastActive = hook.frames;
     let ranAt = Date.now();
-    let key = "";
+    let leaned = false;
+    let prev = base;
+    let moved = 0;
     const finish = (end: PathResult["end"]): PathResult => {
       thumb(null);
       const s = hook.state;
@@ -120,21 +126,32 @@ export function walkPath(arg: PathArg): boolean {
       return { end, leg, trail };
     };
     for (;;) {
+      // The touch is down: lean toward the first leg. Every move of the thumb from here on is
+      // walkPath's, in order (a slide from the harness could land after a turn and undo it).
+      if (!leaned && g.__qaStickPointer !== undefined) {
+        leaned = true;
+        thumb(arg.legs[0]!);
+        lastActive = hook.frames;
+      }
       const s = hook.state;
       const frames = hook.frames;
       if (frames !== lastFrames && s) {
         lastFrames = frames;
         ranAt = Date.now();
         const h = at(s);
-        const k = `${s.mapId},${h.x},${h.y}`;
-        if (k !== key) {
-          key = k;
-          trail.push(lite(s));
-        }
         if (s.mapId !== first.mapId) return finish("map");
+        const l = arg.legs[leg]!;
+        if (h.x !== prev.x || h.y !== prev.y) {
+          trail.push(lite(s));
+          const along = (h.x - prev.x) * l.dx + (h.y - prev.y) * l.dy;
+          moved++; // one step (a ledge hop moves two cells in one)
+          prev = h;
+          // Fail safe: a step the walk didn't ask for (the wrong way, or past the last one) means
+          // the thumb isn't where it should be: let go at once.
+          if (along <= 0 || moved > asked) return finish("astray");
+        }
         if (s.mode === "battle") return finish("battle");
         if (s.mode === "dialog") return finish("text");
-        const l = arg.legs[leg]!;
         const progress = Math.max(0, (h.x - base.x) * l.dx + (h.y - base.y) * l.dy);
         // Stepping, a fade (a warp on its way) or progress all mean something is still happening.
         if (progress > best || s.player.step || s.fade !== 0) lastActive = frames;
@@ -192,14 +209,17 @@ export interface WalkSummary {
   blocker: string | null;
 }
 
-const REASONS: Record<Exclude<Stop, "blocked" | "stalled">, string> = {
+const REASONS: Record<Exclude<Stop, "blocked" | "stalled" | "astray">, string> = {
   battle: "a battle started",
   text: "text came up",
   map: "the map changed",
 };
+/** The harness's own slip, said plainly so the player can report it (tag "harness"). */
+const ASTRAY = "the joystick went a way you didn't ask for, so the harness let go (a harness problem)";
 
 /** The line the player gets about how far the joystick took them; empty when it went as asked. */
 export function walkNote(w: WalkSummary): string {
+  if (w.stop === "astray") return `You moved ${w.walked} step${w.walked === 1 ? "" : "s"} of the ${w.asked} you asked for: ${ASTRAY}.`;
   if (w.walked > w.asked) return `You moved ${w.walked} steps (you asked for ${w.asked}).`;
   if (w.walked === w.asked) return "";
   const moved = w.walked === 0 ? "You didn't move" : `You moved ${w.walked} of ${w.asked} steps`;
