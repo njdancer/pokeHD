@@ -56,7 +56,9 @@ exactly where it was; `from: "save"` rolls back to the last in-game save).
 ## Rules the harness keeps
 
 - The player only touches the screen, like a person. No keys, no calling game code.
-- What it's told is what's on screen: text, choices and where they are, a small text map around
-  it. No RAM, no hidden information. Screenshots and contact sheets on request.
+- What it's told is what's on screen: text, choices and where they are, a text map around
+  it the size of the Game Boy's own screen (10×9 steps), and after a joystick walk how many steps
+  it took and, when short, why (a battle, text, a new map, what's in the way). No RAM, no hidden
+  information. Screenshots and contact sheets on request.
 - Glitch heuristics (a flip to the Game Boy screen, the scene reloading, a stalled emulator, long
   frames, page errors) arrive as harness notes; the player decides whether they're bugs.

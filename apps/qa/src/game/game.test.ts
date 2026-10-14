@@ -6,7 +6,7 @@ import { describeLayouts } from "./layout-log.ts";
 import { continueButton, describeButtons, describeGameBoyText, mapName, startingUp } from "./outcome.ts";
 import { pickFrames } from "./recorder.ts";
 import type { Panel, ScreenButton, StateLite } from "./screen-read.ts";
-import { buildTextMap } from "./textmap.ts";
+import { blockerAt, buildTextMap } from "./textmap.ts";
 
 // A tiny world: blocks are one tile throughout (0 floor, 1 wall, 2 grass, 3 water).
 const FLOOR = 0x01;
@@ -94,6 +94,29 @@ describe("buildTextMap", () => {
   });
 });
 
+describe("the text map's window", () => {
+  it("is the Game Boy's own view by default: 10 steps wide, 9 tall, the player 5th across and down", () => {
+    const rows = buildTextMap(world, null, state(2, 3)).split("\n").slice(0, -1);
+    expect(rows).toHaveLength(9);
+    expect(rows.every((r) => r.length === 10)).toBe(true);
+    expect(rows[4]!.indexOf("@")).toBe(4);
+  });
+});
+
+describe("blockerAt", () => {
+  const dir = (dx: number, dy: number) => ({ dx, dy });
+  it("names what the text map shows in the way", () => {
+    expect(blockerAt(world, null, state(1, 2), dir(0, -1))).toBe("a wall");
+    expect(blockerAt(world, null, state(0, 2), dir(-1, 0))).toBe("a wall"); // the edge of the world
+    expect(blockerAt(world, null, state(4, 3), dir(0, 1))).toBe("water");
+    expect(blockerAt(world, null, state(4, 2), dir(1, 0))).toBe("a sign");
+    expect(blockerAt(world, null, state(2, 3, [{ x: 3, y: 3, facing: "up", step: null, visible: true, pictureId: 1 }]), dir(1, 0))).toBe("someone");
+  });
+  it("says nothing when the way looks open", () => {
+    expect(blockerAt(world, null, state(2, 3), dir(-1, 0))).toBeNull();
+  });
+});
+
 const ROM_PATH = new URL("../../../../rom/pokeblue.gb", import.meta.url);
 
 describe.skipIf(!existsSync(ROM_PATH))("buildTextMap on the ROM's caves", () => {
@@ -112,6 +135,11 @@ describe.skipIf(!existsSync(ROM_PATH))("buildTextMap on the ROM's caves", () => 
     const text = buildTextMap(rom!, null, at("MT_MOON_B2F", 28, 8), { left: 1, right: 1, up: 2, down: 0 });
     expect(text.split("\n").slice(0, 3)).toEqual(["^^^", "#//", ".@."]);
     expect(text).toContain("/ stairs between floor heights");
+  });
+
+  it("says when a step would drop between floor heights, but not onto the stairs", () => {
+    expect(blockerAt(rom!, null, at("MT_MOON_1F", 2, 3), { dx: -1, dy: 0 })).toBe("a drop between floor heights (use the stairs /)");
+    expect(blockerAt(rom!, null, at("MT_MOON_B2F", 28, 8), { dx: 0, dy: -1 })).toBeNull();
   });
 });
 
