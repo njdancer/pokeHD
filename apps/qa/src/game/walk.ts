@@ -51,6 +51,8 @@ export interface PathArg {
   stall: number;
   /** Wall time with no emulated frame at all before giving up (the game stopped running). */
   idleMs: number;
+  /** Wall time for the whole walk, whatever the game does, before letting go ("stalled"). */
+  maxMs: number;
 }
 
 export interface PathResult {
@@ -77,7 +79,7 @@ interface WalkHook {
  * one too many) lifts it at once ("astray"). Returns false when the page has no state to follow.
  */
 export function walkPath(arg: PathArg): boolean {
-  type G = typeof globalThis & { __pokehd?: WalkHook; __qaWalk?: Promise<PathResult>; __qaStickPointer?: number; __qaStickArmed?: boolean };
+  type G = typeof globalThis & { __pokehd?: WalkHook; __qaWalk?: Promise<PathResult>; __qaStickPointer?: number; __qaStickArmed?: boolean; __qaWalkStop?: boolean };
   const g = globalThis as G;
   const hook = g.__pokehd;
   const first = hook?.state;
@@ -111,6 +113,9 @@ export function walkPath(arg: PathArg): boolean {
   const asked = arg.legs.reduce((n, l) => n + l.steps, 0);
   // This walk's touch is the next one to go down on the stick.
   g.__qaStickPointer = undefined;
+  // The harness sets this when it gives up on the walk (its own deadline): let go at once.
+  g.__qaWalkStop = false;
+  const began = Date.now();
   g.__qaWalk = (async (): Promise<PathResult> => {
     let leg = 0;
     let base = at(first);
@@ -121,6 +126,7 @@ export function walkPath(arg: PathArg): boolean {
     let leaned = false;
     let prev = base;
     let moved = 0;
+    let fade = first.fade;
     const ran: NonNullable<PathResult["ran"]> = [];
     const finish = (end: PathResult["end"]): PathResult => {
       thumb(null);
@@ -156,8 +162,13 @@ export function walkPath(arg: PathArg): boolean {
         if (s.mode === "battle") return finish("battle");
         if (s.mode === "dialog") return finish("text");
         const progress = Math.max(0, (h.x - base.x) * l.dx + (h.y - base.y) * l.dy);
-        // Stepping, a fade (a warp on its way) or progress all mean something is still happening.
-        if (progress > best || s.player.step || s.fade !== 0) lastActive = frames;
+        // Stepping, a fade under way (a warp on its way) or progress all mean something is still
+        // happening. A fade that holds is no fade: a dark cave (Rock Tunnel without Flash) keeps its
+        // palette two shades down the whole time, and counting that as busy meant a walk into a
+        // wall there never stopped. Full black or white is a warp's, mid-load.
+        const fading = s.fade !== fade || Math.abs(s.fade) === 1;
+        fade = s.fade;
+        if (progress > best || s.player.step || fading) lastActive = frames;
         best = Math.max(best, progress);
         if (best >= l.steps) {
           // The leg's last step is under way: turn now, or let go after the last leg.
@@ -187,7 +198,7 @@ export function walkPath(arg: PathArg): boolean {
           continue;
         }
       }
-      if (Date.now() - ranAt > arg.idleMs) return finish("stalled");
+      if (Date.now() - ranAt > arg.idleMs || Date.now() - began > arg.maxMs || g.__qaWalkStop) return finish("stalled");
       await new Promise((r) => setTimeout(r, 1));
     }
   })();

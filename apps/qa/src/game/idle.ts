@@ -24,9 +24,13 @@ const PAGE_SCREENS = new Set(["start", "name", "dialog"]);
 export function readiness(r: ScreenRead): Readiness {
   if (!r.hooked || r.loading || startingUp(r)) return { ready: false, why: "the game loading" };
   if (r.panels.some((p) => PAGE_SCREENS.has(p.kind))) return { ready: true, on: "page" };
-  if (r.state?.fade) return { ready: false, why: "a screen fade" };
-  if (r.state?.player.step) return { ready: false, why: "a step under way" };
   const input = r.input;
+  // A fade under way runs outside the overworld loop and its waits, so the page's word covers it.
+  // Without that word, any fade counts. A dark cave (Rock Tunnel without Flash) keeps its palette
+  // two shades down the whole time: that's the map's light, not a fade, and every action there
+  // used to wait out the full READY_MAX_MS for it.
+  if (r.state?.fade && !input?.ready) return { ready: false, why: "a screen fade" };
+  if (r.state?.player.step) return { ready: false, why: "a step under way" };
   // A page without the signal (an older build): a message box without its ▼ is all there is to go on.
   if (!input) return r.printing ? { ready: false, why: BUSY["printing"]! } : { ready: true, on: "screen" };
   if (!input.ready) return { ready: false, why: BUSY[input.why] ?? input.why };

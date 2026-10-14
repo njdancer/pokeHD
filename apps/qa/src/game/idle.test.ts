@@ -22,8 +22,13 @@ describe("readiness", () => {
   it("waits out loading, fades and steps whatever the page says", () => {
     expect(readiness(screen({ hooked: false })).ready).toBe(false);
     expect(readiness(screen({ loading: true })).ready).toBe(false);
-    expect(readiness(screen({ state: state({ fade: 2 }) }))).toEqual({ ready: false, why: "a screen fade" });
+    expect(readiness(screen({ state: state({ fade: 2 / 3 }), input: { ready: false, why: "busy" } }))).toEqual({ ready: false, why: "a screen fade" });
+    expect(readiness(screen({ state: state({ fade: 2 / 3 }), input: null }))).toEqual({ ready: false, why: "a screen fade" });
     expect(readiness(screen({ state: state({}, { step: { dx: 1 } }) }))).toEqual({ ready: false, why: "a step under way" });
+  });
+
+  it("takes a dark cave's dim palette for the map's light, not a fade, once the game takes input", () => {
+    expect(readiness(screen({ state: state({ fade: 2 / 3 }) }))).toEqual({ ready: true, on: "free" });
   });
 
   it("waits for the HD battle menu to be on screen before it's tapped", () => {

@@ -10,6 +10,22 @@ import type { Direction, GameDriver, Move } from "./game/types.ts";
 
 /** How long the player waits for the developer before carrying on alone. */
 const REPLY_TIMEOUT_MS = 30 * 60_000;
+/**
+ * The last word on how long a game tool may take (the driver's own deadline, ACTION_MAX_MS, comes
+ * first): past it the turn ends with an error, so the player is never left waiting on a call.
+ */
+const TOOL_MAX_MS = 75_000;
+/** The same for a restart, which may wait minutes for the game to load. */
+const RESTART_MAX_MS = 6 * 60_000;
+
+/** `p`, or an error once `ms` has gone by without it. */
+function capped<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} didn't finish in ${Math.round(ms / 1000)} s (the game may be stuck: take a screenshot, and restart_game if it stays that way)`)), ms);
+  });
+  return Promise.race([p, late]).finally(() => clearTimeout(timer));
+}
 const PROMPT = fileURLToPath(new URL("../prompt.md", import.meta.url));
 
 /**
@@ -167,29 +183,29 @@ export class Toolbox {
           const x = Number(input["x"]);
           const y = Number(input["y"]);
           act("tap", `tap ${String(input["what"] ?? `${x},${y}`)}`);
-          return text((await this.driver.tap(x, y)).text);
+          return text((await capped(this.driver.tap(x, y), TOOL_MAX_MS, "The tap")).text);
         }
         case "swipe": {
           const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((k) => Number(input[k]));
           act("tap", `swipe ${String(input["what"] ?? `${x1},${y1} → ${x2},${y2}`)}`);
-          return text((await this.driver.swipe(x1!, y1!, x2!, y2!, Number(input["ms"] ?? 300))).text);
+          return text((await capped(this.driver.swipe(x1!, y1!, x2!, y2!, Number(input["ms"] ?? 300)), TOOL_MAX_MS, "The swipe")).text);
         }
         case "joystick": {
           const moves = parseMoves(String(input["moves"] ?? ""));
           if (typeof moves === "string") return text(moves, true);
           act("joystick", `joystick ${moves.map((m) => ARROWS[m.direction].repeat(m.tiles)).join("")}`);
-          return text((await this.driver.joystick(moves)).text);
+          return text((await capped(this.driver.joystick(moves), TOOL_MAX_MS, "The walk")).text);
         }
         case "screenshot":
           act("screenshot", "screenshot");
-          return image("The screen now:", await this.driver.screenshot());
+          return image("The screen now:", await capped(this.driver.screenshot(), TOOL_MAX_MS, "The screenshot"));
         case "contact_sheet": {
           const at = Number(input["turn"]);
           const before = Number(input["before"]);
           const after = Number(input["after"]);
           const fps = Number(input["fps"]);
           act("contact_sheet", `contact sheet turn ${at} −${before}s…+${after}s`);
-          return image(`Frames around turn ${at}, ${fps} per second:`, await this.driver.contactSheet(at, before, after, fps));
+          return image(`Frames around turn ${at}, ${fps} per second:`, await capped(this.driver.contactSheet(at, before, after, fps), TOOL_MAX_MS, "The contact sheet"));
         }
         case "notebook":
           return text(this.#notebook(input, act));
@@ -200,7 +216,7 @@ export class Toolbox {
         case "restart_game": {
           const from = input["from"] === "save" ? "save" : "now";
           act("tap", from === "save" ? "restart from last save" : "restart game");
-          return text((await this.driver.restart({ from })).text);
+          return text((await capped(this.driver.restart({ from }), RESTART_MAX_MS, "The restart")).text);
         }
         default:
           return text(`There's no tool called ${name}.`, true);
@@ -309,7 +325,7 @@ export class Toolbox {
 
   async #refreshStatus(turn: number): Promise<void> {
     try {
-      const s = await this.driver.status();
+      const s = await capped(this.driver.status(), 15_000, "The status");
       this.bus.setStatus({ turn, map: s.map, playTime: s.playTime, fps: s.fps });
     } catch {
       this.bus.setStatus({ turn });
