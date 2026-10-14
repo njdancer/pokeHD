@@ -17,8 +17,10 @@ import { createFrameCap } from "./frame-cap.ts";
 import { castsMovingShadow, installCachedShadow } from "./look/cached-shadow.ts";
 import { createRig } from "./look/rig.ts";
 import { webgpuViewsWork } from "./webgpu-probe.ts";
+import { createDeviceRecovery, type GpuEvent, type GpuState } from "./gpu-recovery.ts";
 
 export type { DayCycle } from "./look/cycle.ts";
+export type { GpuEvent, GpuState } from "./gpu-recovery.ts";
 export type { LookParams } from "./look/params.ts";
 export { settingOfTileset, type Setting } from "./look/setting.ts";
 export { alignedPixelRatio, QUALITY_PATCHES, type Quality } from "./look/quality.ts";
@@ -113,6 +115,11 @@ export interface BenchResult {
 
 export interface Engine {
   backend: "WebGPU" | "WebGL2";
+  /**
+   * The GPU device: "recovering" after it was lost while a new one is made (the canvas shows
+   * nothing meanwhile), "failed" once that was given up (see `EngineOptions.onGpu`).
+   */
+  readonly gpu: GpuState;
   look: LookController;
   /** The quality tier laid over every look; see `QUALITY_PATCHES`. */
   readonly quality: Quality;
@@ -163,6 +170,11 @@ export interface EngineOptions {
    * harness caps at 60 so a 120 Hz display leaves its stream encoder room.
    */
   maxFps?: number;
+  /**
+   * Hears about the GPU device being lost, and the engine bringing the view back on a new one
+   * (QA bug #74). After "failed" the canvas stays blank: the page should reload or do without.
+   */
+  onGpu?: (event: GpuEvent) => void;
 }
 
 // The newest engine created on a canvas owns it. React StrictMode mounts, unmounts and
@@ -181,31 +193,22 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   const query = new URLSearchParams(location.search);
   const lookdev = options.lookdev ?? query.has("lookdev");
   const forceWebGL = options.forceWebGL ?? (query.has("webgl") || !(await webgpuViewsWork()));
-  const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, forceWebGL });
-  await renderer.init();
-  // three.js puts a small InstancedMesh's matrices in a uniform array sized by its instance count
-  // and named after the buffer, so every one gets its own shader: dozens per map chunk, each
-  // compiled on first draw (seconds of stalls in WebGL2). With no uniform-buffer room they all use
-  // instanced attributes and share their shaders.
-  const capabilities = (renderer.backend as unknown as { capabilities: { getUniformBufferLimit(): number } }).capabilities;
-  capabilities.getUniformBufferLimit = () => 0;
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap; // PCF honours shadow.radius for softness
+  let renderer = await startRenderer(canvas, forceWebGL);
 
   const params = structuredClone(DEFAULT_LOOK);
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(params.camera.fov, 1, 0.5, 1200);
   const sky = createSky(scene);
   const rig = createRig(scene, sky);
-  const isWebGPU = (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
+  const isWebGPU = usesWebGPU(renderer);
   /** The town's shadows drawn only when they change (D35); `?shadowcache=0` draws them every frame. */
   const shadowCache = query.get("shadowcache") === "0" ? null : installCachedShadow(rig.sun);
   const staticShadows = createChangeWatch();
   let world: WorldContent = options.world ?? createPlaceholder();
   scene.add(world.root);
-  const post = createPost(renderer, scene, camera);
+  let post = createPost(renderer, scene, camera);
   const compile = (object: THREE.Object3D) => post.compile(object);
-  const warmup = nonBlockingShaders(renderer, scene, canvas, !isWebGPU);
+  let warmup = nonBlockingShaders(renderer, scene, canvas, !isWebGPU);
 
   const fogNear = uniform(30);
   const fogFar = uniform(100);
@@ -424,7 +427,7 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
   let ambientAt = 0;
   /** Time from ticks the frame cap skipped, owed to the next drawn frame. */
   let carried = 0;
-  renderer.setAnimationLoop((t) => {
+  const loop = (t: number) => {
     if (superseded()) return renderer.setAnimationLoop(null);
     timer.update(t);
     const delta = timer.getDelta();
@@ -471,7 +474,71 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       secondStart = t;
     }
     frameHooks.after?.();
+  };
+  renderer.setAnimationLoop(loop);
+
+  // A lost device (QA bug #74): a new renderer on a new device takes over the same scene, post
+  // graph rebuilt, every mesh, texture and shader made again on first use. The game never stops.
+  let disposed = false;
+  const recovery = createDeviceRecovery({
+    restore: async () => {
+      if (disposed || superseded()) return;
+      const next = await startRenderer(canvas, forceWebGL, { noFallback: isWebGPU, attempts: 1 });
+      if (disposed || superseded()) {
+        void next.dispose();
+        return;
+      }
+      if (usesWebGPU(next) !== isWebGPU) {
+        void next.dispose();
+        throw new Error("the new renderer came up on a different backend");
+      }
+      const old = renderer;
+      const oldPost = post;
+      old.setAnimationLoop(null);
+      renderer = next;
+      post = createPost(renderer, scene, camera);
+      warmup = nonBlockingShaders(renderer, scene, canvas, !isWebGPU);
+      readyFrame = false;
+      watchDevice(renderer);
+      rebuild();
+      renderer.setAnimationLoop(loop);
+      // The old renderer's resources lived on the dead device; letting go of them is all that's left.
+      try {
+        oldPost.dispose();
+      } catch {
+        // Disposing what was on a lost device can throw; it's going either way.
+      }
+      void Promise.resolve().then(() => old.dispose()).catch(() => {});
+      console.info("[pokeHD] HD view restored on a new GPU device");
+    },
+    onEvent: (event) => {
+      if (event.state === "lost") console.warn(`[pokeHD] GPU device lost (${event.detail}); making a new one`);
+      if (event.state === "failed") console.error(`[pokeHD] gave up on the HD view: ${event.detail}`);
+      options.onGpu?.(event);
+    },
   });
+  function watchDevice(watched: THREE.WebGPURenderer) {
+    const lost = (detail: string) => {
+      if (disposed || watched !== renderer) return;
+      watched.setAnimationLoop(null);
+      // WebGL2 gets its context back on the same canvas only when the browser says so; the page
+      // reloads instead.
+      if (!isWebGPU) return recovery.lost(`WebGL context lost: ${detail}`);
+      recovery.lost(detail);
+    };
+    const device = (watched.backend as { device?: GPUDevice }).device;
+    // three.js ignores a device destroyed on purpose, so listen to the device itself: only this
+    // engine's dispose destroys its device on purpose (and that sets `disposed` first).
+    if (device) void device.lost.then((info) => lost(`${info.reason ?? "unknown"}: ${info.message}`));
+    else {
+      const onDeviceLost = watched.onDeviceLost.bind(watched);
+      watched.onDeviceLost = (info) => {
+        onDeviceLost(info);
+        lost(info.message ?? "unknown");
+      };
+    }
+  }
+  watchDevice(renderer);
 
   /** Resolves once the GPU has finished everything submitted so far. */
   const gpuIdle = async () => {
@@ -488,6 +555,9 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
 
   const engine: Engine = {
     backend: isWebGPU ? "WebGPU" : "WebGL2",
+    get gpu() {
+      return recovery.state;
+    },
     look,
     stats,
     ready,
@@ -536,6 +606,8 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
       return { frameMs, cpuMs, passes: frameCalls, drawCalls, triangles };
     },
     dispose() {
+      disposed = true;
+      recovery.dispose();
       world.setCompiler?.(null);
       renderer.setAnimationLoop(null);
       clearTimeout(rebuildTimer);
@@ -554,6 +626,43 @@ export async function createEngine(canvas: HTMLCanvasElement, options: EngineOpt
     disposePanel = mountLookdevPanel(engine, frameHooks);
   }
   return engine;
+}
+
+const usesWebGPU = (renderer: THREE.WebGPURenderer) => (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true;
+
+/**
+ * Makes and initialises a renderer, set up the way the engine draws. Starting up while the GPU
+ * process is restarting fails for a moment (no adapter), so a failed start is tried again.
+ * `noFallback` keeps three.js from quietly falling back to WebGL2 when WebGPU isn't back yet (a
+ * canvas that had a WebGPU context can't take a WebGL one).
+ */
+async function startRenderer(
+  canvas: HTMLCanvasElement,
+  forceWebGL: boolean,
+  { noFallback = false, attempts = 3 }: { noFallback?: boolean; attempts?: number } = {},
+): Promise<THREE.WebGPURenderer> {
+  for (let attempt = 1; ; attempt++) {
+    const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, forceWebGL });
+    if (noFallback) (renderer as unknown as { _getFallback: unknown })._getFallback = null;
+    try {
+      await renderer.init();
+    } catch (e) {
+      void Promise.resolve().then(() => renderer.dispose()).catch(() => {});
+      if (attempt >= attempts) throw e;
+      console.warn(`[pokeHD] renderer didn't start (attempt ${attempt}); trying again`, e);
+      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      continue;
+    }
+    // three.js puts a small InstancedMesh's matrices in a uniform array sized by its instance
+    // count and named after the buffer, so every one gets its own shader: dozens per map chunk,
+    // each compiled on first draw (seconds of stalls in WebGL2). With no uniform-buffer room they
+    // all use instanced attributes and share their shaders.
+    const capabilities = (renderer.backend as unknown as { capabilities: { getUniformBufferLimit(): number } }).capabilities;
+    capabilities.getUniformBufferLimit = () => 0;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFShadowMap; // PCF honours shadow.radius for softness
+    return renderer;
+  }
 }
 
 type Pipelines = { getForRender(renderObject: unknown, promises?: Promise<void>[] | null): unknown; updateForRender(renderObject: unknown): void };
