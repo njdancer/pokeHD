@@ -67,3 +67,16 @@ exactly where it was; `from: "save"` rolls back to the last in-game save).
   information. Screenshots and contact sheets on request.
 - Glitch heuristics (a flip to the Game Boy screen, the scene reloading, a stalled emulator, long
   frames, page errors) arrive as harness notes; the player decides whether they're bugs.
+
+## Movement eval
+
+`node src/eval/cli.ts …` (from `apps/qa`) measures the joystick tool on the player's model without
+the browser: the real emulator core in Node (`src/eval/sim.ts`) walks the joystick frame by frame
+the way `walkPath` does, and describes the result with the same note and text map the live player
+gets. Scenarios come from the ROM by seed (`gen`): a real map, a start, and a goal the game's
+collision allows, with the shortest route walked in the emulator first. Short goals are named by
+the text map's column and row; multi-turn goals are off screen, given as steps north/south and
+east/west, indoors, in caves and outdoors. `run <variant>` plays them through Claude Code on the
+subscription token (as the live player does), `decide <runA> <runB>` compares two runs paired by
+scenario and logs the step, and `export` writes the dashboard's data. Variants of the tool live in
+`src/eval/variants.ts`. Everything the eval writes goes under `runs/eval/` (gitignored).
