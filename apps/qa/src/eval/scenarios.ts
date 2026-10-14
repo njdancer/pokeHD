@@ -43,6 +43,8 @@ export interface Scenario {
   turnCap: number;
   /** Event flags set first (EVENT_* numbers): the route's trainers already beaten, as a player passing through would have them. */
   events?: number[];
+  /** Toggleable objects hidden first (TOGGLE_* numbers): items a player passing through has taken. */
+  hidden?: number[];
 }
 
 const OUTDOOR = new Set(["OVERWORLD", "PLATEAU", "FOREST"]);
@@ -454,7 +456,7 @@ export function marathons(world: WorldData): Scenario[] {
   // EVENT_BEAT_* flags (constants/event_constants.asm): every trainer on the way already beaten,
   // so nobody stops the walk (battles are off in the eval, and a trainer's challenge would loop).
   const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
-  const specs: { id: string; area: Area; start: Place; lastMap: number; goal: Region; text: string; turnCap: number; events: number[] }[] = [
+  const specs: { id: string; area: Area; start: Place; lastMap: number; goal: Region; text: string; turnCap: number; events: number[]; hidden?: number[] }[] = [
     {
       id: "marathon-mt-moon",
       area: "cave",
@@ -465,6 +467,9 @@ export function marathons(world: WorldData): Scenario[] {
       turnCap: 120,
       // MT_MOON_1_TRAINER_0–6, MT_MOON_EXIT_SUPER_NERD, MT_MOON_3_TRAINER_0–3.
       events: [...range(0x571, 0x577), ...range(0x579, 0x57d)],
+      // TOGGLE_MT_MOON_B2F_FOSSIL_1/2: the fossils stand in the only corridor to the exit ladder,
+      // and a player takes one (with A, which the drill doesn't have) to get past.
+      hidden: [109, 110],
     },
     {
       id: "marathon-viridian-forest",
@@ -496,6 +501,7 @@ export function marathons(world: WorldData): Scenario[] {
       features: ["turn", "detour", "door"],
       turnCap: m.turnCap,
       events: m.events,
+      ...(m.hidden && { hidden: m.hidden }),
     };
   });
 }

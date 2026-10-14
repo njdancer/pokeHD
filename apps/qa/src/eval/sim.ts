@@ -24,6 +24,8 @@ const W = {
   wEventFlags: 0xd747,
   /** NUM_EVENTS / 8. */
   eventBytes: 0xa00 / 8,
+  /** One bit per toggleable object, set = hidden (an item taken, someone gone). */
+  wToggleableObjectFlags: 0xd5a6,
 };
 /** wStatusFlags4's BIT_NO_BATTLES: NewBattle starts nothing while it's set. */
 const NO_BATTLES = 1 << 4;
@@ -75,6 +77,8 @@ export interface SimOptions {
   eventsDone?: boolean;
   /** Event flags to set (EVENT_* numbers from constants/event_constants.asm), e.g. trainers beaten. */
   events?: number[];
+  /** Toggleable objects to hide (TOGGLE_* numbers from constants/toggle_constants.asm). */
+  hidden?: number[];
 }
 
 export class Sim {
@@ -146,6 +150,7 @@ export class Sim {
     gb.loadState(this.#base);
     if (opts.eventsDone) for (let i = 0; i < W.eventBytes; i++) gb.write(W.wEventFlags + i, 0xff);
     for (const e of opts.events ?? []) gb.write(W.wEventFlags + (e >> 3), gb.read(W.wEventFlags + (e >> 3)) | (1 << (e & 7)));
+    for (const t of opts.hidden ?? []) gb.write(W.wToggleableObjectFlags + (t >> 3), gb.read(W.wToggleableObjectFlags + (t >> 3)) | (1 << (t & 7)));
     const map = this.rom.world.maps[place.map];
     if (!map) throw new Error(`No map ${place.map}`);
     let done = false;
