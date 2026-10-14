@@ -14,9 +14,9 @@
 // | `HandleMenuInput`, straight after a battle switch or a PC Pokémon list | A on the first item (SWITCH, DEPOSIT, WITHDRAW) |
 // | `HandleMenuInput` for LearnMove's "which move should be forgotten?" | a = A with wCurrentMenuItem, or B to cancel |
 //
-// LearnMove's questions (a fifth move, from a TM, an HM or a level: "Delete an older move to make
-// room for …?", the move to forget, "Abandon learning …?") always come to the page, also in the
-// middle of one of the menu's own actions (GameActions), which has no answer for them.
+// LearnMove's questions (a fifth move at a level up in battle: "Delete an older move to make room
+// for …?", the move to forget, "Abandon learning …?") come to the page like any other. Inside one
+// of the menu's own actions (a TM, a Rare Candy) GameActions answers them so the action ends.
 //
 // The page has already said what it wants done with the Pokémon it chose, so the little menu
 // the game puts up next (SWITCH / STATS / CANCEL, DEPOSIT / STATS / CANCEL) gets its first item.
@@ -194,8 +194,7 @@ export class GameAsks {
         this.#ask(g, () => this.#listAsk(g)!, (a) => this.#listAnswer(g, a)),
       ),
       new StandIn(gb, "DisplayChooseQuantityMenu", free, (g) => this.#ask(g, () => this.#quantityAsk(g), (a) => this.#quantityAnswer(g, a))),
-      // LearnMove's yes/no and its list are the page's even inside the menu's own action.
-      new StandIn(gb, "DisplayTextBoxID", (g) => (free() || learnMoveCall(g)) && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU, (g) =>
+      new StandIn(gb, "DisplayTextBoxID", (g) => free() && g.read(addr("wTextBoxID")) === TWO_OPTION_MENU, (g) =>
         this.#ask(g, () => this.#yesNoAsk(g), (a) => {
           const yes = a !== null && "yes" in a && a.yes;
           // NO/YES (clearing the save) puts the "no" first.
@@ -207,7 +206,7 @@ export class GameAsks {
           return {};
         }),
       ),
-      new StandIn(gb, "HandleMenuInput", learnMoveCall, (g) => this.#ask(g, () => this.#forgetAsk(g), (a) => this.#forgetAnswer(g, a))),
+      new StandIn(gb, "HandleMenuInput", (g) => free() && learnMoveCall(g), (g) => this.#ask(g, () => this.#forgetAsk(g), (a) => this.#forgetAnswer(g, a))),
       new StandIn(gb, "HandleMenuInput", (g) => free() && thenFirst() && g.read(addr("wMaxMenuItem")) === 2, (g) => {
         g.write(addr("wCurrentMenuItem"), 0);
         return { registers: { af: (PAD_A << 8) | (g.registers.af & 0xff) } };
