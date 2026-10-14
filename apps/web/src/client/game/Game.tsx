@@ -85,6 +85,7 @@ import { liftPictures, STAGE_HEIGHT } from "./intro-pictures.ts";
 import { LockScreen } from "./LockScreen.tsx";
 import { Starter, type StartChoice } from "./onboarding.ts";
 import { newScriptView, scriptTap, scriptView, withScriptState, type ScriptView } from "./script-view.ts";
+import { MessageLog, pageInput, type LoggedLine, type PageInput, type PageInputFacts } from "./qa-signals.ts";
 import { DialogJoiner } from "./dialog-join.ts";
 import { uiLook } from "./ui-look.ts";
 import { Pokedex } from "../dex/Pokedex.tsx";
@@ -125,6 +126,10 @@ declare global {
       snapshot(): Promise<GameSnapshot>;
       readonly page: object;
       readonly slow: SlowFrame[];
+      /** Whether the page would take the player's next input now (qa-signals.ts). */
+      readonly input: PageInput | null;
+      /** This page's message log (qa-signals.ts): `boot` changes when the game restarts. */
+      messages(after: number): { boot: string; lines: LoggedLine[] };
     };
   }
 }
@@ -580,6 +585,10 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       const trackMapOnly = mapOnlyTracker();
       let latest: OverworldState | null = null;
       let emuFrames = 0;
+      /** ?stats: every line the message box showed, and who has the next input (qa-signals.ts). */
+      const qaLog = showStats ? new MessageLog() : null;
+      const qaBoot = Math.random().toString(36).slice(2);
+      let qaFacts: Omit<PageInputFacts, "battleAsk" | "sheet"> | null = null;
       // The Pokédex's journal: places visited, people met and what they first said (p2-dex).
       let journal: DexJournal | null = null;
       let journalFor = -1;
@@ -626,7 +635,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           if (scriptRef.current?.id === id) scriptRef.current.ended = true;
         },
         onScriptPress: () => readOnScript(),
-        onFrame: ({ pixels, watched, count, acting }) => {
+        onFrame: ({ pixels, watched, count, acting, wait }) => {
           if (disposed) return; // the game is going: only its save is still wanted
           image.data.set(new Uint8Array(pixels));
           if (++emuFrames === 1) {
@@ -729,6 +738,12 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           if (joined.press) host?.tap(Button.A);
           // A whole message's ▼ shows only when a tap reads on (QA bug 56).
           const boxText = script ? withScriptState(text, scriptRef.current) : text;
+          if (qaLog) {
+            const box = boxText.shown ? boxText.dialog : null;
+            qaLog.show(joined.lines ?? box?.lines ?? null, !!script || box?.state !== "printing");
+            const held = !!script && !scriptRef.current?.ended;
+            qaFacts = { mode: state.mode, inWorld, dialog: box?.state ?? null, menu: boxText.shown && boxText.menus.some((m) => m.active), pageHolds: held, game: wait ?? null, acting: !!acting };
+          }
           const key = fits ? `${textKey(boxText)}#${joined.lines?.join("|") ?? ""}` : "";
           if (key !== shownText) {
             shownText = key;
@@ -972,6 +987,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           get page() {
             return { held: heldRef.current, onboarding: onboardingRef.current?.phase ?? null, starter: !!starterRef.current, script: scriptRef.current?.id ?? null };
           },
+          get input() {
+            const sheet = heldRef.current || menuStateRef.current.open || !!menuStateRef.current.ask || dexHeldRef.current;
+            return qaFacts && pageInput({ ...qaFacts, battleAsk: !!battleAskRef.current, sheet });
+          },
+          messages: (after: number) => ({ boot: qaBoot, lines: qaLog?.since(after) ?? [] }),
           slow,
         };
         // Display frame times, and emulated frames per second, for perf checks.

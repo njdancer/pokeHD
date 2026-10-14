@@ -16,6 +16,7 @@ import { GiftDesk } from "./gifts/desk.ts";
 import { SafePoint } from "./gifts/safepoint.ts";
 import { JournalHooks } from "./journal-hooks.ts";
 import { LinkPort } from "./link.ts";
+import { gameInputWait } from "./input-wait.ts";
 import type { FromWorker, FromWorklet, ToWorker, ToWorklet, Watch } from "./protocol.ts";
 
 const AUDIO_LEAD_FRAMES = 3;
@@ -77,7 +78,8 @@ function runOneFrame() {
   const watched: Record<string, Uint8Array> = {};
   for (const [name, [address, length]] of Object.entries(watches)) watched[name] = gb.readBytes(address, length);
   const pixels = gb.frame.slice().buffer;
-  post({ type: "frame", pixels, count: frames, watched, ...(actions?.running ? { acting: true } : {}) }, [pixels]);
+  const wait = gameInputWait(gb);
+  post({ type: "frame", pixels, count: frames, watched, ...(actions?.running ? { acting: true } : {}), ...(wait ? { wait } : {}) }, [pixels]);
 
   if (gb.sramDirty && performance.now() - lastSramFlush > SRAM_FLUSH_MS) flushSram();
 }

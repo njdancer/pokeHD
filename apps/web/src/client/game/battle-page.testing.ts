@@ -6,8 +6,8 @@
 // go through the menu's LiveActions first, as in Game: one it was told the answer to up front (the
 // bag's "Use POTION on GEODUDE": the party question after the bag's) never reaches a sheet.
 import {
-  BATTLE_WATCHES, BattleMenus, Button, Controls, GameAsks, GameBoy, OVERWORLD_WATCHES, ScreenTextDecoder, TEXT_WATCHES,
-  type AskAnswer, type BattleAnswer, type BattleAsk, type GameAsk, type TextWatched, type Watch,
+  BATTLE_WATCHES, BattleMenus, Button, Controls, GameAsks, GameBoy, gameInputWait, OVERWORLD_WATCHES, ScreenTextDecoder, TEXT_WATCHES,
+  type AskAnswer, type BattleAnswer, type BattleAsk, type GameAsk, type ScreenText, type TextWatched, type Watch,
 } from "@pokehd/emu";
 import { readGlyphs } from "@pokehd/rom";
 import { LiveActions, type LiveHost } from "../menu/live.ts";
@@ -16,6 +16,7 @@ import {
 } from "./battle.ts";
 import { battleTextFits } from "./hd-text.ts";
 import { newScriptView, scriptTap, scriptView, withScriptState, type ScriptView } from "./script-view.ts";
+import { MessageLog, pageInput, type BoxState } from "./qa-signals.ts";
 
 /** Frames between the player's taps on a message: a person reading, not mashing. */
 const READ_FRAMES = 40;
@@ -109,6 +110,15 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
   let more = false;
   /** The HD message box shows the whole message (Game's scriptShownRef). */
   let scriptShown = false;
+  /** What Game gives ?stats (qa-signals.ts): every line the box showed, and the box and menus now. */
+  const log = new MessageLog();
+  let box: { dialog: BoxState | null; menu: boolean } = { dialog: null, menu: false };
+  const observe = (text: ScreenText, view: { lines: string[] | null } | null) => {
+    const shown = view ? withScriptState(text, script.current) : text.shown ? text : null;
+    const dialog = shown?.dialog ?? null;
+    log.show(view?.lines ?? dialog?.lines ?? null, !!view || dialog?.state !== "printing");
+    box = { dialog: dialog?.state ?? null, menu: !!shown?.menus.some((m) => m.active) };
+  };
 
   /**
    * One frame as Game shows it: the Game Boy pixels left over the HD battle (-1 for the Game Boy
@@ -153,11 +163,13 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
       hd = view ? (view.lines ?? []).join(" / ") : fits ? text.boxes.flatMap((b) => b.lines.map((l) => l.text)).join(" / ") : null;
       more = (view ? withScriptState(text, script.current) : fits ? text : null)?.dialog?.state === "waiting";
       scriptShown = !!view;
+      observe(text, view);
       return { visible: 0, read: "item" };
     }
     const screen = fight.scene === "scene" ? fight.screen : null;
     if (!screen) {
       cover.covering(null, !!asked);
+      observe(decoder.decode(watched as unknown as TextWatched), null);
       // The Game Boy's own screen in a battle (a menu, or the way in) shows whole.
       const read = JSON.stringify({ scene: fight.scene, boxes: decoder.decode(watched as unknown as TextWatched).boxes.map((b) => b.lines.map((l) => l.text).join("|")) });
       return { visible: fight.state && fight.scene === "menu" ? -1 : 0, read };
@@ -174,6 +186,7 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
     hd = view ? (view.lines ?? []).join(" / ") : fits ? text.boxes.flatMap((b) => b.lines.map((l) => l.text)).join(" / ") : null;
     more = (view ? withScriptState(text, script.current) : fits ? text : null)?.dialog?.state === "waiting";
     scriptShown = !!view;
+    observe(text, view);
     const read = JSON.stringify({ boxes: onScreen.boxes.map((b) => [b.x, b.y, b.width, b.height, b.lines.map((l) => l.text).join("|")]), loose: onScreen.loose.map((l) => l.text) });
     return { visible, read };
   };
@@ -224,5 +237,16 @@ export async function battlePage(state: Uint8Array, { rom, wasm, lag = 0, sheet 
     cover.answered();
     return play(done, options);
   };
-  return { gb, play, answer, asked: () => asked, gameAsks };
+  /** Answers the HD battle menu's question without playing on. */
+  const send = (a: BattleAnswer) => {
+    const id = asked!.id;
+    asked = null;
+    answered.add(id);
+    sending = { id, answer: a, in: lag };
+    cover.answered();
+  };
+  /** Who has the next input, as Game tells ?stats (qa-signals.ts). */
+  const input = () =>
+    pageInput({ mode: "battle", inWorld: true, ...box, pageHolds: scriptShown && !!script.current && !script.current.ended, game: gameInputWait(gb), battleAsk: !!asked, sheet: false, acting: false });
+  return { gb, play, answer, asked: () => asked, gameAsks, step, tapMessage, send, input, log, hd: () => hd, more: () => more };
 }

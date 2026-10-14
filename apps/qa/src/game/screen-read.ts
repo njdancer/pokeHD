@@ -62,12 +62,19 @@ export interface ScreenRead {
   joystick: Rect | null;
   /** A text box is still typing out (the HD box has no ▼ yet but the game is in a dialog). */
   printing: boolean;
+  /**
+   * Whether the page would take a tap now, and if not why (apps/web qa-signals.ts PageInput);
+   * null from a page without it.
+   */
+  input: PageInputLite | null;
   now: number;
 }
 
+export type PageInputLite = { ready: true; on: string } | { ready: false; why: string };
+
 export function readScreen(arg: { slowSince: number }): ScreenRead {
   type W = Window & {
-    __pokehd?: { state: unknown; inWorld: boolean; frames: number; page: { held?: unknown }; slow: { at: number; ms: number }[] };
+    __pokehd?: { state: unknown; inWorld: boolean; frames: number; page: { held?: unknown }; slow: { at: number; ms: number }[]; input?: PageInputLite | null };
   };
   const hook = (window as W).__pokehd;
   const vw = innerWidth;
@@ -166,6 +173,7 @@ export function readScreen(arg: { slowSince: number }): ScreenRead {
     buttons,
     joystick,
     printing,
+    input: hook?.input ? (JSON.parse(JSON.stringify(hook.input)) as PageInputLite) : null,
     now: performance.now(),
   };
 }

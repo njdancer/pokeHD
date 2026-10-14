@@ -11,6 +11,7 @@ import { chromium, type Browser, type BrowserContext, type CDPSession, type Elem
 import { ScreenTextDecoder, TEXT_WATCHES, type TextWatched } from "@pokehd/emu";
 import { parseWorld, readGlyphs, stitchOverworld, SYMBOLS, type StitchedWorld, type WorldData } from "@pokehd/rom";
 import { GlitchWatcher } from "./glitches.ts";
+import { describeMessages, readiness, type LoggedLine } from "./idle.ts";
 import { continueButton, describeButtons, describeGameBoyText, describePanels, mapName, startingUp } from "./outcome.ts";
 import { describeLayouts, installLayoutLog, type LayoutEntry } from "./layout-log.ts";
 import { composeSheet, cropShot, MAX_SHEET_FRAMES, pickFrames, Recorder } from "./recorder.ts";
@@ -51,7 +52,11 @@ const STREAM_SCALE = 1.5;
 /** How often the headed stream window is checked against STREAM_VIEWPORT. */
 const FIT_EVERY_MS = 3000;
 const READY_TIMEOUT_MS = 120_000;
-const SETTLE_MAX_MS = 4000;
+/**
+ * The longest an action waits for the game to take input again, before and after it: room for an
+ * evolution or a long scene, after which the result says what the game was still doing.
+ */
+const READY_MAX_MS = 15_000;
 const SETTLE_CALM_MS = 500;
 /** Emulated frames the game must run unchanged to count as settled (a step is 16). */
 const SETTLE_CALM_FRAMES = 20;
@@ -135,6 +140,10 @@ export function createDriver(opts: DriverOptions): GameDriver {
   let last: ScreenRead | null = null;
   /** The emulator's speed (frames per second), measured by `settle`; times a walk with no state to follow. */
   let emuFps = 59.7;
+  /** The screen when the game was last still busy at READY_MAX_MS: the next action doesn't wait on the same again. */
+  let stuck: string | null = null;
+  /** How far the page's message log has been told (apps/web qa-signals.ts MessageLog). */
+  let told = { boot: "", seq: 0 };
   const entry = new MapEntry();
 
   const need = <T>(v: T | null): T => {
@@ -230,8 +239,12 @@ export function createDriver(opts: DriverOptions): GameDriver {
       r.buttons.map((b) => b.label),
     ]);
 
-  /** Waits until the screen stops changing (the player not mid-step, no fade, text done) or the timeout. */
-  async function settle(minMs = 250, maxMs = SETTLE_MAX_MS, fromMap?: number): Promise<ScreenRead> {
+  /**
+   * Waits until the game will take the player's next input (`readiness`: the page's word, no fade,
+   * no step) and the screen has stopped changing, or `maxMs`. `busy` says what the game was still
+   * doing if it ran out of time.
+   */
+  async function settle(minMs = 250, maxMs = READY_MAX_MS, fromMap?: number): Promise<{ read: ScreenRead; busy: string | null }> {
     const start = Date.now();
     await sleep(minMs);
     let sig = "";
@@ -249,8 +262,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
         since = Date.now();
         sinceFrames = r.frames;
       }
-      // "Off we go…" on the start screen isn't calm: the game is still starting behind it.
-      const calm = r.hooked && !r.loading && !startingUp(r) && (!r.state || (!r.state.player.step && r.state.fade === 0));
+      const ready = readiness(r);
       // Quiet while the game actually ran: a game starved of CPU looks still between its frames,
       // and would carry on (finish a step, say) after the outcome was read. A menu that holds the
       // game stops its frames on purpose.
@@ -258,10 +270,57 @@ export function createDriver(opts: DriverOptions): GameDriver {
       // second or so: give it longer, so the map is read with the player where they landed.
       const warped = fromMap !== undefined && !!r.state && r.state.mapId !== fromMap;
       const ran = r.held || !r.state || r.frames - sinceFrames >= (warped ? SETTLE_WARP_FRAMES : SETTLE_CALM_FRAMES);
-      const quiet = ran && Date.now() - since >= (r.printing ? SETTLE_CALM_MS * 2 : SETTLE_CALM_MS);
-      if ((calm && quiet) || Date.now() - start > maxMs) return r;
+      const quiet = ran && Date.now() - since >= SETTLE_CALM_MS;
+      if (ready.ready && quiet) {
+        stuck = null;
+        return { read: r, busy: null };
+      }
+      if (Date.now() - start > maxMs) {
+        const busy = ready.ready ? "the screen still changing" : ready.why;
+        stuck = stuckKey(r);
+        return { read: r, busy };
+      }
       await sleep(100);
     }
+  }
+
+  const stuckKey = (r: ScreenRead) => JSON.stringify([signature(r), r.input]);
+
+  /**
+   * Before an action: waits for the game to take it, unless it's as it was when it last ran out
+   * of time (then the action may be just what it's waiting for). What it was still busy with, if
+   * it ran out of time again.
+   */
+  async function untilReady(): Promise<string | null> {
+    const r = await read();
+    if (readiness(r).ready || (stuck !== null && stuck === stuckKey(r))) return null;
+    return (await settle(0)).busy;
+  }
+
+  /** The page's messages since it last told them (and none from before a reload). */
+  async function newMessages(): Promise<LoggedLine[]> {
+    type Hook = { messages?(after: number): { boot: string; lines: LoggedLine[] } };
+    const got = await (await gameFrame())
+      .evaluate(({ boot, seq }) => {
+        const hook = (window as unknown as { __pokehd?: Hook }).__pokehd;
+        if (!hook?.messages) return null;
+        const all = hook.messages(0);
+        return all.boot === boot ? hook.messages(seq) : all;
+      }, told)
+      .catch(() => null);
+    if (!got) return [];
+    const fresh = got.boot === told.boot;
+    told = { boot: got.boot, seq: Math.max(fresh ? told.seq : 0, ...got.lines.map((l) => l.seq)) };
+    return fresh ? got.lines : [];
+  }
+
+  /** The result's notes on waiting: before the action, and after it. */
+  function waitNotes(before: string | null, after: string | null): string[] {
+    const secs = READY_MAX_MS / 1000;
+    return [
+      before ? `(The game was still busy with ${before} after ${secs} s, so your action went in anyway.)` : "",
+      after ? `(The game was still busy with ${after} after ${secs} s. Your next action waits for it first.)` : "",
+    ].filter(Boolean);
   }
 
   /** Text boxes decoded from the Game Boy screen, for screens the page draws none of its own for. */
@@ -296,7 +355,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
       }
       const panels = after.panels.filter((p) => !p.kind.startsWith("battle-card"));
       const textual = panels.filter((p) => p.kind !== "toast");
-      if (panels.length) parts.push(describePanels(panels));
+      const ready = readiness(after);
+      if (panels.length) parts.push(describePanels(panels, ready.ready && ready.on === "message"));
       // The game's own screen in front (or a dialog the page has no HD box for): read its tiles.
       const gameBoyShown = after.layout === "full" || after.layout === "dialog";
       const gameBoyUp = gameBoyShown || (s && s.mode !== "overworld");
@@ -309,22 +369,27 @@ export function createDriver(opts: DriverOptions): GameDriver {
       }
     }
     // Mid-fade, or a screen the page has no words for yet: say so rather than nothing.
-    if (!parts.length) parts.push("Nothing to read on screen right now (it may be changing). Wait, or take a screenshot.");
+    if (!parts.length) parts.push("Nothing to read on screen right now (it may be changing). Take a screenshot to see it.");
     const buttons = describeButtons(after);
     if (buttons) parts.push(buttons);
     return { text: parts.join("\n") };
   }
 
   async function act(fn: () => Promise<void>, minMs = 250): Promise<Outcome> {
+    const waited = await untilReady();
     const before = last ?? (await read());
     const from = Date.now();
     await fn();
-    const after = await settle(minMs);
+    const { read: after, busy } = await settle(minMs);
     const result = await outcome(before, after);
+    const said = describeMessages(await newMessages(), messageText(after));
     const log = await (await gameFrame()).evaluate(() => (window as unknown as { __qaLayouts?: LayoutEntry[] }).__qaLayouts ?? []).catch(() => []);
     const screen = describeLayouts(log, from, Date.now());
-    return screen ? { text: `${result.text}\n${screen}` } : result;
+    return { text: [...waitNotes(waited, busy), said, result.text, screen ?? ""].filter(Boolean).join("\n") };
   }
+
+  /** The message box's text on screen now. */
+  const messageText = (r: ScreenRead) => r.panels.filter((p) => p.kind === "message").map((p) => p.text);
 
   // ---- start and reload ----
 
@@ -486,7 +551,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
     } finally {
       busy--;
     }
-    const after = await settle(500);
+    const { read: after } = await settle(500);
+    await newMessages();
     if (from === "save" && after.inWorld && after.state) {
       // Say where the save put the player: autosaves land every 5 minutes and after battles, so
       // the last save can be later (or earlier) than the player remembers.
@@ -578,7 +644,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
       }
       startPolling();
       if (!direct && !(opts.headless ?? true)) fitter = setInterval(() => void fitWindow().catch(() => {}), FIT_EVERY_MS);
-      const after = await settle(500);
+      const { read: after } = await settle(500);
+      await newMessages();
       return outcome(null, after);
     },
 
@@ -624,11 +691,12 @@ export function createDriver(opts: DriverOptions): GameDriver {
         .map((m) => ({ direction: m.direction, steps: m.run ? 40 : Math.max(1, Math.min(20, Math.round(m.tiles))), run: !!m.run }))
         .filter((m) => m.direction in DIRS);
       let total = runs.reduce((n, r) => n + (r.run ? 0 : r.steps), 0);
+      const waited = await untilReady();
       const before = await read();
       const stick = before.joystick;
       if (!stick || !runs.length) {
         const o = await outcome(before, before);
-        return { text: `${stick ? "No moves given." : "The joystick isn't on screen right now."}\n${o.text}` };
+        return { text: [...waitNotes(waited, null), stick ? "No moves given." : "The joystick isn't on screen right now.", o.text].join("\n") };
       }
       const layoutsFrom = Date.now();
       const centre = { x: stick.x + stick.w / 2, y: stick.y + stick.h / 2 };
@@ -678,7 +746,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const stop: Stop | null = result && result.end !== "done" ? result.end : null;
       const stoppedGoing: Direction = runs[Math.min(result?.leg ?? 0, runs.length - 1)]!.direction;
       const seen: (StateLite | null)[] = [from, ...(result?.trail ?? [])];
-      const after = await settle(150, SETTLE_MAX_MS, from?.mapId);
+      const { read: after, busy } = await settle(150, READY_MAX_MS, from?.mapId);
       const o = await outcome(before, after);
       const to = after.state;
       seen.push(to);
@@ -704,7 +772,8 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const where = to && to.mode === "overworld" ? entry.line(to) : "";
       const at = o.text.indexOf("\nButtons:");
       const text = where && at >= 0 ? `${o.text.slice(0, at)}\n${where}${o.text.slice(at)}` : where ? `${o.text}\n${where}` : o.text;
-      return { text: [note || debug ? `${note}${debug}` : "", text, screen ?? ""].filter(Boolean).join("\n") };
+      const said = describeMessages(await newMessages(), messageText(after));
+      return { text: [...waitNotes(waited, busy), note || debug ? `${note}${debug}` : "", said, text, screen ?? ""].filter(Boolean).join("\n") };
     },
 
     wait(ms) {
