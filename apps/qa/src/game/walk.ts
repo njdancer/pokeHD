@@ -227,3 +227,33 @@ export function walkNote(w: WalkSummary): string {
   if (w.stop === "blocked" && w.blocker) return `${moved}: ${w.blocker} is in the way going ${w.direction}.`;
   return `${moved}; something stopped you going ${w.direction}.`;
 }
+
+/**
+ * Where the player is from where they came into the map they're on: a fixed origin across turns,
+ * since the text map recentres on every step. The live player asked for one ("the text map
+ * recentres after every move, so I can't keep absolute coordinates"), and in the movement eval
+ * the line took multi-turn goals from 82% to 90% in fewer turns. A person could count the same
+ * steps; it says nothing the screen hasn't shown.
+ */
+export class MapEntry {
+  #map = -1;
+  #x = 0;
+  #y = 0;
+
+  /** Notes the state; on a map not seen last time, here is where the player came in. */
+  see(s: StateLite): void {
+    if (s.mapId === this.#map) return;
+    this.#map = s.mapId;
+    this.#x = s.player.x;
+    this.#y = s.player.y;
+  }
+
+  /** "You're 5 north and 3 east of where you came into this map (or started)." */
+  line(s: StateLite): string {
+    this.see(s);
+    const dx = s.player.x - this.#x;
+    const dy = s.player.y - this.#y;
+    const parts = [dy ? `${Math.abs(dy)} ${dy < 0 ? "north" : "south"}` : "", dx ? `${Math.abs(dx)} ${dx < 0 ? "west" : "east"}` : ""].filter(Boolean);
+    return parts.length ? `You're ${parts.join(" and ")} of where you came into this map (or started).` : "You're where you came into this map (or started).";
+  }
+}

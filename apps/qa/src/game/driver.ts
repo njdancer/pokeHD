@@ -17,7 +17,7 @@ import { composeSheet, cropShot, MAX_SHEET_FRAMES, pickFrames, Recorder } from "
 import { readScreen, type ScreenRead, type StateLite } from "./screen-read.ts";
 import { blockerAt, buildTextMap } from "./textmap.ts";
 import type { Direction, GameDriver, GameStatus, Glitch, Move, Outcome, RestartOptions } from "./types.ts";
-import { countSteps, DIRS, interruption, stallFrames, walkNote, walkPath, type PathResult, type Stop } from "./walk.ts";
+import { countSteps, DIRS, interruption, MapEntry, stallFrames, walkNote, walkPath, type PathResult, type Stop } from "./walk.ts";
 
 export interface DriverOptions {
   /** The app's origin, e.g. http://localhost:5173. */
@@ -135,6 +135,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
   let last: ScreenRead | null = null;
   /** The emulator's speed (frames per second), measured by `settle`; times a walk with no state to follow. */
   let emuFps = 59.7;
+  const entry = new MapEntry();
 
   const need = <T>(v: T | null): T => {
     if (!v) throw new Error("The driver isn't started");
@@ -629,6 +630,7 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const centre = { x: stick.x + stick.w / 2, y: stick.y + stick.h / 2 };
       const p0 = await toPage(centre.x, centre.y);
       const from = before.state;
+      if (from) entry.see(from);
       const stepFrames = from?.player && (from.player as { transport?: string }).transport === "bike" ? 8 : 16;
       // The thumb leans 55 px (page) from where it went down; in the game's own pixels for the page side.
       const lean = 55;
@@ -684,7 +686,11 @@ export function createDriver(opts: DriverOptions): GameDriver {
       const debug = process.env["POKEHD_QA_DEBUG"] && from && to ? ` [debug: (${from.player.x},${from.player.y}) → (${to.player.x},${to.player.y}), ${walked} counted, stop ${why}]` : "";
       const log = await (await gameFrame()).evaluate(() => (window as unknown as { __qaLayouts?: LayoutEntry[] }).__qaLayouts ?? []).catch(() => []);
       const screen = describeLayouts(log, layoutsFrom, Date.now());
-      return { text: [note || debug ? `${note}${debug}` : "", o.text, screen ?? ""].filter(Boolean).join("\n") };
+      // After the text map, before the buttons: where the player is from where they came into the map.
+      const where = to && to.mode === "overworld" ? entry.line(to) : "";
+      const at = o.text.indexOf("\nButtons:");
+      const text = where && at >= 0 ? `${o.text.slice(0, at)}\n${where}${o.text.slice(at)}` : where ? `${o.text}\n${where}` : o.text;
+      return { text: [note || debug ? `${note}${debug}` : "", text, screen ?? ""].filter(Boolean).join("\n") };
     },
 
     wait(ms) {
