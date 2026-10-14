@@ -6,7 +6,7 @@ import { createPortal } from "react-dom";
 import { Env, useEnv, type MenuEnv } from "./env.tsx";
 import { CloseIcon, TabIcon, type TabId } from "./icons.tsx";
 import { useFreshTapGuard } from "./fresh-tap.ts";
-import { NavContext, rootOf, TABS, type Nav, type Screen } from "./nav.tsx";
+import { NavContext, rootOf, TABS, withoutPicks, type Nav, type Screen } from "./nav.tsx";
 import type { Request } from "./model.ts";
 import { EntryScreen, PokemonScreen } from "./screens/Pokemon.tsx";
 import { FriendScreen, PeopleScreen, PersonScreen } from "./screens/People.tsx";
@@ -112,6 +112,13 @@ export function DexMenu({ env: base, open, onClose, start, request, onRequestDon
     if (start?.screen) s[start.tab] = [rootOf(start.tab), start.screen];
     return { tab: start?.tab ?? ("dex" as TabId), stacks: s, motion: "none" as Motion };
   });
+  // Each tab keeps its place when the dex shuts, but not a one-off pick ("Teach it to which
+  // Pokémon?", "Use it on…", a gift): it reopens on the screen the pick started from (QA bug 54).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (!open) place[1]((st) => withoutPicks(st));
+  }
   // The sidebar's width is the player's to choose, so it's remembered on this device.
   const [sideNow, setSideNow] = useState<Side>(() => storedSide() ?? side ?? "full");
   const [shownSide, setShownSide] = useState(side);
