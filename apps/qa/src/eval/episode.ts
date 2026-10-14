@@ -69,7 +69,7 @@ function env(): Record<string, string | undefined> {
 }
 
 export function openingText(scenario: Scenario, variant: Variant, sim: Sim): string {
-  return `Movement drill: only the joystick works for this one, and the drill ends by itself the moment you get there.\nGoal: ${scenario.text}\n\nThe screen now: ${variant.opening(sim)}`;
+  return `Movement drill: ${Object.keys(variant.tools).length > 1 ? `only ${Object.keys(variant.tools).join(" and ")} work` : "only the joystick works"} for this one, and the drill ends by itself the moment you get there.\nGoal: ${scenario.text}\n\nThe screen now: ${variant.opening(sim)}`;
 }
 
 export async function playEpisode(sim: Sim, scenario: Scenario, variant: Variant, opts: { model: string; rep: number }): Promise<EpisodeResult> {

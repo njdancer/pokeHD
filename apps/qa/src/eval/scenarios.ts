@@ -499,3 +499,84 @@ export function marathons(world: WorldData): Scenario[] {
     };
   });
 }
+
+/**
+ * A dungeon's warps in words, as a player who had mapped it would have them: each floor's ladders,
+ * grouped by which can be walked between, with offsets from the group's first ladder (or the
+ * entrance), and where each leads. For the "knows the warps" experiments: can the player plan a
+ * ladder route and walk it?
+ */
+export function warpBrief(world: WorldData, floors: number[], entrance: { map: number; x: number; y: number }, outside: number): string {
+  const label = (map: number, i: number) => `${MAP_NAMES[map]!.replace(/^MT_MOON_/, "")}-${String.fromCharCode(97 + i)}`;
+  const dir = (dx: number, dy: number) => compass(dx, dy) || "the same spot";
+  const lines: string[] = [];
+  for (const id of floors) {
+    const map = world.maps[id]!;
+    const w = map.widthBlocks * 2;
+    const groups: { anchor: { x: number; y: number; name: string }; members: number[] }[] = [];
+    const reachFrom = (x: number, y: number) => search(world, map, { mode: "overworld", mapId: id, fade: 0, player: { x, y, facing: "down", step: null }, npcs: [] }, new Set());
+    const placed = new Set<number>();
+    const starts = id === entrance.map ? [{ x: entrance.x, y: entrance.y, name: "the entrance you come in by" }] : [];
+    for (const s of starts) {
+      // The entrance's own tiles are the way back out where you started.
+      map.warps.forEach((wp, i) => {
+        if (wp.to === "last" && Math.abs(wp.x - s.x) + Math.abs(wp.y - s.y) <= 1) placed.add(i);
+      });
+      const g = reachFrom(s.x, s.y);
+      const members = map.warps.map((_, i) => i).filter((i) => !placed.has(i) && g.dist[map.warps[i]!.y * w + map.warps[i]!.x]! >= 0 && !(map.warps[i]!.x === s.x && map.warps[i]!.y === s.y));
+      members.forEach((i) => placed.add(i));
+      groups.push({ anchor: s, members });
+    }
+    map.warps.forEach((wp, i) => {
+      if (placed.has(i)) return;
+      const g = reachFrom(wp.x, wp.y);
+      const members = map.warps.map((_, j) => j).filter((j) => !placed.has(j) && (j === i || g.dist[map.warps[j]!.y * w + map.warps[j]!.x]! >= 0));
+      members.forEach((j) => placed.add(j));
+      groups.push({ anchor: { x: wp.x, y: wp.y, name: label(id, i) }, members: members.filter((j) => j !== i) });
+      groups.at(-1)!.members.unshift(i);
+    });
+    lines.push(`${MAP_NAMES[id]!.replace(/_/g, " ")}:`);
+    for (const g of groups) {
+      const parts = g.members.map((i) => {
+        const wp = map.warps[i]!;
+        const to = wp.to === "last" ? outside : wp.to;
+        const where = wp.x === g.anchor.x && wp.y === g.anchor.y ? "" : `, ${dir(wp.x - g.anchor.x, wp.y - g.anchor.y)} of ${g.anchor.name}`;
+        const dest = to === outside ? "the way out, to Route 4 east of the mountain" : label(to, wp.toWarp);
+        return `${label(id, i)}${where}, leads to ${dest}`;
+      });
+      lines.push(`- An area${g.anchor.name.startsWith("the entrance") ? ` with ${g.anchor.name}` : ""}: ${parts.join("; ")}.`);
+    }
+  }
+  return `Mt Moon's ladders, floor by floor (ladders in the same area can be walked between; you arrive on the ladder paired with the one you took):\n${lines.join("\n")}`;
+}
+
+/** Mt Moon experiments: the marathon with the warps known, told to plan, or one floor alone. */
+export function mtMoonExperiments(world: WorldData): Scenario[] {
+  const [moon] = marathons(world);
+  const id = (name: string) => MAP_NAMES.indexOf(name);
+  const brief = warpBrief(world, [id("MT_MOON_1F"), id("MT_MOON_B1F"), id("MT_MOON_B2F")], { map: id("MT_MOON_1F"), x: 14, y: 35 }, id("ROUTE_4"));
+  const b2f: Scenario = (() => {
+    const start: Place = { map: id("MT_MOON_B2F"), x: 21, y: 17, facing: "down" };
+    const goal: Region = { type: "region", map: id("MT_MOON_B1F"), xMin: 22, yMax: 4 };
+    const par = parAcross(world, start, id("ROUTE_4"), goal) ?? 0;
+    return {
+      ...moon!,
+      id: "mt-moon-b2f-west",
+      kind: "marathon",
+      map: start.map,
+      mapName: "MT_MOON_B2F",
+      start,
+      goal,
+      text: "You're on a ladder on Mt Moon B2F. Find the ladder on this floor that's 10 steps north and 16 steps west of you, and climb it. Keep track of where you've been as you go.",
+      par,
+      parTurns: Math.max(3, Math.ceil(par / 10)),
+      turnCap: 40,
+    };
+  })();
+  return [
+    { ...moon!, id: "mt-moon-warps", text: `${moon!.text}\n\n${brief}` },
+    { ...moon!, id: "mt-moon-warps-plan", text: `${moon!.text}\n\n${brief}\n\nBefore you move, work out which ladders to take, in order, and write that plan down. Then follow it, saying which ladder you're heading for each time.` },
+    { ...moon!, id: "mt-moon-notebook", text: `${moon!.text}\n\nUse your notebook as you go: each time you take a ladder, note which floor you left, where the ladder was (from where you came into that floor), and which floor you arrived on. Before choosing where to go next, read it back and plan from it.` },
+    b2f,
+  ];
+}

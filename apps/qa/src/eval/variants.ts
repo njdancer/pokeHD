@@ -231,6 +231,8 @@ export interface Features {
   spaced?: boolean;
   /** One-token symbols for the text map's cells. */
   glyphs?: boolean;
+  /** The live player's notebook tool alongside the joystick (kept for the episode only). */
+  notebook?: boolean;
 }
 
 function build(id: string, note: string, parent: string | null, f: Features): Variant {
@@ -278,13 +280,33 @@ function build(id: string, note: string, parent: string | null, f: Features): Va
           return { ...out, text: `Turn ${turn}. ${text}` };
         },
       };
+  const notes = new WeakMap<Sim, string[]>();
+  const notebook: VariantTool = {
+    description: TOOLS.notebook.description,
+    shape: TOOLS.notebook.shape,
+    run(sim, input, turn) {
+      const book = notes.get(sim) ?? [];
+      notes.set(sim, book);
+      const value = String(input["text"] ?? "").trim();
+      if (input["action"] === "append" && value) {
+        book.push(value);
+        return { text: `Turn ${turn}. Noted.` };
+      }
+      if (input["action"] === "replace") {
+        book.splice(0, book.length, value);
+        return { text: `Turn ${turn}. Notebook rewritten.` };
+      }
+      return { text: `Turn ${turn}. ${book.length ? `Your notebook:\n${book.join("\n")}` : "Your notebook is empty."}` };
+    },
+  };
   return {
     id,
     note,
     parent,
     features: f,
-    tools: { joystick: tool },
+    tools: f.notebook ? { joystick: tool, notebook } : { joystick: tool },
     opening: (sim) => {
+      notes.set(sim, []);
       memory.set(sim, new Explored());
       const opening = withExtra(sim.opening(), tracking(sim));
       return f.spaced ? spaceCells(opening) : f.glyphs ? glyphCells(opening) : opening;
@@ -307,4 +329,5 @@ export const VARIANTS: Record<string, Variant> = {
   "clipped-ground": build("clipped-ground", "Clipped text map plus one already-seen row or column to line the new strips up against.", "from-entry", { exitNote: true, fromEntry: true, clip: "ground" }),
   spaced: build("spaced", "A space between the text map's cells, so each cell is one token (run together, 10 cells are ~3 tokens).", "from-entry", { exitNote: true, fromEntry: true, spaced: true }),
   glyphs: build("glyphs", "Text map cells in one-token symbols (□ floor, ■ wall, ★ you…), one token a cell without spaces.", "from-entry", { exitNote: true, fromEntry: true, glyphs: true }),
+  "from-entry-notebook": build("from-entry-notebook", "The position line plus the live notebook tool (for the Mt Moon experiments).", "from-entry", { exitNote: true, fromEntry: true, notebook: true }),
 };

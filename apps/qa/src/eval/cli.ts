@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { openingText, playEpisode, type EpisodeResult } from "./episode.ts";
-import { generate, marathons, type Area, type Kind, type Scenario } from "./scenarios.ts";
+import { generate, marathons, mtMoonExperiments, type Area, type Kind, type Scenario } from "./scenarios.ts";
 import { loadRomData, Sim } from "./sim.ts";
 import { summarise, compare, type Summary } from "./score.ts";
 import { VARIANTS } from "./variants.ts";
@@ -90,6 +90,10 @@ async function main(): Promise<void> {
     const set = marathons(loadRomData().world);
     writeFileSync(join(SETS, "marathon.json"), JSON.stringify(set, null, 1));
     for (const s of set) console.log(`${s.id}: par ${s.par} steps, cap ${s.turnCap} turns`);
+    const exp = mtMoonExperiments(loadRomData().world);
+    writeFileSync(join(SETS, "mtmoon.json"), JSON.stringify(exp, null, 1));
+    for (const s of exp) console.log(`${s.id}: par ${s.par} steps, cap ${s.turnCap} turns`);
+    console.log(exp[0]!.text);
     return;
   }
   if (command === "show") {
