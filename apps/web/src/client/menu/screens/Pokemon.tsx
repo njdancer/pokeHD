@@ -6,7 +6,7 @@ import { BallMark } from "../icons.tsx";
 import { useNav } from "../nav.tsx";
 import { heightText, weightText } from "../../dex/catalogue.ts";
 import { Page, Pixel, ReadButton, Row, Seg, Types } from "../ui.tsx";
-import { cardOf, cardTrial } from "../card/data.ts";
+import { cardOf, cardFinish } from "../card/data.ts";
 import { TradingCard } from "../card/TradingCard.tsx";
 
 type Filter = "all" | "caught" | "seen";
@@ -82,12 +82,14 @@ export function EntryScreen({ dex }: { dex: number }) {
   const words = e.pages.map((p) => p.join(" ")).join(" ");
   const name = niceMon(e.name);
   const kind = e.category.charAt(0) + e.category.slice(1).toLowerCase();
-  const card = useMemo(() => (cardTrial ? cardOf(env, dex) : null), [env, dex]);
+  const card = useMemo(() => (cardFinish ? cardOf(env, dex) : null), [env, dex]);
 
   if (!caught && card)
     return (
       <Page title={name} meta={dexNo(dex)}>
-        <TradingCard card={card} faceDown finish={cardTrial!} />
+        <div className="m-cardhero">
+          <TradingCard card={card} faceDown finish={cardFinish!} />
+        </div>
         <div className="m-card m-note">
           <p>Catch one to turn its card over.</p>
           {homes.length > 0 && <p className="m-sub">You might find one around {homes.slice(0, 2).map((h) => h.name).join(" or ")}.</p>}
@@ -122,7 +124,9 @@ export function EntryScreen({ dex }: { dex: number }) {
     <Page title={name} meta={dexNo(dex)}>
       {card ? (
         <>
-          <TradingCard card={card} finish={cardTrial!} />
+          <div className="m-cardhero">
+            <TradingCard card={card} finish={cardFinish!} />
+          </div>
           <ReadButton text={`${name}, the ${kind} Pokémon. ${words}`} label="Read it" />
         </>
       ) : (
@@ -152,10 +156,12 @@ export function EntryScreen({ dex }: { dex: number }) {
       <Seg label="About" value={tab} onChange={setTab} options={[["about", "About"], ["moves", "Moves"], ["where", "Where"], ["grows", "Grows"]]} />
       {tab === "about" && (
         <div className="m-card m-about">
-          <dl className="m-facts">
-            <div><dt>Height</dt><dd>{heightText(e)}</dd></div>
-            <div><dt>Weight</dt><dd>{weightText(e)}</dd></div>
-          </dl>
+          {!card && (
+            <dl className="m-facts">
+              <div><dt>Height</dt><dd>{heightText(e)}</dd></div>
+              <div><dt>Weight</dt><dd>{weightText(e)}</dd></div>
+            </dl>
+          )}
           {(
             [
               ["HP", e.stats.hp],

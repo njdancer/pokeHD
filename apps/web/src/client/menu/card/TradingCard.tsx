@@ -1,4 +1,4 @@
-// A Pokémon as a trading card you hold (prototype, /dev/card): printed from the ROM's words and
+// A Pokémon as a trading card you hold (the entry page; tuning at /dev/card): printed from the ROM's words and
 // PokeAPI's artwork (face.ts), lit with relief, gloss and foil (gl.ts), and turned by the phone's
 // gyro, the pointer, or a slow sway (tilt.ts). Face down until caught; catching turns it over.
 import { useEffect, useRef, useState, type MouseEvent } from "react";
