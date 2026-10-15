@@ -12,6 +12,7 @@ import type { Request } from "./model.ts";
 import { EntryScreen, PokemonScreen } from "./screens/Pokemon.tsx";
 import { FriendScreen, PeopleScreen, PersonScreen } from "./screens/People.tsx";
 import { BagPick, BoxPick, FlyScreen, InventoryScreen, ItemScreen, MonScreen, ShopPick, TeamPick } from "./screens/Inventory.tsx";
+import { BoxScreen, DepositScreen, MartCounter, PcCounter, SellBagScreen, ShelfScreen } from "./screens/Counters.tsx";
 import { MapScreen } from "./screens/MapScreen.tsx";
 import { BuyScreen, SellScreen } from "./screens/Quantity.tsx";
 import { GrownupsScreen, MeScreen, SavesScreen, SettingsScreen } from "./screens/Me.tsx";
@@ -31,6 +32,10 @@ function render(s: Screen): ReactNode {
     case "bag": return <BagPick purpose={s.for} />;
     case "buy": return <BuyScreen item={s.item} />;
     case "sell": return <SellScreen id={s.id} />;
+    case "shelf": return <ShelfScreen stock={s.stock} />;
+    case "sellbag": return <SellBagScreen />;
+    case "box": return <BoxScreen />;
+    case "deposit": return <DepositScreen />;
     case "map": return <MapScreen key={s.focus} focus={s.focus} />;
     case "fly": return <FlyScreen mon={s.mon} />;
     case "me": return <MeScreen />;
@@ -348,6 +353,8 @@ function Sheet({ request, onDone }: { request: Request; onDone(): void }) {
     if (!mustAnswer) env.actions.cancel();
     onDone();
   };
+  // A counter sheet stays for the whole visit: what's done in it comes back to it, not the game.
+  const counter = request.kind === "mart" || request.kind === "pc";
   const nav: Nav = {
     depth: stack.length,
     sheet: true,
@@ -356,7 +363,7 @@ function Sheet({ request, onDone }: { request: Request; onDone(): void }) {
     replace: (s) => set((st) => [...st.slice(0, -1), s], "none"),
     reset: () => set((st) => st.slice(0, 1), "pop"),
     tab: () => {},
-    close: onDone,
+    close: counter ? () => set((st) => st.slice(0, 1), "pop") : onDone,
   };
   const top = stack[stack.length - 1];
   // The sheet's root is the list the game asked for; deeper screens are the dex's own.
@@ -366,6 +373,8 @@ function Sheet({ request, onDone }: { request: Request; onDone(): void }) {
     : request.kind === "deposit" ? <TeamPick title="Bill's PC" />
     : request.kind === "withdraw" ? <BoxPick />
     : request.kind === "buy" ? <ShopPick stock={request.stock} />
+    : request.kind === "mart" ? <MartCounter stock={request.stock} look={request.look} onLeave={close} />
+    : request.kind === "pc" ? <PcCounter look={request.look} onLeave={close} />
     : <BagPick />;
   return (
     <div className="m-sheet" role="dialog" aria-label="The game asks" {...guard}>

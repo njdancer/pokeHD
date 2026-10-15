@@ -31,6 +31,11 @@ export type Screen =
   /** How many to buy from the Mart's shelf, or to sell it from the bag (the shop's sheet). */
   | { k: "buy"; item: { id: number; name: string; price: number; kind: ItemKind } }
   | { k: "sell"; id: number }
+  /** The counter sheets' lists (proposal, /dev/menu): the shelf, the bag to sell, the box, the team for the PC. */
+  | { k: "shelf"; stock: { id: number; name: string; price: number; kind: ItemKind }[] }
+  | { k: "sellbag" }
+  | { k: "box" }
+  | { k: "deposit" }
   | { k: "map"; focus?: string }
   /** Where this Pokémon's FLY goes: the towns visited. */
   | { k: "fly"; mon: number }

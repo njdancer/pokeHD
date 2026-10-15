@@ -76,3 +76,9 @@
   .md-panel { position: fixed; z-index: 45; inset: auto 0 0 0; width: auto; max-height: 70%; overflow: auto; padding: 18px 16px 60px; background: #fbf3e3; border-radius: 22px 22px 0 0; box-shadow: 0 -10px 30px #0004; transform: translateY(105%); transition: transform .3s; }
   .md-panel.shown { transform: none; }
 }
+
+/* Proposals (UI pass): the yes-or-no sheet inside the mock phone, and its answers in the message box. */
+.md-phone .dm-sheet-shade.md-local { position: absolute; z-index: 4; }
+.md-more { color: #e0702a; font-size: 14px; }
+.md-msg-btns .md-yes { background: linear-gradient(#f08a3e, #e0702a); color: #fff; border-color: #b9541a; box-shadow: 0 3px 0 #b9541a; }
+.md-msg-btns button { flex: 1; }

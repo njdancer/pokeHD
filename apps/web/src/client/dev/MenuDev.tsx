@@ -19,6 +19,7 @@ import type { TabId } from "../menu/icons.tsx";
 import { inBattle, type MenuActions, type MenuModel, type Moment, type Request } from "../menu/model.ts";
 import { SAMPLE_STOCK, sampleModel } from "../menu/sample.ts";
 import "../game/text-overlay.css";
+import "../menu/ask-sheet.css";
 import "./menu-dev.css";
 
 const query = new URLSearchParams(location.search);
@@ -93,6 +94,9 @@ export function MenuDev() {
   const [log, setLog] = useState<Log[]>([]);
   const [pending, setPending] = useState<{ label: string; run(): void } | null>(null);
   const [panel, setPanel] = useState(false);
+  // Proposals from the UI pass (2026-10-15): the counters as one sheet, and yes-or-no questions.
+  const [look, setLook] = useState<Look>((query.get("look") as Look | null) ?? "menu");
+  const [question, setQuestion] = useState<QuestionLook | null>(null);
   const [hold, setHold] = useState<Hold>(query.get("turn") === "1" ? "side" : query.get("desk") === "1" ? "desk" : "upright");
   const onPhone = useMedia("(max-width: 860px)");
   const rail = query.get("rail") === "1";
@@ -333,7 +337,8 @@ export function MenuDev() {
           {env && (
             <>
               <div className="md-place">Vermilion City</div>
-              <GameMock moment={moment} model={env.model} onAsk={ask} onEndTalk={endTalk} pending={pending?.label ?? null} onCancelPending={() => setPending(null)} />
+              {question && <QuestionMock look={question} onAnswer={(yes) => (setQuestion(null), say(yes ? "Heal" : "Cancel", "The sheet answers DisplayTextBoxID's two-option menu (HEAL / CANCEL)."))} />}
+              <GameMock moment={moment} look={look} model={env.model} onAsk={ask} onEndTalk={endTalk} pending={pending?.label ?? null} onCancelPending={() => setPending(null)} />
               <DexHost open={open} onOpen={() => setOpen(true)} onClose={() => setOpen(false)} alert={env.model.friends.some((f) => f.gift)} {...frameOf(hold, onPhone)}>
                 {(slots) => (
                   <DexMenu
@@ -382,6 +387,28 @@ export function MenuDev() {
           <p className="md-hint">{info[2]}</p>
         </section>
         <section>
+          <h2>Proposal: the Mart and the PC</h2>
+          <div className="md-chips">
+            {LOOKS.map(([l, label]) => (
+              <button key={l} type="button" aria-pressed={l === look} onClick={() => setLook(l)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="md-hint">{LOOKS.find((l) => l[0] === look)![2]} Pick the Mart or PC moment above, then talk to the clerk or use the PC.</p>
+        </section>
+        <section>
+          <h2>Proposal: yes or no</h2>
+          <div className="md-chips">
+            {QUESTION_LOOKS.map(([q, label]) => (
+              <button key={q} type="button" aria-pressed={q === question} onClick={() => setQuestion(q)}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="md-hint">The nurse asks "Shall we heal your Pokémon?". Now the question shows twice: in the message box, and again in the sheet under it.</p>
+        </section>
+        <section>
           <h2>Under the hood</h2>
           <p className="md-hint">What each tap calls in the game's own code: our UI answers the game's menu routines and calls its routines at safe points. No button presses.</p>
           <ul className="md-log">
@@ -399,9 +426,54 @@ export function MenuDev() {
   );
 }
 
+type Look = "now" | "menu" | "tabs";
+const LOOKS: [Look, string, string][] = [
+  ["now", "Now", "The game's own menu, drawn as HD boxes: BUY / SELL / QUIT, the money and the clerk's words are three panels at once."],
+  ["menu", "A: Menu", "One sheet for the whole visit. The game's choices are big rows; each opens its list in the sheet, and you come back to the counter after each buy or sale."],
+  ["tabs", "B: Tabs", "One sheet for the whole visit, with the lists themselves in tabs: Buy and Sell, or the box and your team. One tap fewer to anything."],
+];
+
+type QuestionLook = "now" | "sheet" | "box";
+const QUESTION_LOOKS: [QuestionLook, string][] = [
+  ["now", "Now"],
+  ["sheet", "A: Sheet only"],
+  ["box", "B: In the message box"],
+];
+
+/** The nurse's question, as it shows now and in the two proposals. */
+function QuestionMock({ look, onAnswer }: { look: QuestionLook; onAnswer(yes: boolean): void }) {
+  const choices = (cls: string) => (
+    <div className={cls}>
+      <button type="button" className={cls === "dm-two" ? "dm-verb alt" : undefined} onClick={() => onAnswer(false)}>Cancel</button>
+      <button type="button" className={cls === "dm-two" ? "dm-verb" : "md-yes"} onClick={() => onAnswer(true)}>Heal</button>
+    </div>
+  );
+  const box = (inline: boolean) => (
+    <div className="md-msg">
+      <p>Shall we heal your Pokémon?{!inline && <span className="md-more"> ▼</span>}</p>
+      {inline && choices("md-msg-btns")}
+    </div>
+  );
+  if (look === "box") return box(true);
+  return (
+    <>
+      {look === "now" && box(false)}
+      <div className="dm-sheet-shade md-local">
+        <section className="dm-sheet" role="dialog" aria-label="Shall we heal your Pokémon?">
+          <header>
+            <h2 className="dm-question">Shall we heal your Pokémon?</h2>
+          </header>
+          {choices("dm-two")}
+        </section>
+      </div>
+    </>
+  );
+}
+
 /** Stand-ins for the game's own screens (battle menu, message box) that open the request sheets. */
-function GameMock({ moment, model, onAsk, onEndTalk, pending, onCancelPending }: {
+function GameMock({ moment, look, model, onAsk, onEndTalk, pending, onCancelPending }: {
   moment: Moment;
+  look: Look;
   model: MenuModel;
   onAsk(r: Request, title: string, code: string): void;
   onEndTalk(): void;
@@ -429,12 +501,16 @@ function GameMock({ moment, model, onAsk, onEndTalk, pending, onCancelPending }:
         </div>
       )}
       {moment === "talk" && box("SAILOR: The ship's leaving soon. Better hurry!", [["Next ▼", onEndTalk]])}
-      {moment === "pc" &&
+      {moment === "pc" && look !== "now" &&
+        box("BILL's PC. Your Pokémon are stored here.", [["Use the PC", () => onAsk({ kind: "pc", look }, "PC (proposal)", "Bill's PC menu (WITHDRAW / DEPOSIT / RELEASE / CHANGE BOX) is answered by one sheet; each list in it answers DisplayMonListMenu as before.")]])}
+      {moment === "shop" && look !== "now" &&
+        box("CLERK: Hi there!", [["Talk to the clerk", () => onAsk({ kind: "mart", stock: SAMPLE_STOCK, look }, "Mart (proposal)", "The BUY / SELL / QUIT menu is answered by one sheet; its lists answer DisplayListMenuID and DisplayChooseQuantityMenu as before.")]])}
+      {moment === "pc" && look === "now" &&
         box("BILL's PC. What do you want to do?", [
           ["Withdraw", () => onAsk({ kind: "withdraw" }, "PC: Withdraw", "BillsPCWithdraw asks through DisplayMonListMenu; the Box sheet answers.")],
           ["Deposit", () => onAsk({ kind: "deposit" }, "PC: Deposit", "BillsPCDeposit asks through DisplayMonListMenu; the Team sheet answers.")],
         ])}
-      {moment === "shop" &&
+      {moment === "shop" && look === "now" &&
         box("Hi there! May I help you?", [
           ["Buy", () => onAsk({ kind: "buy", stock: SAMPLE_STOCK }, "Mart: Buy", "The buy list (DisplayListMenuID) is answered by the Mart sheet.")],
           ["Sell", () => onAsk({ kind: "sell" }, "Mart: Sell", "The sell list (DisplayListMenuID) is answered by the Bag sheet.")],
