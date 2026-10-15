@@ -1,0 +1,10 @@
+/* The trading card (TradingCard.tsx): turned in 3D by CSS, lit inside its canvas. */
+.tc { width: 100%; max-width: 380px; margin: 0 auto; }
+.tc-stage { padding: 6px 0 22px; }
+.tc-card {
+  position: relative; width: 100%; aspect-ratio: 63 / 88; border-radius: 4.76% / 3.41%;
+  box-shadow: var(--sx, 0px) var(--sy, 18px) 26px -6px #1d0f0566, 0 2px 4px #1d0f0533;
+  will-change: transform; cursor: pointer; touch-action: pan-y; -webkit-tap-highlight-color: transparent;
+}
+.tc-canvas { display: block; width: 100%; height: 100%; border-radius: inherit; }
+.tc-hint { margin: -10px 0 4px; text-align: center; color: var(--m-muted, #9a6c45); font-size: 14px; font-weight: 700; }

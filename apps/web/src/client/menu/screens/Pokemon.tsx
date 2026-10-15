@@ -6,6 +6,8 @@ import { BallMark } from "../icons.tsx";
 import { useNav } from "../nav.tsx";
 import { heightText, weightText } from "../../dex/catalogue.ts";
 import { Page, Pixel, ReadButton, Row, Seg, Types } from "../ui.tsx";
+import { cardOf, cardTrial } from "../card/data.ts";
+import { TradingCard } from "../card/TradingCard.tsx";
 
 type Filter = "all" | "caught" | "seen";
 
@@ -80,6 +82,19 @@ export function EntryScreen({ dex }: { dex: number }) {
   const words = e.pages.map((p) => p.join(" ")).join(" ");
   const name = niceMon(e.name);
   const kind = e.category.charAt(0) + e.category.slice(1).toLowerCase();
+  const card = useMemo(() => (cardTrial ? cardOf(env, dex) : null), [env, dex]);
+
+  if (!caught && card)
+    return (
+      <Page title={name} meta={dexNo(dex)}>
+        <TradingCard card={card} faceDown finish={cardTrial!} />
+        <div className="m-card m-note">
+          <p>Catch one to turn its card over.</p>
+          {homes.length > 0 && <p className="m-sub">You might find one around {homes.slice(0, 2).map((h) => h.name).join(" or ")}.</p>}
+        </div>
+        <ReadButton text={`${name}. Catch one to turn its card over.`} />
+      </Page>
+    );
 
   if (!caught)
     return (
@@ -105,6 +120,13 @@ export function EntryScreen({ dex }: { dex: number }) {
   const learns = env.model.learns(dex);
   return (
     <Page title={name} meta={dexNo(dex)}>
+      {card ? (
+        <>
+          <TradingCard card={card} finish={cardTrial!} />
+          <ReadButton text={`${name}, the ${kind} Pokémon. ${words}`} label="Read it" />
+        </>
+      ) : (
+        <>
       <div className="m-hero" style={{ ["--type" as string]: typeTint(e.types[0]!) }}>
         <div className="m-hero-pic art">
           {art ? <img src={artworkUrl(dex)} alt="" onError={() => setArt(false)} draggable={false} /> : <Pixel src={monPic(env, dex)} />}
@@ -125,6 +147,8 @@ export function EntryScreen({ dex }: { dex: number }) {
         <p>{words}</p>
         <ReadButton text={`${name}, the ${kind} Pokémon. ${words}`} label="Read it" />
       </div>
+        </>
+      )}
       <Seg label="About" value={tab} onChange={setTab} options={[["about", "About"], ["moves", "Moves"], ["where", "Where"], ["grows", "Grows"]]} />
       {tab === "about" && (
         <div className="m-card m-about">
