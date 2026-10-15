@@ -70,6 +70,38 @@ describe("ScreenTextDecoder", () => {
     expect(text.quantity?.value).toBe(1);
   });
 
+  // Bill's PC after a Pokémon is chosen: the message box's whole right side is under the little
+  // menu, out to the screen's edge. Unfound, its words read as loose text and the Game Boy
+  // screen came up over the HD layer for a moment (UI pass, 2026-10-15).
+  it("finds a box whose right side is under another box out to the screen's edge", () => {
+    const decoder = new ScreenTextDecoder(glyphs);
+    const text = decoder.decode(
+      screen([
+        "┌────────────┐......",
+        "│            │......",
+        "│▷WITHDRAW   │......",
+        "│            │......",
+        "│ DEPOSIT    │......",
+        "│            │......",
+        "│ SEE YA     │......",
+        "│       ┌──────────┐",
+        "└───────│          │",
+        "┌───────│ WITHDRAW │",
+        "│       │          │",
+        "│WHAT   │ STATS    │",
+        "│       │          │",
+        "│       │ CANCEL   │",
+        "│       │          │",
+        "│       │          │",
+        "│       │          │",
+        "└───────└──────────┘",
+      ]),
+    );
+    expect(text.boxes.map((b) => [b.x, b.y, b.width, b.height])).toContainEqual([0, 9, 20, 9]);
+    expect(text.loose).toEqual([]);
+    expect(text.pictures).toBe(false);
+  });
+
   it("reads the battle menu, its columns one space apart (QA bug 41)", () => {
     const decoder = new ScreenTextDecoder(glyphs);
     const menu = (fight: string) =>

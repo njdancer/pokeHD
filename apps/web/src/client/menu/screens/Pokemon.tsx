@@ -59,7 +59,7 @@ export function PokemonScreen() {
               {c && <BallMark />}
               <Pixel src={monPic(env, n)} />
               <span className="m-no">{String(n).padStart(3, "0")}</span>
-              <span className="m-name">{niceMon(e.name)}</span>
+              <span className={niceMon(e.name).length >= 9 ? "m-name long" : "m-name"}>{niceMon(e.name)}</span>
             </button>
           );
         })}
@@ -183,7 +183,7 @@ export function EntryScreen({ dex }: { dex: number }) {
         (learns ? (
           <div className="m-list">
             {learns.moves.map(([m, at]) => (
-              <Row key={m} title={m} right={at === 0 ? "From the start" : `Level ${at}`} />
+              <Row key={`${m}@${at}`} title={m} right={at === 0 ? "From the start" : `Level ${at}`} />
             ))}
           </div>
         ) : (

@@ -33,3 +33,5 @@ playwright-report/
 
 # QA runs: screenshots, recordings and saves of the game
 apps/qa/runs*/
+# UI pass and fuzz screenshots (renders of ROM graphics), outside test-results so Playwright keeps them
+apps/web/ui-runs/
