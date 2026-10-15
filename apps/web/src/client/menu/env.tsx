@@ -92,6 +92,9 @@ export const BADGES: { name: string; colour: string; shape: string }[] = [
   { name: "Earth", colour: "#3f8f4a", shape: "M16 4l11 12-11 12L5 16z" },
 ];
 
+/** "CERULEAN CITY" → "Cerulean City", "MT.MOON" → "Mt. Moon": town map names as the menu writes places. */
+export const nicePlace = (s: string) => s.toLowerCase().replace(/(^|[ .])([a-z])/g, (_m, a: string, b: string) => a + b.toUpperCase()).replace("Mt.moon", "Mt. Moon");
+
 /** "POKé BALL" → "Poké Ball", "HM01" stays, "S.S.TICKET" → "S.S. Ticket": friendlier to read. */
 export const niceItem = (name: string) =>
   /^(HM|TM)\d/.test(name) ? name : name.toLowerCase().replace(/é/g, "é").replace(/(^|[ .'-])([a-zé])/g, (_m, a: string, b: string) => a + b.toUpperCase()).replace(/^S\.S\./, "S.S. ").replace("Poké", "Poké").replace("'S ", "'s ").replace(/'S$/, "'s");

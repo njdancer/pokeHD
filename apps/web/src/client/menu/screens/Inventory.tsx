@@ -2,7 +2,7 @@
 // reordered by dragging. Filters narrow it to a kind, or bring back things you've run out of. The
 // same lists answer the game's requests in a sheet (battle Team and Bag, PC, Mart).
 import { useState } from "react";
-import { monPic, niceItem, niceMon, useEnv } from "../env.tsx";
+import { monPic, niceItem, niceMon, nicePlace, useEnv } from "../env.tsx";
 import { BallMark, ItemIcon } from "../icons.tsx";
 import { useNav, type Purpose } from "../nav.tsx";
 import { battleMonOf, inBattle, ITEM_KINDS, type Item, type ItemKind, type Mon } from "../model.ts";
@@ -31,7 +31,7 @@ export function MonRow({ m, i, grip, onClick, off, active, why }: { m: Mon; i: n
         }
         title={
           <>
-            {niceMon(m.name)} <StatusPill status={m.hp === 0 ? undefined : m.status} />
+            <span className="m-tname">{niceMon(m.name)}</span> <StatusPill status={m.hp === 0 ? undefined : m.status} />
             {m.hp === 0 && <span className="m-status s-fnt">Fainted</span>}
             {i === 0 && !active && <span className="m-lead">Leader</span>}
             {active && <span className="m-lead now">In battle</span>}
@@ -311,7 +311,7 @@ export function FlyScreen({ mon }: { mon: number }) {
         {towns.map((t) => (
           <Row
             key={t.map}
-            title={t.name}
+            title={nicePlace(t.name)}
             onClick={() => {
               env.toast(env.actions.fieldMove(mon, "FLY", { to: t.map }));
               nav.close();

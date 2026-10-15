@@ -133,7 +133,10 @@ function findBoxes(grid: Grid): Found[] {
             return false;
           };
           while (right < SCREEN_COLS && is(right, y, BOX.horizontal) && !(own(right, y) === null && edge(right))) right++;
-          if (right >= SCREEN_COLS || own(right, y) !== null) continue;
+          // Or its whole right side under another box out to the screen's edge (Bill's PC's message
+          // box under WITHDRAW / STATS / CANCEL): keep it, cut off there, as for a hidden bottom.
+          if (right >= SCREEN_COLS && lenient && own(SCREEN_COLS - 1, y) === null) right = SCREEN_COLS - 1;
+          else if (right >= SCREEN_COLS || own(right, y) !== null) continue;
         }
         let bottom = y + 1;
         while (

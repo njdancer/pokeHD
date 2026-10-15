@@ -113,6 +113,10 @@ button.m-row:active { transform: translateY(2px); box-shadow: 0 0 0 #e7cc9c, 0 2
 .m-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .m-title { font-size: 17px; line-height: 1.2; }
 .m-text .m-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-text .m-title:has(> .m-tname) { display: flex; align-items: center; gap: 5px; }
+.m-title:has(> .m-tname) > .m-lead { margin-left: 0; }
+.m-title > .m-tname { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.m-title:has(> .m-tname) > :not(.m-tname) { flex-shrink: 0; }
 .m-sub { color: var(--m-muted); font-size: 14px; font-weight: 700; line-height: 1.3; }
 .m-right { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 13.5px; color: var(--m-muted); font-variant-numeric: tabular-nums; }
 .m-right b { color: var(--m-ink); font-size: 15px; }
@@ -229,6 +233,7 @@ button.m-row:active { transform: translateY(2px); box-shadow: 0 0 0 #e7cc9c, 0 2
 .m-dexcard .ball-mark { position: absolute; top: 5px; right: 5px; }
 .m-dexcard .m-no { font-size: 11px; letter-spacing: 0; }
 .m-dexcard .m-name { max-width: 100%; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-dexcard .m-name.long { font-size: 11px; letter-spacing: -.02em; }
 .m-dexcard.seen .m-pixel { filter: grayscale(1) contrast(.8); opacity: .55; }
 .m-dexcard.seen .m-name { color: var(--m-muted); }
 .m-dexcard.none { background: none; border: 2px dashed #e6cfa3; box-shadow: none; justify-content: center; aspect-ratio: .82; }

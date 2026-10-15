@@ -3,7 +3,7 @@
 // Pokémon met, items found, your trail, checkpoints, friends, wild areas. Tap anything for a card.
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { MAP_NAMES } from "@pokehd/rom";
-import { monPic, niceMon, spritePic, useEnv } from "../env.tsx";
+import { monPic, niceMon, nicePlace, spritePic, useEnv } from "../env.tsx";
 import { useNav } from "../nav.tsx";
 import { buildWorldMap, paintFog, type Pin, type PinKind, type WorldMap } from "../world-map.ts";
 import { Avatar } from "./People.tsx";
@@ -41,7 +41,7 @@ const PIN_LOOK: Record<PinKind, [string, string, string]> = {
   house: ["#8e5bb5", "•", "House"],
 };
 
-const niceName = (s: string) => s.toLowerCase().replace(/(^|[ .])([a-z])/g, (_m, a: string, b: string) => a + b.toUpperCase()).replace("Mt.moon", "Mt. Moon");
+const niceName = nicePlace;
 
 /** Painting Kanto takes a moment, so it's kept per ROM. */
 const painted = new WeakMap<Uint8Array, { map: WorldMap; art: string }>();
