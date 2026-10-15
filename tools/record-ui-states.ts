@@ -85,7 +85,9 @@ function setUp() {
     const at = addr("wPartyMons") + i * PARTYMON;
     for (let k = 0; k < 4; k++) {
       gb.write(at + 8 + k, m.moves[k] ?? 0);
-      gb.write(at + 29 + k, m.moves[k] ? 15 : 0);
+      // Full PP: the Moves table's sixth byte (6 bytes a move, from move 1).
+      const move = m.moves[k];
+      gb.write(at + 29 + k, move ? ROM[SYMBOLS.Moves.bank * 0x4000 + (SYMBOLS.Moves.address - 0x4000) + (move - 1) * 6 + 5]! : 0);
     }
     if (m.nick) {
       const name = encodeText(m.nick);

@@ -236,7 +236,12 @@ for (const scene of SCENES.filter((s) => !only || only.includes(s.name)))
         did += ` FAILED: ${(e as Error).message.split("\n")[0]}`;
       }
       await sleep(700);
-      const c = await census(page);
+      // A page that stops answering (a battle at a frame a second) ends the scene rather than the run.
+      const c = await Promise.race([census(page), sleep(60_000).then(() => null)]);
+      if (!c) {
+        log({ step: n, did, hung: true, errors: errors.splice(0) });
+        break;
+      }
       const inWorld = await page.evaluate(() => !!(window as Hooked).__pokehd?.inWorld);
       const flags = redFlags(c, { inWorld });
       if (missing) flags.unshift(`step didn't happen: ${did}`);
