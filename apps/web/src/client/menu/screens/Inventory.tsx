@@ -355,60 +355,77 @@ export function BagPick({ purpose }: { purpose?: Purpose }) {
 
 /** Bill's PC: take one out (the withdraw sheet). */
 export function BoxPick() {
+  const { model } = useEnv();
+  const full = model.team.length >= 6;
+  return (
+    <Page title="Box 1" meta={`${model.box.length} of 20`} banner={full ? "Your team is full. Put one in first" : "Take which Pokémon with you?"}>
+      <BoxList />
+    </Page>
+  );
+}
+
+/** The box's Pokémon, each with Take (the withdraw sheet's list, and the PC counter's Box tab). */
+export function BoxList() {
   const env = useEnv();
   const { model, actions } = env;
   const nav = useNav();
   const full = model.team.length >= 6;
   return (
-    <Page title="Box 1" meta={`${model.box.length} of 20`} banner={full ? "Your team is full. Put one in first" : "Take which Pokémon with you?"}>
-      <div className="m-list">
-        {model.box.map((m, i) => (
-          <Row
-            key={m.key}
-            media={<Pixel src={monPic(env, m.dex)} />}
-            title={niceMon(m.name)}
-            sub={`Level ${m.level}`}
-            right={
-              <button type="button" className="m-pill" disabled={full} onClick={() => (env.toast(actions.withdraw(i)), nav.close())}>
-                Take
-              </button>
-            }
-          />
-        ))}
-      </div>
+    <div className="m-list">
+      {model.box.map((m, i) => (
+        <Row
+          key={m.key}
+          media={<Pixel src={monPic(env, m.dex)} />}
+          title={niceMon(m.name)}
+          sub={`Level ${m.level}`}
+          right={
+            <button type="button" className="m-pill" disabled={full} onClick={() => (env.toast(actions.withdraw(i)), nav.close())}>
+              Take
+            </button>
+          }
+        />
+      ))}
+      {!model.box.length && <p className="m-empty">The box is empty.</p>}
+    </div>
+  );
+}
+
+export function ShopPick({ stock }: { stock: StockItem[] }) {
+  const { model } = useEnv();
+  return (
+    <Page title="Poké Mart" meta={`₽${model.trainer.money.toLocaleString("en")}`} banner="What would you like?">
+      <ShopList stock={stock} />
     </Page>
   );
 }
 
-/** The Poké Mart's counter (the buy sheet): a tap on a row asks how many (BuyScreen). */
-export function ShopPick({ stock }: { stock: StockItem[] }) {
+/** The Mart's shelf, each thing with its price and how many you have. */
+export function ShopList({ stock }: { stock: StockItem[] }) {
   const env = useEnv();
   const nav = useNav();
   const { model } = env;
   const bag = model.bag.map((b) => ({ item: b.id, quantity: b.count ?? 1 }));
   return (
-    <Page title="Poké Mart" meta={`₽${model.trainer.money.toLocaleString("en")}`} banner="What would you like?">
-      <div className="m-list">
-        {stock.map((s) => {
-          const have = model.bag.filter((b) => b.id === s.id).reduce((n, b) => n + (b.count ?? 0), 0);
-          const max = buyMax(model.trainer.money, s.price, bag, s.id);
-          return (
-            <Row
-              key={s.id}
-              media={
-                <span className="m-itemicon">
-                  <ItemIcon id={s.id} kind={s.kind} />
-                </span>
-              }
-              title={niceItem(s.name)}
-              sub={max === 0 ? limitOf("buy", 0, model.trainer.money, s.price, have) : have ? `You have ${have}` : "You have none"}
-              right={<b className="m-count">₽{s.price.toLocaleString("en")}</b>}
-              off={max === 0}
-              onClick={() => nav.go({ k: "buy", item: s })}
-            />
-          );
-        })}
-      </div>
-    </Page>
+    <div className="m-list">
+      {stock.map((s) => {
+        const have = model.bag.filter((b) => b.id === s.id).reduce((n, b) => n + (b.count ?? 0), 0);
+        const max = buyMax(model.trainer.money, s.price, bag, s.id);
+        return (
+          <Row
+            key={s.id}
+            media={
+              <span className="m-itemicon">
+                <ItemIcon id={s.id} kind={s.kind} />
+              </span>
+            }
+            title={niceItem(s.name)}
+            sub={max === 0 ? limitOf("buy", 0, model.trainer.money, s.price, have) : have ? `You have ${have}` : "You have none"}
+            right={<b className="m-count">₽{s.price.toLocaleString("en")}</b>}
+            off={max === 0}
+            onClick={() => nav.go({ k: "buy", item: s })}
+          />
+        );
+      })}
+    </div>
   );
 }

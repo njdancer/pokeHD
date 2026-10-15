@@ -245,4 +245,7 @@ export type Request =
   | { kind: "deposit" }
   | { kind: "withdraw" }
   | { kind: "buy"; stock: { id: number; name: string; price: number; kind: ItemKind }[] }
-  | { kind: "sell" };
+  | { kind: "sell" }
+  /** Proposals at /dev/menu: the Mart's and Bill's PC's whole visit as one sheet (Counters.tsx). */
+  | { kind: "mart"; stock: { id: number; name: string; price: number; kind: ItemKind }[]; look: "menu" | "tabs" }
+  | { kind: "pc"; look: "menu" | "tabs" };
