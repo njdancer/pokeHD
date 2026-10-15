@@ -183,6 +183,14 @@ export function fieldOf(rom: Uint8Array, world: WorldData, game: Pick<GameSnapsh
 /** Per ROM: how each Pokémon grows (it takes a scan of every species). */
 const learnsCache = new WeakMap<Uint8Array, Map<number, Learns>>();
 
+/** A Pokémon's moves and evolution line straight from the ROM, outside a game (the card's dev page). */
+export function romLearns(rom: Uint8Array, catalogue: Catalogue): (dex: number) => Learns | undefined {
+  const cache = learnsCache.get(rom) ?? new Map<number, Learns>();
+  learnsCache.set(rom, cache);
+  const speciesOf = (dex: number) => catalogue.entries[dex - 1]!.species;
+  return (dex) => (catalogue.entries[dex - 1] ? learnsOf(rom, cache, dex, speciesOf) : undefined);
+}
+
 export function liveModel({ rom, world, catalogue, game, journal, friends, savedAt, app }: LiveInput): MenuModel {
   const placeOf = (map: number) => (MAP_NAMES[map] ? townMapPlace(rom, map).name : "");
   const speciesOf = (dex: number) => catalogue.entries[dex - 1]!.species;
