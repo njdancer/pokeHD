@@ -49,9 +49,9 @@ describe("itemVerbs for the field items", () => {
   const ROPE: Item = { id: ID.ESCAPE_ROPE, name: "ESCAPE ROPE", kind: "Travel", count: 1, text: "" };
   // A key item with no count, on the Travel shelf, as the live model has it (QA bug 72).
   const BIKE: Item = { id: ID.BICYCLE, name: "BICYCLE", kind: "Travel", text: "" };
-  function at(field: MenuModel["field"], moment: Moment = "explore", biking = false) {
+  function at(field: Pick<MenuModel["field"], "escapeRope" | "bike">, moment: Moment = "explore", biking = false) {
     const s = setup(moment);
-    Object.assign(s.env.model, { field, biking, bag: [ROPE, BIKE] });
+    Object.assign(s.env.model, { field: { outside: true, flyTo: [], ...field }, biking, bag: [ROPE, BIKE] });
     return { ...s, nav: { ...s.nav, sheet: moment !== "explore" } };
   }
 
@@ -182,5 +182,55 @@ describe("itemVerbs for the field items the game uses from its bag", () => {
     expect(use!.off).toBeUndefined();
     use!.run!();
     expect(wild.actions.useItem).toHaveBeenCalledWith(0x41);
+  });
+});
+
+// The field moves besides CUT, from the team screen (the HD UI pass: with the Start menu gone only
+// CUT had a way in, so SURF, FLY and STRENGTH were out of reach on a phone).
+describe("monVerbs for field moves", () => {
+  const move = (name: string) => ({ name, type: "NORMAL", pp: 15, maxPp: 15 });
+  const pidgeot: Mon = { key: "p", dex: 18, name: "PIDGEOT", level: 40, hp: 120, maxHp: 120, moves: [move("FLY"), move("TELEPORT")] };
+  const blastoise: Mon = { key: "b", dex: 9, name: "BLASTOISE", level: 50, hp: 150, maxHp: 150, moves: [move("SURF"), move("STRENGTH"), move("FLASH"), move("DIG")] };
+  const chansey: Mon = { key: "c", dex: 113, name: "CHANSEY", level: 40, hp: 100, maxHp: 300, moves: [move("SOFTBOILED")] };
+  function team(badges: boolean[] = Array(8).fill(true), field: Partial<MenuModel["field"]> = {}) {
+    const s = setup();
+    (s.actions as unknown as { fieldMove: unknown }).fieldMove = vi.fn(() => "");
+    Object.assign(s.env.model, {
+      team: [blastoise, pidgeot, chansey, mon],
+      trainer: { badges },
+      surfing: false,
+      field: { escapeRope: false, bike: true, outside: true, flyTo: [{ map: 2, name: "Pewter City" }], ...field },
+    });
+    const verb = (i: number, label: string) => monVerbs(s.env, s.nav, i).find((v) => v.label.startsWith(label));
+    return { ...s, verb };
+  }
+
+  it("offers each move the Pokémon knows, closing the menu to show it", () => {
+    const { verb, actions, nav } = team();
+    for (const label of ["Use SURF", "Use STRENGTH", "Use FLASH"]) expect(verb(0, label)?.off, label).toBeUndefined();
+    verb(0, "Use SURF")!.run!();
+    expect(actions.fieldMove).toHaveBeenCalledWith(0, "SURF");
+    expect(nav.close).toHaveBeenCalled();
+  });
+
+  it("greys out a move whose badge is missing, and FLY and TELEPORT indoors", () => {
+    expect(team(Array(8).fill(false)).verb(0, "Use SURF")!.off).toBe("Needs the Soul Badge");
+    const inside = team(undefined, { outside: false });
+    expect(inside.verb(1, "Fly")!.off).toBe("Only outside");
+    expect(inside.verb(1, "Use TELEPORT")!.off).toBe("Only outside");
+    expect(team().verb(0, "Use DIG")!.off).toBe("Only in caves and dungeons");
+  });
+
+  it("FLY goes to a list of towns; SOFTBOILED picks who to heal", () => {
+    const { verb, nav, actions, env } = team();
+    verb(1, "Fly")!.run!();
+    expect(nav.go).toHaveBeenCalledWith({ k: "fly", mon: 1 });
+    verb(2, "Use SOFTBOILED")!.run!();
+    expect(nav.go).toHaveBeenCalledWith({ k: "team", for: { softboiled: 2 } });
+    const [heal] = monVerbs(env, nav, 3, { softboiled: 2 });
+    expect(heal!.off).toBeUndefined();
+    heal!.run!();
+    expect(actions.fieldMove).toHaveBeenCalledWith(2, "SOFTBOILED", { target: 3 });
+    expect(monVerbs(env, nav, 2, { softboiled: 2 })[0]!.off).toBe("That's the one using it");
   });
 });

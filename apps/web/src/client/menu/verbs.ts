@@ -1,7 +1,7 @@
 // What a Pokémon or an item can do right now, given the game's moment and why it was picked.
 // The rules are the game's (balls only in wild battles, no bike indoors…); these only decide what
 // to offer, the game's own routines still decide what happens.
-import { inBattle, type Item, type Mon } from "./model.ts";
+import { inBattle, type FieldMove, type Item, type Mon } from "./model.ts";
 import { niceItem, niceMon, type MenuEnv } from "./env.tsx";
 import type { Nav, Purpose } from "./nav.tsx";
 import type { VerbSpec } from "./ui.tsx";
@@ -69,6 +69,10 @@ export function monVerbs(env: MenuEnv, nav: Nav, i: number, purpose?: Purpose): 
   }
   if (purpose && "teach" in purpose)
     return [{ label: `Teach it to ${niceMon(m.name)}`, off: canLearn(env, m, purpose.teach) ? undefined : `${niceMon(m.name)} can't learn it`, run: () => (done(env, nav, actions.teach(purpose.teach, i)), nav.reset()) }];
+  if (purpose && "softboiled" in purpose) {
+    const user = model.team[purpose.softboiled]!;
+    return [{ label: `Give ${niceMon(m.name)} some of ${niceMon(user.name)}'s HP`, off: i === purpose.softboiled ? "That's the one using it" : m.hp === 0 ? "Fainted" : m.hp >= m.maxHp ? "Already healthy" : undefined, run: () => (done(env, nav, actions.fieldMove(purpose.softboiled, "SOFTBOILED", { target: i })), nav.reset({ k: "mon", i: purpose.softboiled })) }];
+  }
   if (purpose && "giftTo" in purpose) {
     const f = model.friends.find((x) => x.id === purpose.giftTo)!;
     return [{ label: `Send ${niceMon(m.name)} to ${f.name}`, off: model.team.length < 2 ? "Keep one with you" : undefined, run: () => (done(env, nav, actions.gift(f.id, { mon: i })), nav.reset({ k: "friend", id: f.id })) }];
@@ -88,8 +92,43 @@ export function monVerbs(env: MenuEnv, nav: Nav, i: number, purpose?: Purpose): 
   // The game's own CUT on what the player faces; the menu closes so the tree is seen to go, and
   // what the game says comes back as a notice (QA bug 69: this only ever said "nothing to cut").
   if (m.moves.some((x) => x.name === "CUT")) v.push({ label: "Use CUT", alt: true, run: () => done(env, nav, actions.cut(i), true) });
+  for (const move of FIELD_MOVES) if (m.moves.some((x) => x.name === move)) v.push(fieldVerb(env, nav, i, move));
   v.push({ label: "Use an item on it", alt: true, run: () => nav.go({ k: "bag", for: { onMon: i } }) });
   return v;
+}
+
+/** StartMenu_Pokemon's field moves after CUT, in its order. */
+const FIELD_MOVES: FieldMove[] = ["FLY", "SURF", "STRENGTH", "FLASH", "DIG", "TELEPORT", "SOFTBOILED"];
+/** The badge each needs (StartMenu_Pokemon's checks): its index in the model's badges, and its name. */
+const FIELD_BADGE: Partial<Record<FieldMove, [number, string]>> = { FLASH: [0, "Boulder Badge"], FLY: [2, "Thunder Badge"], STRENGTH: [3, "Rainbow Badge"], SURF: [4, "Soul Badge"] };
+
+/**
+ * A field move from the team screen. The menu closes so what it does is seen, and what the game
+ * says comes back as a notice; the game's own checks decide (no water ahead, a dungeon for DIG).
+ * Only what the menu can tell for sure is greyed out first: a missing badge, FLY and TELEPORT indoors.
+ */
+function fieldVerb(env: MenuEnv, nav: Nav, i: number, move: FieldMove): VerbSpec {
+  const { model, actions } = env;
+  const m = model.team[i]!;
+  const badge = FIELD_BADGE[move];
+  const needs = badge && !model.trainer.badges[badge[0]] ? `Needs the ${badge[1]}` : undefined;
+  const act = () => done(env, nav, actions.fieldMove(i, move), true);
+  switch (move) {
+    case "FLY":
+      return { label: "Fly somewhere", alt: true, off: needs ?? (model.field.outside ? undefined : "Only outside"), run: () => nav.go({ k: "fly", mon: i }) };
+    case "SURF":
+      return { label: model.surfing ? "Stop surfing" : "Use SURF", note: model.surfing ? "Face the land first" : "Face the water first", alt: true, off: needs, run: act };
+    case "STRENGTH":
+      return { label: "Use STRENGTH", note: "Then push boulders", alt: true, off: needs, run: act };
+    case "FLASH":
+      return { label: "Use FLASH", note: "Lights up dark caves", alt: true, off: needs, run: act };
+    case "DIG":
+      return { label: "Use DIG", note: "Back to the last Pokémon Center", alt: true, off: model.field.escapeRope ? undefined : "Only in caves and dungeons", run: act };
+    case "TELEPORT":
+      return { label: "Use TELEPORT", note: "Back to the last Pokémon Center", alt: true, off: model.field.outside ? undefined : "Only outside", run: act };
+    case "SOFTBOILED":
+      return { label: "Use SOFTBOILED on…", note: "Gives a fifth of its HP", alt: true, off: m.hp * 5 <= m.maxHp ? "Not healthy enough" : undefined, run: () => nav.go({ k: "team", for: { softboiled: i } }) };
+  }
 }
 
 /** What the Mart buys back: not key items (IsKeyItem) nor HMs (IsItemHM, priceless), only what has a price. */

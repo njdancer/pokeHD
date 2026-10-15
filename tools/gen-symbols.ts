@@ -325,6 +325,19 @@ export const ALLOWLIST: readonly string[] = [
   "wSpritePlayerStateData1FacingDirection",
   "wTileInFrontOfPlayer",
   "wTilePlayerStandingOn",
+  // The other field moves from the Pokédex menu: StartMenu_Pokemon's branches, each made of the
+  // routines and texts it calls, with the destination FLY's town map would pick written as it does
+  "GetPartyMonName",
+  "IsSurfingAllowed",
+  "PrintStrengthText",
+  "StartMenu_Pokemon.cannotFlyHereText",
+  "StartMenu_Pokemon.cannotUseTeleportNowText",
+  "StartMenu_Pokemon.flashLightsAreaText",
+  "StartMenu_Pokemon.notHealthyEnoughText",
+  "StartMenu_Pokemon.warpToLastPokemonCenterText",
+  "wDestinationMap",
+  "wMapPalOffset",
+  "wStatusFlags1",
   // HD battle menus (p2-tapfirst): the battle menu's and the move list's waits for input, and
   // what the page shows and answers there
   "DisplayBattleMenu.AButtonPressed",

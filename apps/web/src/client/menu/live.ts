@@ -4,7 +4,7 @@
 // questions become the menu's sheets (Request); the ones it has no sheet for (yes/no, a PC item
 // list, a quantity nobody chose yet) stay with the small fallback sheet (Sheets.tsx).
 import type { ActionResult, AskAnswer, GameAction, GameAsk, GameSnapshot, MonStatus } from "@pokehd/emu";
-import { itemUse } from "@pokehd/emu";
+import { FLY_TOWNS, itemUse, outsideTileset } from "@pokehd/emu";
 import {
   type Message,
   growth,
@@ -25,7 +25,7 @@ import type { Catalogue } from "../dex/catalogue.ts";
 import type { Friend as RoomFriend } from "../room/client.ts";
 import { bikeAllowed, escapeRopeWorks, itemLine, itemPrice, shelf } from "./items.ts";
 import type { PlayJournal } from "./journal.ts";
-import type { AppOptions, GameOptions, Item, ItemKind, Learns, MenuActions, MenuModel, Moment, Mon, Person, PersonKind, Request } from "./model.ts";
+import type { AppOptions, FieldMove, GameOptions, Item, ItemKind, Learns, MenuActions, MenuModel, Moment, Mon, Person, PersonKind, Request } from "./model.ts";
 
 const HM01 = 0xc4;
 const TM01 = 0xc9;
@@ -174,10 +174,13 @@ export function outdoorSpot(world: WorldData, map: number): { map: number; x: nu
  * What the field items can do where the player stands, by the game's own checks. The map header's
  * tileset is the one the game loads into wCurMapTileset for it.
  */
-export function fieldOf(rom: Uint8Array, world: WorldData, game: Pick<GameSnapshot, "map" | "transport">): MenuModel["field"] {
+export function fieldOf(rom: Uint8Array, world: WorldData, game: Pick<GameSnapshot, "map" | "transport"> & Partial<Pick<GameSnapshot, "townsVisited">>): MenuModel["field"] {
   const tileset = world.maps[game.map]?.tileset;
-  if (tileset === undefined) return { escapeRope: false, bike: false };
-  return { escapeRope: escapeRopeWorks(rom, game.map, tileset), bike: game.transport !== "surf" && bikeAllowed(rom, game.map, tileset) };
+  const flyTo = Array.from({ length: FLY_TOWNS }, (_, map) => map)
+    .filter((map) => ((game.townsVisited ?? 0) >> map) & 1)
+    .map((map) => ({ map, name: townMapPlace(rom, map).name }));
+  if (tileset === undefined) return { escapeRope: false, bike: false, outside: false, flyTo };
+  return { escapeRope: escapeRopeWorks(rom, game.map, tileset), bike: game.transport !== "surf" && bikeAllowed(rom, game.map, tileset), outside: outsideTileset(tileset), flyTo };
 }
 
 /** Per ROM: how each Pokémon grows (it takes a scan of every species). */
@@ -340,6 +343,7 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
     app,
     repel: game.repelSteps,
     biking: game.transport === "bike",
+    surfing: game.transport === "surf",
     ...(typeof game.battleMon === "number" ? { battleMon: game.battleMon } : {}),
     field: fieldOf(rom, world, game),
     layers: {
@@ -596,6 +600,9 @@ export class LiveActions implements MenuActions {
   }
   cut(mon: number): string {
     return this.#do({ kind: "cut", mon });
+  }
+  fieldMove(mon: number, move: FieldMove, on: { to?: number; target?: number } = {}): string {
+    return this.#do({ kind: "field-move", move, mon, ...on });
   }
   deposit(mon: number): string {
     this.#answer({ index: mon });

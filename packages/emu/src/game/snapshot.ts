@@ -91,6 +91,8 @@ export interface GameSnapshot {
    * the rival's battles are remembered here (EVENT_BEAT_BROCK …), not by EndTrainerBattle.
    */
   events: Uint8Array;
+  /** wTownVisitedFlag: bit n for town map n (Pallet Town 0 … Saffron City 10), where FLY can go. */
+  townsVisited: number;
 }
 
 const sym = (name: SymbolName, length: number): Watch => [SYMBOLS[name].address, length];
@@ -122,6 +124,7 @@ export const SNAPSHOT_RANGES: readonly Watch[] = [
   sym("wIsInBattle", 1),
   sym("wCurrentBoxNum", 1),
   sym("wPlayerMonNumber", 1),
+  sym("wTownVisitedFlag", 2),
   // flag_array NUM_EVENTS, up to wGrassRate.
   [SYMBOLS.wEventFlags.address, SYMBOLS.wGrassRate.address - SYMBOLS.wEventFlags.address],
 ];
@@ -196,7 +199,7 @@ function wholeCount(list: Uint8Array, capacity: number, structLength: number): n
 }
 
 export function decodeSnapshot(bytes: readonly Uint8Array[]): GameSnapshot {
-  const [party, partyOt, partyNicks, bag, pcItems, box, boxNicks, player, rival, id, money, badges, owned, seen, options, time, repel, transport, map, coords, battle, boxNumber, battleMon, events] =
+  const [party, partyOt, partyNicks, bag, pcItems, box, boxNicks, player, rival, id, money, badges, owned, seen, options, time, repel, transport, map, coords, battle, boxNumber, battleMon, towns, events] =
     bytes as Uint8Array[];
   const teamCount = wholeCount(party!, PARTY_LENGTH, PARTYMON);
   const mons = 1 + PARTY_LENGTH + 1;
@@ -231,5 +234,6 @@ export function decodeSnapshot(bytes: readonly Uint8Array[]): GameSnapshot {
     battleKind: battle![0] === 1 ? "wild" : battle![0] === 2 ? "trainer" : null,
     battleMon: (battle![0] ?? 0) !== 0 && (battleMon![0] ?? 0xff) < teamCount ? battleMon![0]! : null,
     events: events ?? new Uint8Array(0),
+    townsVisited: (towns?.[0] ?? 0) | ((towns?.[1] ?? 0) << 8),
   };
 }

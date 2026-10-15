@@ -8,6 +8,7 @@
 // |---|---|
 // | use an item | `UseItem` with wCurItem, framed like a person's text (`DisplayTextIDInit` … `CloseTextDisplay`) |
 // | CUT | `UsedCut`, as the start menu's POKéMON list calls it, in the same frame |
+// | FLY, SURF, STRENGTH, FLASH, DIG, TELEPORT, SOFTBOILED | `StartMenu_Pokemon`'s branch for it, call by call (its texts, `IsSurfingAllowed`, `UseItem` with the move's pseudo-item, `PrintStrengthText`); FLY's town map stood in for |
 // | toss | `RemoveItemFromInventory`, as tossing does once the player says yes |
 // | reorder the team | `SwitchPartyMon_InitVarOrSwapData`, the party menu's swap without its drawing |
 // | reorder moves | none outside battle: the moves and their PP swapped in the party struct |
@@ -33,6 +34,11 @@ export type GameAction =
   | { kind: "use-item"; item: number; mon?: number; answers?: boolean[] }
   /** The field move CUT, by the party member in slot `mon`, on whatever the player faces. */
   | { kind: "cut"; mon: number }
+  /**
+   * Any other field move by the party member in slot `mon`: FLY to the town map `to` (a town the
+   * player has visited), SOFTBOILED onto party member `target`.
+   */
+  | { kind: "field-move"; move: FieldMove; mon: number; to?: number; target?: number }
   | { kind: "toss-item"; item: number; quantity: number }
   /** Moves a party member from one slot to another (the rest shift up or down). */
   | { kind: "move-mon"; from: number; to: number }
@@ -40,6 +46,21 @@ export type GameAction =
   | { kind: "move-item"; from: number; to: number }
   | { kind: "options"; options: number }
   | { kind: "save" };
+
+/** The field moves the start menu's POKéMON list offers besides CUT (`StartMenu_Pokemon`). */
+export type FieldMove = "FLY" | "SURF" | "STRENGTH" | "FLASH" | "DIG" | "TELEPORT" | "SOFTBOILED";
+export const FIELD_MOVES: Record<FieldMove, number> = { FLY: 0x13, SURF: 0x39, STRENGTH: 0x46, FLASH: 0x94, DIG: 0x5b, TELEPORT: 0x64, SOFTBOILED: 0x87 };
+/** The badge each needs (wObtainedBadges bit, its name, its gym's town), as StartMenu_Pokemon checks. */
+export const FIELD_MOVE_BADGES: Partial<Record<FieldMove, { bit: number; badge: string; town: string }>> = {
+  FLASH: { bit: 0, badge: "BOULDERBADGE", town: "Pewter" },
+  FLY: { bit: 2, badge: "THUNDERBADGE", town: "Vermilion" },
+  STRENGTH: { bit: 3, badge: "RAINBOWBADGE", town: "Celadon" },
+  SURF: { bit: 4, badge: "SOULBADGE", town: "Fuchsia" },
+};
+/** Towns FLY goes to: the first NUM_CITY_MAPS maps, by wTownVisitedFlag (BuildFlyLocationList). */
+export const FLY_TOWNS = 11;
+/** CheckIfInOutsideMap: towns and routes (tileset OVERWORLD) and Route 23 / Indigo Plateau (PLATEAU). */
+export const outsideTileset = (tileset: number) => tileset === 0 || tileset === 23;
 
 export type ActionResult =
   /** `messages`: what the game said, box by box (each a line or two). */
@@ -61,6 +82,21 @@ const ITEM_USED = 1;
 /** A text ID other than 0 (the start menu): DisplayTextIDInit draws an ordinary dialogue box. */
 const TEXT_BOX = 1;
 const CUT = 0x0f;
+const POTION = 0x14;
+const SURFBOARD = 0x07;
+const ESCAPE_ROPE = 0x1d;
+/** wStatusFlags1 */
+const SURF_ALLOWED = 1 << 1;
+/** wStatusFlags4 */
+const UNKNOWN_4_1 = 1 << 1;
+const NO_BATTLES = 1 << 4;
+/** wStatusFlags6 */
+const FLY_WARP = 1 << 3;
+const ESCAPE_WARP = 1 << 6;
+/** wStatusFlags7 */
+const USED_FLY = 1 << 7;
+const MON_HP = 1;
+const MON_MAXHP = 34;
 /** wObtainedBadges' BIT_CASCADEBADGE, which the start menu's CUT asks for. */
 const CASCADEBADGE = 1 << 1;
 /** `lda_coord 8, 9`: the screen tile under the player's feet. */
@@ -117,18 +153,21 @@ export class GameActions {
     this.#safe = SafePoint.of(gb);
     const ours = () => this.#running !== null;
     const keep = (g: GameBoy) => this.#keep(g);
+    // "Use on which Pokémon?": the party menu's outputs (HandlePartyMenuInput), or cancelled.
+    const party = (g: GameBoy) => {
+      const slot = this.#running?.mon;
+      if (slot === undefined || slot >= g.read(addr("wPartyCount"))) return { carry: true };
+      const species = g.read(addr("wPartySpecies") + slot);
+      g.write(addr("wCurrentMenuItem"), slot);
+      g.write(addr("wWhichPokemon"), slot);
+      g.write(addr("wCurPartySpecies"), species);
+      g.write(addr("wBattleMonSpecies2"), species);
+      return { carry: false };
+    };
     this.#standIns = [
-      // "Use on which Pokémon?": the party menu's outputs (HandlePartyMenuInput), or cancelled.
-      new StandIn(gb, "DisplayPartyMenu", ours, (g) => {
-        const slot = this.#running?.mon;
-        if (slot === undefined || slot >= g.read(addr("wPartyCount"))) return { carry: true };
-        const species = g.read(addr("wPartySpecies") + slot);
-        g.write(addr("wCurrentMenuItem"), slot);
-        g.write(addr("wWhichPokemon"), slot);
-        g.write(addr("wCurPartySpecies"), species);
-        g.write(addr("wBattleMonSpecies2"), species);
-        return { carry: false };
-      }),
+      new StandIn(gb, "DisplayPartyMenu", ours, party),
+      // SOFTBOILED's (ItemUseMedicine goes back to the party menu the start menu left up).
+      new StandIn(gb, "GoBackToPartyMenu", ours, party),
       // A yes/no: a TM's "Teach … to a POKéMON?" and the like. Answered from the action, else no.
       // LearnMove's ("Delete an older move…?", "Abandon learning…?") and its move list are the
       // page's to ask (GameAsks): answering them ourselves went round and round (QA bug 48). What
@@ -210,6 +249,137 @@ export class GameActions {
   dispose(): void {
     for (const s of this.#standIns) s.dispose();
     this.#removePause();
+  }
+
+  /**
+   * StartMenu_Pokemon's `.choseOutOfBattleMove` branches (engine/menus/start_sub_menus.asm), one
+   * call at a time from the idle point. Where a branch would go back to the party menu (a refusal
+   * printed), the action ends with that text instead; FLY's town map is the page's to show, so its
+   * pick is written as LoadTownMap_Fly writes it.
+   */
+  #fieldMove(
+    action: Extract<GameAction, { kind: "field-move" }>,
+    ctx: { begin: (mon?: number) => void; fail: (reason: string, say?: string) => { drop: string }; finish: (completed: boolean) => void; failed: (why: string) => void },
+  ): Job {
+    const { move, mon, to, target } = action;
+    const rom = this.#rom;
+    const last = () => this.#running?.messages.at(-1);
+    /** The branch's calls, decided at the idle point (they read the game as it is then). */
+    let steps: Step[] = [];
+    const nameMon: Step = { routine: "GetPartyMonName", registers: () => ({ af: mon << 8, hl: addr("wPartyMonNicks") }) };
+    const refuse = (text: SymbolName, why: string): Step[] => [...say(rom, text), { routine: "DelayFrame", after: () => void ctx.failed(last() ?? why) }];
+    const itemStep = (item: number, user = mon): Step => ({
+      routine: "UseItem",
+      before: (g) => {
+        g.write(addr("wCurItem"), item);
+        g.write(addr("wPseudoItemID"), item);
+        g.write(addr("wWhichPokemon"), user);
+      },
+      after: (g) => {
+        this.#keep(g);
+        if (g.read(addr("wActionResultOrTookBattleTurn")) === 0) ctx.failed(last() ?? `${move} didn't work here`);
+      },
+    });
+    const job: Job = {
+      scratch: [
+        [addr("hTextID"), 1],
+        [addr("wPseudoItemID"), 1],
+        [addr("wUpdateSpritesEnabled"), 1],
+        [addr("wPartyMenuTypeOrMessageID"), 1],
+        [addr("wWhichPokemon"), 1],
+        [addr("wStringBuffer"), 5],
+      ],
+      check: (g) => {
+        if (mon >= g.read(addr("wPartyCount"))) return ctx.fail("no such Pokémon");
+        const moves = g.readBytes(addr("wPartyMons") + mon * PARTYMON_STRUCT_LENGTH + MON_MOVES, NUM_MOVES);
+        if (!moves.includes(FIELD_MOVES[move])) return ctx.fail(`doesn't know ${move}`);
+        const badge = FIELD_MOVE_BADGES[move];
+        if (badge && !((g.read(addr("wObtainedBadges")) >> badge.bit) & 1)) return ctx.fail(`needs the ${badge.badge}`, `${move} needs the ${badge.badge} from ${badge.town}'s Gym.`);
+        const outside = outsideTileset(g.read(addr("wCurMapTileset")));
+        switch (move) {
+          case "FLY":
+            if (!outside) steps = refuse("StartMenu_Pokemon.cannotFlyHereText", "can't fly here");
+            else {
+              if (to === undefined || to >= FLY_TOWNS) return ctx.fail("no town to fly to");
+              const visited = g.read(addr("wTownVisitedFlag") + (to >> 3)) & (1 << (to & 7));
+              if (!visited) return ctx.fail("not a town you've been to");
+              // ChooseFlyDestination, then what LoadTownMap_Fly's A writes (its town list holds map IDs).
+              steps = [{
+                routine: "DelayFrame",
+                before: (g2) => {
+                  g2.write(addr("wStatusFlags4"), g2.read(addr("wStatusFlags4")) & ~NO_BATTLES);
+                  g2.write(addr("wDestinationMap"), to);
+                  g2.write(addr("wStatusFlags6"), g2.read(addr("wStatusFlags6")) | FLY_WARP);
+                  g2.write(addr("wStatusFlags7"), g2.read(addr("wStatusFlags7")) | USED_FLY);
+                },
+              }];
+            }
+            break;
+          case "SURF": {
+            let allowed = false;
+            steps = [
+              farcall("IsSurfingAllowed"),
+              {
+                routine: "DelayFrame",
+                before: (g2) => {
+                  const flags = g2.read(addr("wStatusFlags1"));
+                  allowed = !!(flags & SURF_ALLOWED);
+                  g2.write(addr("wStatusFlags1"), flags & ~SURF_ALLOWED);
+                },
+                after: () => {
+                  if (!allowed) ctx.failed(last() ?? "can't surf here");
+                },
+              },
+            ];
+            // UseItem only once IsSurfingAllowed said yes; else a frame, and on to the end.
+            const surf = itemStep(SURFBOARD);
+            steps.push({ ...surf, routine: "Bankswitch", registers: () => (allowed ? { bc: SYMBOLS.UseItem.bank << 8, hl: SYMBOLS.UseItem.address } : { bc: 0, hl: SYMBOLS.DelayFrame.address }), before: (g2) => allowed && surf.before!(g2), after: (g2, out) => (allowed ? surf.after!(g2, out) : undefined) });
+            break;
+          }
+          case "STRENGTH":
+            steps = [farcall("PrintStrengthText", (g2) => g2.write(addr("wCurPartySpecies"), g2.read(addr("wPartySpecies") + mon)))];
+            break;
+          case "FLASH":
+            steps = [{ routine: "DelayFrame", before: (g2) => g2.write(addr("wMapPalOffset"), 0) }, ...say(rom, "StartMenu_Pokemon.flashLightsAreaText")];
+            break;
+          case "DIG":
+            steps = [itemStep(ESCAPE_ROPE)];
+            break;
+          case "TELEPORT":
+            if (!outside) steps = refuse("StartMenu_Pokemon.cannotUseTeleportNowText", "can't teleport here");
+            else
+              steps = [
+                ...say(rom, "StartMenu_Pokemon.warpToLastPokemonCenterText"),
+                {
+                  routine: "DelayFrame",
+                  before: (g2) => {
+                    g2.write(addr("wStatusFlags6"), g2.read(addr("wStatusFlags6")) | FLY_WARP | ESCAPE_WARP);
+                    g2.write(addr("wStatusFlags4"), (g2.read(addr("wStatusFlags4")) | UNKNOWN_4_1) & ~NO_BATTLES);
+                  },
+                },
+              ];
+            break;
+          case "SOFTBOILED": {
+            if (target === undefined || target >= g.read(addr("wPartyCount"))) return ctx.fail("no Pokémon to heal");
+            const at = addr("wPartyMons") + mon * PARTYMON_STRUCT_LENGTH;
+            const word = (a: number) => (g.read(a) << 8) | g.read(a + 1);
+            // More HP than a fifth of its most, or "Not healthy enough."
+            if (Math.floor(word(at + MON_MAXHP) / 5) >= word(at + MON_HP)) steps = refuse("StartMenu_Pokemon.notHealthyEnoughText", "not healthy enough");
+            // ItemUseMedicine's Softboiled: the user in wWhichPokemon, the one it heals from the party menu.
+            else steps = [itemStep(POTION)];
+            break;
+          }
+        }
+        // As pressing START works out what the player faces; the menu's frame; the Pokémon's
+        // name where the branch's texts read it (`.choseOutOfBattleMove`); the branch; the way back.
+        // The party menu's stand-in answers with SOFTBOILED's target.
+        job.steps = [facingStep(() => ctx.begin(target ?? mon)), textFrame(), nameMon, ...steps, closeText];
+        return undefined;
+      },
+      steps: [],
+      done: ctx.finish,
+    };
+    return job;
   }
 
   #job(action: GameAction, done: (result: ActionResult) => void): Job {
@@ -330,6 +500,8 @@ export class GameActions {
           done: finish,
         };
       }
+      case "field-move":
+        return this.#fieldMove(action, { begin, fail, finish, failed: (why) => (failed = why) });
       case "toss-item": {
         const { item, quantity } = action;
         return {
@@ -433,6 +605,32 @@ export class GameActions {
         return { scratch: [], steps: [{ ...saveGame, before: () => begin() }], done: finish };
     }
   }
+}
+
+/** A routine in any bank, called through Bankswitch as `farcall` does. */
+const farcall = (name: SymbolName, before?: (gb: GameBoy) => void): Step => ({
+  routine: "Bankswitch",
+  before,
+  registers: () => ({ bc: SYMBOLS[name].bank << 8, hl: SYMBOLS[name].address }),
+});
+
+/** DisplayTextIDInit's frame: what every message from a person gets (font, sprites still, the box). */
+const textFrame = (before?: (gb: GameBoy) => void): Step => ({
+  routine: "Bankswitch",
+  before: (g) => {
+    before?.(g);
+    g.write(addr("hTextID"), TEXT_BOX);
+  },
+  registers: () => ({ bc: SYMBOLS.DisplayTextIDInit.bank << 8, hl: SYMBOLS.DisplayTextIDInit.address }),
+});
+/** And its end: CloseTextDisplay pops the ROM bank DisplayTextID pushed. */
+const closeText: Step = { routine: "CloseTextDisplay", push: (g) => [g.read(addr("hLoadedROMBank")) << 8] };
+
+/** A text of StartMenu_Pokemon's (`text_far` and `text_end`), printed as its `PrintText` does. */
+function say(rom: Uint8Array, text: SymbolName): Step[] {
+  const bytes = rom.subarray(romOffset(SYMBOLS[text]), romOffset(SYMBOLS[text]) + 5);
+  // The text's bank isn't mapped at the idle point: its five bytes go where any bank sees them.
+  return [{ routine: "PrintText", before: (g) => bytes.forEach((b, i) => g.write(addr("wStringBuffer") + i, b)), registers: () => ({ hl: addr("wStringBuffer") }) }];
 }
 
 /** A change made straight to the game's data at the idle point (no routine of its own). */

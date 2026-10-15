@@ -31,6 +31,7 @@ const TODAY = 4.6 / 3.9;
 const ACTIONS: MenuActions = {
   useItem: () => "Used it",
   makeLeader: () => "Leads now",
+  fieldMove: () => "",
   moveMon() {},
   moveMove() {},
   moveItem() {},

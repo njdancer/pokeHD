@@ -13,7 +13,9 @@ export type Purpose =
   /** Pick a Pokémon or an item to send to this friend. */
   | { giftTo: string }
   /** Pick an item to use on this Pokémon. */
-  | { onMon: number };
+  | { onMon: number }
+  /** Pick a Pokémon for this one's SOFTBOILED to heal. */
+  | { softboiled: number };
 
 export type Screen =
   | { k: "dex" }
@@ -30,6 +32,8 @@ export type Screen =
   | { k: "buy"; item: { id: number; name: string; price: number; kind: ItemKind } }
   | { k: "sell"; id: number }
   | { k: "map"; focus?: string }
+  /** Where this Pokémon's FLY goes: the towns visited. */
+  | { k: "fly"; mon: number }
   | { k: "me" }
   | { k: "settings" }
   | { k: "grownups" }
