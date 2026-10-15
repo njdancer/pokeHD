@@ -2,7 +2,7 @@
 // any Pokémon's card, in three finishes, tilted by the phone's gyro (tap the card first on an
 // iPhone), the mouse, or a slow sway. Sliders for the foil, the gloss and the relief.
 // URL options: ?mon=6, ?finish=holo|reverse|gold, ?down=1 (face down), ?all=1 (three finishes
-// side by side), ?art=0 (the cartridge's picture). The game's entry page shows it with ?card.
+// side by side), ?art=0 (the cartridge's picture). The game's entry page shows it by default (?card=off for the old page).
 import { useEffect, useMemo, useState } from "react";
 import { parseWorld } from "@pokehd/rom";
 import { fetchDevRom } from "../dev-rom.ts";

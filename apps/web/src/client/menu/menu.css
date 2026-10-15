@@ -518,6 +518,20 @@ img.m-sprite { width: 40px; height: 40px; }
 .m-dex[data-layout="landscape"] .m-idcol .m-badges { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .m-idcol { display: flex; flex-direction: column; gap: 10px; }
 
+/* The entry page's trading card (card/TradingCard.tsx). The page's own height sizes it: upright,
+   small enough that the read button and tabs show under it; on its side, the card fills the
+   screen's height on the left and the rest scrolls beside it. */
+.m-body:has(> .m-cardhero) { container-type: size; }
+.m-cardhero { flex: none; display: flex; justify-content: center; }
+.m-cardhero .tc { --tc-max: max(210px, calc((100cqh - 240px) * 63 / 88)); }
+.m-cardhero .tc-stage { padding: 2px 0 20px; }
+.m-dex[data-layout="landscape"] .m-body:has(> .m-cardhero) {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; align-items: start; column-gap: 18px; row-gap: 10px;
+}
+.m-dex[data-layout="landscape"] .m-body:has(> .m-cardhero) > * { grid-column: 2; }
+.m-dex[data-layout="landscape"] .m-body > .m-cardhero { grid-column: 1; grid-row: 1 / span 30; position: sticky; top: 0; }
+.m-dex[data-layout="landscape"] .m-cardhero .tc { width: calc((100cqh - 22px) * 63 / 88); --tc-max: none; }
+
 /* Wider pages fit more in a row, whichever way up. */
 @container pane (min-width: 420px) {
   .m-dexgrid { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); }

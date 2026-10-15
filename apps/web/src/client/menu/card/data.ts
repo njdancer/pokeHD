@@ -26,5 +26,9 @@ export function cardOf(env: Pick<MenuEnv, "rom" | "catalogue" | "model">, dex: n
 }
 
 const param = typeof location !== "undefined" ? new URLSearchParams(location.search).get("card") : null;
-/** `?card` in the address shows the entry page as a card (a trial, off by default); `?card=gold` or `reverse` picks the finish. */
-export const cardTrial: Finish | null = param === null ? null : param === "gold" || param === "reverse" ? param : "holo";
+/**
+ * The entry page shows a caught Pokémon as a holo card (Nick picked the starlight holo,
+ * 2026-10-15). `?card=gold` or `?card=reverse` tries the other finishes; `?card=off` brings back
+ * the old picture-and-words page.
+ */
+export const cardFinish: Finish | null = param === "off" ? null : param === "gold" || param === "reverse" ? param : "holo";
