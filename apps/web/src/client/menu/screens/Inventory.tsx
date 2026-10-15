@@ -165,6 +165,7 @@ const purposeLine = (env: ReturnType<typeof useEnv>, p?: Purpose) => {
   if ("use" in p) return `Use ${niceItem(env.model.bag.find((b) => b.id === p.use)?.name ?? "")} on which Pokémon?`;
   if ("teach" in p) return "Teach it to which Pokémon?";
   if ("giftTo" in p) return `Send to ${env.model.friends.find((f) => f.id === p.giftTo)?.name}`;
+  if ("softboiled" in p) return `Heal which Pokémon with ${niceMon(env.model.team[p.softboiled]?.name ?? "")}'s SOFTBOILED?`;
   return `Use what on ${niceMon(env.model.team[p.onMon]?.name ?? "")}?`;
 };
 
@@ -293,6 +294,32 @@ export function TeamPick({ purpose, title = "Your team" }: { purpose?: Purpose; 
         ))}
       </div>
       {it && <p className="m-foot">{niceItem(it.name)}: {it.text}</p>}
+    </Page>
+  );
+}
+
+/** Where a Pokémon's FLY can go: the towns visited, as the game's own fly map lists them. */
+export function FlyScreen({ mon }: { mon: number }) {
+  const env = useEnv();
+  const nav = useNav();
+  const m = env.model.team[mon];
+  if (!m) return null;
+  const towns = env.model.field.flyTo;
+  return (
+    <Page title="Fly to…" meta={niceMon(m.name)} banner={`Where should ${niceMon(m.name)} fly?`}>
+      <div className="m-list">
+        {towns.map((t) => (
+          <Row
+            key={t.map}
+            title={t.name}
+            onClick={() => {
+              env.toast(env.actions.fieldMove(mon, "FLY", { to: t.map }));
+              nav.close();
+            }}
+          />
+        ))}
+      </div>
+      {!towns.length && <p className="m-foot">Visit a town first: FLY only goes where you've been.</p>}
     </Page>
   );
 }

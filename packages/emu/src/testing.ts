@@ -54,6 +54,7 @@ export function setBag(gb: GameBoy, items: [number, number][]) {
 const PALLET_TOWN = 0x00;
 const REDS_HOUSE_1F = 0x25;
 const OAKS_LAB = 0x28;
+const ROCK_TUNNEL_1F = 0x52;
 
 /**
  * Plays from power-on to the first rival battle in Oak's lab (with Squirtle, as the first ball
@@ -117,4 +118,31 @@ export function playToRivalBattle(gb: GameBoy, frame = (buttons: number) => (gb.
     if (i > 3000) throw new Error("No battle");
     frame(i % 8 < 2 ? (i % 16 < 8 ? Button.A : Button.Down) : 0);
   }
+}
+
+/**
+ * Puts the player at (x, y) on a map through the game's EnterMap, as a warp would: the map from
+ * wCurMap, and the block map view a warp sets (event_displacement). `width` is the map's width in
+ * blocks. Runs until the map is up.
+ */
+export function enterMap(gb: GameBoy, map: number, x: number, y: number, width: number, lastMap = map): void {
+  let entered = false;
+  const remove = gb.addHook("OverworldLoop", (g) => {
+    if (entered) return;
+    entered = true;
+    g.write(addr("wCurMap"), map);
+    g.write(addr("wLastMap"), lastMap);
+    g.write(addr("wXCoord"), x);
+    g.write(addr("wYCoord"), y);
+    const view = addr("wOverworldMap") + (width + 6) * ((y >> 1) + 1) + (x >> 1) + 1;
+    g.write(addr("wCurrentTileBlockMapViewPointer"), view & 0xff);
+    g.write(addr("wCurrentTileBlockMapViewPointer") + 1, view >> 8);
+    g.write(addr("wYBlockCoord"), y & 1);
+    g.write(addr("wXBlockCoord"), x & 1);
+    // Rock Tunnel is dark until FLASH: the warp into it sets that (CheckWarpsNoCollision's outside maps).
+    g.write(addr("wMapPalOffset"), map === ROCK_TUNNEL_1F ? 6 : 0);
+    g.setRegisters({ pc: addr("EnterMap") });
+  });
+  for (let i = 0; i < 300; i++) gb.runFrame();
+  remove();
 }

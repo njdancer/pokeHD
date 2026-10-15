@@ -5,6 +5,9 @@
 /** What the game is doing while the menu is up: decides which actions are offered. */
 export type Moment = "explore" | "talk" | "wild" | "trainer" | "fainted" | "pc" | "shop";
 
+/** The field moves besides CUT that a Pokémon can use from the team screen (the game's StartMenu_Pokemon). */
+export type FieldMove = "FLY" | "SURF" | "STRENGTH" | "FLASH" | "DIG" | "TELEPORT" | "SOFTBOILED";
+
 export const inBattle = (m: Moment) => m === "wild" || m === "trainer" || m === "fainted";
 
 /**
@@ -185,12 +188,17 @@ export interface MenuModel {
   /** Steps of Repel left. */
   repel: number;
   biking: boolean;
+  surfing: boolean;
   /** What the game's own checks allow where the player stands (see items.ts). */
   field: {
     /** An Escape Rope works here (ItemUseEscapeRope). */
     escapeRope: boolean;
     /** The game lets the player get on the bike here (IsBikeRidingAllowed, and not surfing). */
     bike: boolean;
+    /** Outside, where FLY and TELEPORT work (CheckIfInOutsideMap: a town, a route, the plateau). */
+    outside: boolean;
+    /** The towns FLY can go to: those visited (wTownVisitedFlag), by town map. */
+    flyTo: { map: number; name: string }[];
   };
   layers: MapLayers;
   learns(dex: number): Learns | undefined;
@@ -213,6 +221,8 @@ export interface MenuActions {
   teach(item: number, mon: number): string;
   /** The field move CUT by this Pokémon, on what the player faces (the game's UsedCut). */
   cut(mon: number): string;
+  /** Another field move by this Pokémon (StartMenu_Pokemon's branch): FLY to a town map, SOFTBOILED onto a team member. */
+  fieldMove(mon: number, move: FieldMove, on?: { to?: number; target?: number }): string;
   deposit(mon: number): string;
   withdraw(box: number): string;
   buy(item: number, count: number): string;

@@ -233,6 +233,10 @@ export function MenuDev() {
         say(`${name(mon)} uses CUT`, `At the overworld safe point: GetTileAndCoordsInFrontOfPlayer (as pressing START does), then UsedCut with wWhichPokemon ← ${mon}. It cuts only a tree tile ($3D) or grass in front.`);
         return `${name(mon)} hacked away with CUT!`;
       },
+      fieldMove(mon, move, on) {
+        say(`${name(mon)} uses ${move}`, `At the overworld safe point: StartMenu_Pokemon's .${move.toLowerCase()} branch, call by call${on?.to !== undefined ? `, with wDestinationMap ← ${on.to} as LoadTownMap_Fly's A writes it` : ""}${on?.target !== undefined ? `; the party menu's stand-in answers ${on.target}` : ""}.`);
+        return "";
+      },
       deposit(i) {
         upd((m) => ({ ...m, team: m.team.filter((_, j) => j !== i), box: [m.team[i]!, ...m.box] }));
         setRequest(null);

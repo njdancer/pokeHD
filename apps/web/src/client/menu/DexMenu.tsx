@@ -11,7 +11,7 @@ import { NavContext, rootOf, TABS, withoutPicks, type Nav, type Screen } from ".
 import type { Request } from "./model.ts";
 import { EntryScreen, PokemonScreen } from "./screens/Pokemon.tsx";
 import { FriendScreen, PeopleScreen, PersonScreen } from "./screens/People.tsx";
-import { BagPick, BoxPick, InventoryScreen, ItemScreen, MonScreen, ShopPick, TeamPick } from "./screens/Inventory.tsx";
+import { BagPick, BoxPick, FlyScreen, InventoryScreen, ItemScreen, MonScreen, ShopPick, TeamPick } from "./screens/Inventory.tsx";
 import { MapScreen } from "./screens/MapScreen.tsx";
 import { BuyScreen, SellScreen } from "./screens/Quantity.tsx";
 import { GrownupsScreen, MeScreen, SavesScreen, SettingsScreen } from "./screens/Me.tsx";
@@ -32,6 +32,7 @@ function render(s: Screen): ReactNode {
     case "buy": return <BuyScreen item={s.item} />;
     case "sell": return <SellScreen id={s.id} />;
     case "map": return <MapScreen key={s.focus} focus={s.focus} />;
+    case "fly": return <FlyScreen mon={s.mon} />;
     case "me": return <MeScreen />;
     case "settings": return <SettingsScreen />;
     case "grownups": return <GrownupsScreen />;
