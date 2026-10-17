@@ -1,7 +1,7 @@
 // What a Pokémon or an item can do right now, given the game's moment and why it was picked.
 // The rules are the game's (balls only in wild battles, no bike indoors…); these only decide what
 // to offer, the game's own routines still decide what happens.
-import { inBattle, type FieldMove, type Item, type Mon } from "./model.ts";
+import { battleMonOf, inBattle, type FieldMove, type Item, type Mon } from "./model.ts";
 import { niceItem, niceMon, type MenuEnv } from "./env.tsx";
 import type { Nav, Purpose } from "./nav.tsx";
 import type { VerbSpec } from "./ui.tsx";
@@ -81,7 +81,8 @@ export function monVerbs(env: MenuEnv, nav: Nav, i: number, purpose?: Purpose): 
   if (moment === "pc") return [{ label: "Put it in the PC", off: model.team.length < 2 ? "Keep one with you" : undefined, run: () => done(env, nav, actions.deposit(i), true) }];
   if (battle && !nav.sheet) return [{ label: "Choose on the battle screen", off: "Just looking in battle" }];
   if (battle) {
-    if (i === 0) return [{ label: "In battle now", off: "Already out" }];
+    // The one out now, which after a switch isn't the leader (switching keeps the party's order).
+    if (i === battleMonOf(model)) return [{ label: "In battle now", off: "Already out" }];
     return [
       { label: `Send out ${niceMon(m.name)}`, note: "Uses your turn", off: m.hp === 0 ? "Fainted" : undefined, run: () => done(env, nav, actions.sendOut(i), true) },
       { label: "Use an item on it", alt: true, run: () => nav.go({ k: "bag", for: { onMon: i } }) },
