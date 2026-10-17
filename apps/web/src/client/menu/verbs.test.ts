@@ -234,3 +234,25 @@ describe("monVerbs for field moves", () => {
     expect(monVerbs(env, nav, 2, { softboiled: 2 })[0]!.off).toBe("That's the one using it");
   });
 });
+
+describe("monVerbs for switching in battle", () => {
+  // Charlie's battle: CATERPIE leads, WEEDLE was sent out in its place.
+  function battle(battleMon?: number) {
+    const s = setup("wild");
+    const weedle: Mon = { ...mon, key: "b", dex: 13, name: "WEEDLE" };
+    Object.assign(s.env.model, { team: [{ ...mon, name: "CATERPIE", dex: 10 }, weedle], battleMon });
+    return { ...s, nav: { ...s.nav, sheet: true } };
+  }
+
+  it("lets the leader back in once another was sent out", () => {
+    const { env, nav } = battle(1);
+    expect(monVerbs(env, nav, 0)[0]!.off).toBeUndefined();
+    expect(monVerbs(env, nav, 1)[0]!.off).toBe("Already out");
+  });
+
+  it("takes the leader as out when the game hasn't said", () => {
+    const { env, nav } = battle();
+    expect(monVerbs(env, nav, 0)[0]!.off).toBe("Already out");
+    expect(monVerbs(env, nav, 1)[0]!.off).toBeUndefined();
+  });
+});
