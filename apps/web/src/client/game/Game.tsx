@@ -37,7 +37,7 @@ import {
 } from "@pokehd/emu";
 import { createEngine, type Engine } from "@pokehd/engine";
 import { createLiveWorld, type LiveWorld } from "@pokehd/engine/world";
-import { decodeText, encodeName, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
+import { decodeText, encodeName, MAP_NAMES, parseWorld, pokedexNumber, readGlyphs, SYMBOLS, type RomHeader, type WorldData } from "@pokehd/rom";
 import { JoypadInput, KeyBindingsPanel, TouchPad, useTouchDevice } from "../input/index.ts";
 import { SaveControls } from "../saves/SaveControls.tsx";
 import { cloudBackup } from "../saves/cloud-save.ts";
@@ -178,6 +178,8 @@ type Onboarding = { phase: "choose" } | { phase: "starting"; choice: StartChoice
  * resume-keeper.ts), so this is kept short.
  */
 const RESUME_POINT_MS = 2000;
+/** The Cable Club's Trade Center and Colosseum. */
+const CABLE_CLUB_ROOMS = new Set(["TRADE_CENTER", "COLOSSEUM"].map((name) => MAP_NAMES.indexOf(name)));
 const GPU_RELOAD_KEY = "pokehd.gpuReloadAt";
 /** Whether the page may reload to get its GPU back: not if it already did within the last minute. */
 function gpuReloadAllowed(): boolean {
@@ -382,6 +384,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const introCanvas = useRef<HTMLCanvasElement>(null);
   // Bumped by a .sav import: restarts the emulator on the imported save.
   const [boot, setBoot] = useState(0);
+  /** Standing in the Colosseum or Trade Center, which have no way out but switching off. */
+  const [inCableClub, setInCableClub] = useState(false);
   // The latest mode and map flag, so the layout can be recomputed when the player toggles pip.
   const sceneRef = useRef<{ mode: OverworldState["mode"]; inWorld: boolean; hdText: boolean; battle?: BattleScene; onboarding?: boolean }>({ mode: "overworld", inWorld: false, hdText: false });
   /** The HD Pokédex (p2-dex): its look, and while it's up what it shows. */
@@ -608,6 +612,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       let journal: DexJournal | null = null;
       let journalFor = -1;
       let lastMap = -1;
+      let lastCableClub = false;
       /** Someone just spoke: their words are gathered from the text box until it closes. */
       let talking: { map: number; npc: number; lines: string[]; frames: number } | null = null;
       host = new EmulatorHost({
@@ -672,6 +677,8 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
             playJournalRef.current?.visit(state.mapId);
           }
           if (inWorld) playJournalRef.current?.position(state.mapId, state.player.x, state.player.y);
+          const cableClub = inWorld && state.mode === "overworld" && CABLE_CLUB_ROOMS.has(state.mapId);
+          if (cableClub !== lastCableClub) setInCableClub((lastCableClub = cableClub));
           // Battles: the scene in 3D, the screen masked down to its menus and text.
           const fight = battles?.frame(watched);
           const actual = hd && inWorld ? fight?.scene : undefined;
@@ -1419,6 +1426,13 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
       >
         <i className="hd-ball" aria-hidden />
       </button>}
+      {/* The original's way out of the Cable Club is switching the Game Boy off: the receptionist
+          saved just before, so the game starts again upstairs in the Pokémon Center. */}
+      {ready && inCableClub && !hdText && !dex && !menuOpen && !settings && (
+        <button type="button" className="game-leave-button" data-look={look} onClick={startFromSave}>
+          Leave
+        </button>
+      )}
       {message && <div className="game-toast" role="status">{message}</div>}
       {settings && <div className="game-menu-scrim" onClick={() => setSettings(false)} />}
       {settings && (
