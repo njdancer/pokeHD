@@ -1376,17 +1376,24 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
     for (const f of online.values()) if (!players.some((p) => p.id === f.id)) all.push({ ...f, online: true });
     return all;
   }, [room, players]);
-  /** A gift from the Pokédex menu: the team member or item it names, sent as the Gift panel sends. */
+  /**
+   * A gift from the Pokédex menu: the team member or item it names, sent as the Gift panel sends.
+   * To any friend, playing or not: the room keeps a gift for whoever isn't there and hands it
+   * over when they next connect. Looking only among those online turned away every gift for an
+   * absent friend, and the dex went back to their page as if nothing had happened.
+   */
   const sendGift = async (to: string, what: { item: number } | { mon: number }): Promise<string> => {
-    const friend = room?.friends.find((f) => f.id === to);
-    if (!gifts || !friend) return "They need to be playing right now to get a gift.";
+    const online = room?.friends.find((f) => f.id === to);
+    const friend = online ?? players.find((p) => p.id === to);
+    if (!gifts || !friend) return "Gifts need you to be signed in and online.";
     const g = decodeGiftables(rom, await readGiftables());
     const mon = "mon" in what ? g.party[what.mon] : undefined;
     const item = "item" in what ? g.bag.find((b) => b.item === what.item && !b.key) : undefined;
     const spec = mon ? { kind: "mon" as const, slot: mon.slot, species: mon.species } : item ? { kind: "item" as const, slot: item.slot, item: item.item, quantity: 1 } : null;
     if (!spec) return GIFT_REASONS["item moved"]!;
     const r = await gifts.send(friend, spec);
-    return r.ok ? `Sent ${describeGift(rom, r.gift)} to ${friend.name}. Your game saved.` : (GIFT_REASONS[r.reason] ?? `Couldn't send it (${r.reason}).`);
+    if (r.ok) return `Sent ${describeGift(rom, r.gift)} to ${friend.name}.${online ? "" : " They'll get it next time they play."} Your game saved.`;
+    return GIFT_REASONS[r.reason] ?? `Couldn't send it (${r.reason}).`;
   };
   const bindLive = useMemo(() => (actions: LiveActions) => void (liveActionsRef.current = actions), []);
   const [readAloud, setReadAloud] = useState(false);
