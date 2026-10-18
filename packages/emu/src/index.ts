@@ -10,6 +10,7 @@ export * from "./block-watch.ts";
 export * from "./erase-guard.ts";
 export * from "./link.ts";
 export * from "./input-wait.ts";
+export * from "./stair-step.ts";
 export type { FrameMessage, Watch } from "./protocol.ts";
 export * from "./state/overworld.ts";
 export * from "./state/decode.ts";

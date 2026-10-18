@@ -26,8 +26,7 @@ const DIAGONAL = [Button.Right | Button.Down, Button.Down | Button.Left, Button.
 /**
  * D-pad bits for a vector (x right, y down, as screen coordinates and gamepad axes both are).
  * Inside `deadzone` gives nothing. Cardinal sectors are 60° wide and diagonals 30°, so a thumb
- * slightly off-axis still walks straight: the game reads two held directions by priority, which
- * would feel like a wrong turn.
+ * slightly off-axis still walks straight; a diagonal walks as a staircase (StairStep in @pokehd/emu).
  */
 export function directionMask(x: number, y: number, deadzone: number): number {
   if (Math.hypot(x, y) < deadzone) return 0;
@@ -39,26 +38,28 @@ export function directionMask(x: number, y: number, deadzone: number): number {
   return CARDINAL[(quadrant + 1) % 4]!;
 }
 
-const HORIZONTAL = Button.Left | Button.Right;
-
 /** A held stick direction lets go only once the thumb comes back inside this fraction of the dead zone. */
 const STICK_RELEASE = 0.7;
-/** To turn, the other axis has to beat the held one by this ratio (about 54° off the held axis). */
-const STICK_TURN = 1.4;
+/** Degrees off the nearest axis where the stick starts holding a diagonal, and where a held one lets go. */
+const DIAGONAL_ON = 30;
+const DIAGONAL_OFF = 22;
 
 /**
- * One direction for a thumbstick at (x, y), with x right and y down and 1 the stick's reach. The
- * game walks on a grid in four directions, so the stick only ever holds one: the axis the thumb
- * leans furthest along. Two kinds of hysteresis stop it flickering where a thumb wobbles: a held
- * direction lets go a little inside the dead zone rather than right at it, and switching to the
- * other axis needs a clear lean (`STICK_TURN`), not just crossing the diagonal.
+ * D-pad bits for a thumbstick at (x, y), with x right and y down and 1 the stick's reach: the axis
+ * the thumb leans furthest along, or both near a diagonal (15° either side of it), which the game
+ * walks as a staircase (StairStep in @pokehd/emu). Two kinds of hysteresis stop it flickering where
+ * a thumb wobbles: a held direction lets go a little inside the dead zone rather than right at it,
+ * and a held diagonal lets go only some way past where it began (22° off the axis, not 30°).
  */
 export function stickDirection(x: number, y: number, held: number, deadzone: number): number {
   const reach = Math.hypot(x, y);
   if (reach < (held ? deadzone * STICK_RELEASE : deadzone)) return 0;
   const ax = Math.abs(x);
   const ay = Math.abs(y);
-  const horizontal = held & HORIZONTAL ? ay <= ax * STICK_TURN : held ? ax > ay * STICK_TURN : ax >= ay;
-  if (horizontal) return x < 0 ? Button.Left : Button.Right;
-  return y < 0 ? Button.Up : Button.Down;
+  const across = x < 0 ? Button.Left : Button.Right;
+  const along = y < 0 ? Button.Up : Button.Down;
+  const off = (Math.atan2(Math.min(ax, ay), Math.max(ax, ay)) * 180) / Math.PI;
+  const diagonal = held & LEFT_RIGHT && held & UP_DOWN;
+  if (off >= (diagonal ? DIAGONAL_OFF : DIAGONAL_ON)) return across | along;
+  return ax >= ay ? across : along;
 }

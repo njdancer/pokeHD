@@ -155,12 +155,15 @@ describe("touch stick", () => {
     expect(stickDirection(-0.9, 0.3, 0, D)).toBe(Button.Left);
     expect(stickDirection(0.2, 0.7, 0, D)).toBe(Button.Down);
   });
-  it("keeps a held direction across the diagonal until the thumb clearly turns", () => {
-    expect(stickDirection(0.6, 0.7, Button.Right, D)).toBe(Button.Right);
-    expect(stickDirection(0.6, 0.6, Button.Down, D)).toBe(Button.Down);
-    expect(stickDirection(0.5, 0.8, Button.Right, D)).toBe(Button.Down);
-    expect(stickDirection(-0.7, -0.6, Button.Up, D)).toBe(Button.Up);
-    expect(stickDirection(-0.9, -0.5, Button.Up, D)).toBe(Button.Left);
+  it("holds both directions near a diagonal, and lets go of it only past where it began", () => {
+    expect(stickDirection(0.6, 0.7, 0, D)).toBe(Button.Right | Button.Down);
+    expect(stickDirection(-0.7, -0.6, Button.Up, D)).toBe(Button.Up | Button.Left);
+    // 27° off the axis: not yet diagonal from a straight walk, still diagonal once held.
+    expect(stickDirection(1, 0.5, Button.Right, D)).toBe(Button.Right);
+    expect(stickDirection(1, 0.5, Button.Right | Button.Down, D)).toBe(Button.Right | Button.Down);
+    // 17° off: straight again.
+    expect(stickDirection(1, 0.3, Button.Right | Button.Down, D)).toBe(Button.Right);
+    expect(stickDirection(0.3, 1, Button.Right | Button.Down, D)).toBe(Button.Down);
   });
   it("lets go a little inside the dead zone, not right at it", () => {
     expect(stickDirection(0.25, 0, 0, D)).toBe(0);

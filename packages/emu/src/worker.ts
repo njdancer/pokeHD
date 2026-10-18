@@ -17,6 +17,7 @@ import { SafePoint } from "./gifts/safepoint.ts";
 import { JournalHooks } from "./journal-hooks.ts";
 import { LinkPort } from "./link.ts";
 import { BlockWatch } from "./block-watch.ts";
+import { StairStep } from "./stair-step.ts";
 import { gameInputWait } from "./input-wait.ts";
 import type { FromWorker, FromWorklet, ToWorker, ToWorklet, Watch } from "./protocol.ts";
 
@@ -200,6 +201,8 @@ async function handle(data: ToWorker) {
           const act = (actions = new GameActions(gb, { rom: data.rom }));
           asks = new GameAsks(gb, { rom: data.rom, busy: () => act.pending > 0 && SafePoint.of(g).calling, onAsk: (id, ask) => post({ type: "ask", id, ask }) });
         }
+        // Diagonals walk as a staircase, from any pad.
+        new StairStep(gb);
         blockWatch = data.blocks ? new BlockWatch(gb, (blocks) => post({ type: "blocks", blocks })) : undefined;
         // A resume point holds whatever the game had changed: send it as it is.
         blockWatch?.refresh();
