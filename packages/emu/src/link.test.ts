@@ -4,6 +4,7 @@ import { parseLinkMessage, type LinkMessage } from "@pokehd/protocol";
 import { beforeAll, describe, expect, it } from "vitest";
 import { Button, type GameBoy } from "./core.ts";
 import { LinkPort } from "./link.ts";
+import { ScriptText } from "./script-text.ts";
 import {
   linkScenarioReady,
   makeParty,
@@ -16,9 +17,11 @@ import {
 
 /**
  * Runs both games with each message arriving `delayMs` after it was sent (one way). Messages
- * cross as JSON and are validated with the protocol schema, as they are from the room.
+ * cross as JSON and are validated with the protocol schema, as they are from the room. With
+ * `rom`, each game shows whole messages on a page (ScriptText) that reads them at once, as the
+ * app does.
  */
-async function play(gbs: [GameBoy, GameBoy], kind: Kind, delayMs: number) {
+async function play(gbs: [GameBoy, GameBoy], kind: Kind, delayMs: number, rom?: Uint8Array) {
   let clock = 0;
   const inFlight: { at: number; to: 0 | 1; json: string }[] = [];
   const ports = gbs.map(
@@ -28,8 +31,19 @@ async function play(gbs: [GameBoy, GameBoy], kind: Kind, delayMs: number) {
         send: (message: LinkMessage) => inFlight.push({ at: clock + delayMs, to: i === 0 ? 1 : 0, json: JSON.stringify(message) }),
       }),
   );
+  const pages = rom
+    ? gbs.map((gb) => {
+        const page: ScriptText = new ScriptText(gb, {
+          rom,
+          onMessage: ({ id }) => (page.readOn(id), page.close(id)),
+          onEnd: () => {},
+        });
+        return page;
+      })
+    : [];
   try {
     return await runLink(gbs, kind, (now) => {
+      for (const page of pages) page.frame();
       clock = now;
       while (inFlight.length && inFlight[0]!.at <= now) {
         const { to, json } = inFlight.shift()!;
@@ -38,6 +52,7 @@ async function play(gbs: [GameBoy, GameBoy], kind: Kind, delayMs: number) {
     });
   } finally {
     for (const port of ports) port.dispose();
+    for (const page of pages) page.dispose();
   }
 }
 
@@ -67,6 +82,23 @@ describe.skipIf(!linkScenarioReady)("LinkPort between two Game Boys", () => {
       const [a, b] = results.map((res) => res.hp!);
       expect(a).toEqual([b![1], b![0]]);
       expect(a![0] === 0).not.toBe(a![1] === 0);
+    }, 300_000);
+  });
+
+  // The game starts the table's trade or battle from inside its "Just a moment." button wait,
+  // which the page answers.
+  describe("with whole messages on the page", () => {
+    it("trades", async () => {
+      reset("trade");
+      const { results } = await play(gbs, "trade", 0, rom);
+      results.forEach((res, i) => expect(res.party).toEqual([PLAYERS[i as 0 | 1].mons[1]!.species, PLAYERS[1 - i]!.mons[0]!.species]));
+    }, 300_000);
+
+    it("battles", async () => {
+      reset("battle");
+      const { results } = await play(gbs, "battle", 0, rom);
+      const [a, b] = results.map((res) => res.hp!);
+      expect(a).toEqual([b![1], b![0]]);
     }, 300_000);
   });
 

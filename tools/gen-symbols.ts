@@ -119,6 +119,7 @@ export const ALLOWLIST: readonly string[] = [
   "AddEnemyMonToPlayerParty",
   "AddItemToInventory",
   "AddBCDPredefPredef",
+  "CableClub_RunPredef",
   "Bankswitch",
   "FlagActionPredefPredef",
   "IndexToPokedexPredef",
