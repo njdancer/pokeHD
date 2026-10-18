@@ -43,6 +43,12 @@ const TEXT_DELAY = 1 << 1;
 const FAST_TEXT_DELAY = 1 << 0;
 /** wLinkState in a link battle: ManualTextScroll waits on a timer there, not on buttons. */
 const LINK_STATE_BATTLING = 4;
+/**
+ * wLinkState once the player uses the Game Boy on a Cable Club table ("Just a moment."): the
+ * game's button wait calls CableClub_Run on every pass, which starts the trade or the battle.
+ */
+const LINK_STATE_START_TRADE = 2;
+const LINK_STATE_START_BATTLE = 3;
 /** Frames a closing message may take before it's given up on (a wait we didn't expect). */
 const CLOSE_TIMEOUT = 600;
 /**
@@ -151,6 +157,19 @@ export class ScriptText {
   #wait(g: GameBoy, routine: number): void {
     const m = this.#current;
     if (!m) return;
+    // The original calls CableClub_Run inside the wait, before it looks at the buttons, so the
+    // table's trade or battle starts while "Just a moment." is up. Passing the wait would skip it
+    // and leave the players at the table: call it as the wait would (predef), coming back to the
+    // wait afterwards, where wLinkState no longer asks for it.
+    const link = g.read(SYMBOLS.wLinkState.address);
+    if (link === LINK_STATE_START_TRADE || link === LINK_STATE_START_BATTLE) {
+      const sp = (g.registers.sp - 2) & 0xffff;
+      g.write(sp, routine & 0xff);
+      g.write(sp + 1, routine >> 8);
+      const id = (SYMBOLS.CableClub_RunPredef.address - SYMBOLS.PredefPointers.address) / 3;
+      g.setRegisters({ sp, af: id << 8, pc: SYMBOLS.Predef.address });
+      return;
+    }
     // A `done` message's closing wait only if it was already waiting, or comes right after: in
     // battle the next wait is often for what comes next. After "CHARMANDER grew to level 16!" the
     // game plays its jingle, then waits under the stats box, which a tap during the jingle must

@@ -16,6 +16,7 @@ export const SYMBOLS = {
   BookshelfTileIDs: { bank: 0x03, address: 0x7b8b },
   "CableClubNPC.establishConnectionLoop": { bank: 0x01, address: 0x71eb },
   "CableClubNPC.failedToEstablishConnection": { bank: 0x01, address: 0x7287 },
+  CableClub_RunPredef: { bank: 0x13, address: 0x7f00 },
   ChoosePlayerName: { bank: 0x01, address: 0x695d },
   ChooseRivalName: { bank: 0x01, address: 0x69a4 },
   CloseTextDisplay: { bank: 0x00, address: 0x29e8 },

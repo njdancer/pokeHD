@@ -39,6 +39,13 @@
   content: ""; position: absolute; right: -2px; top: -2px; width: 14px; height: 14px; border-radius: 50%;
   background: #e0702a; border: 2px solid #fffaf0;
 }
+.game-leave-button {
+  position: fixed; z-index: 4; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top));
+  height: 48px; padding: 0 1.2rem; cursor: pointer; color: #3e2a1c; font: 800 1rem / 1 Nunito, ui-rounded, system-ui, sans-serif;
+  background: linear-gradient(#fffaf0, #f2e0bc); border: 3px solid #d6a866; border-radius: 24px;
+  box-shadow: 0 3px 10px #4a2a0a66; -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.game-leave-button:active { translate: 0 2px; }
 .game-toast {
   position: fixed; z-index: 4; left: 50%; translate: -50% 0; top: max(14px, env(safe-area-inset-top)); max-width: calc(100% - 140px);
   padding: .5rem .9rem; color: #3e2a1c; font: 800 .9rem / 1.3 Nunito, ui-rounded, system-ui, sans-serif;
