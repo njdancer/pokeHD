@@ -58,7 +58,7 @@ import {
   uploadResumePoint,
 } from "../saves/resume-store.ts";
 import { ResumeKeeper } from "../saves/resume-keeper.ts";
-import { listPlayers, me, setMyName, type Account } from "../room/account.ts";
+import { listPlayers, me, setMyName, type Account, type Player } from "../room/account.ts";
 import { Friends } from "../room/Friends.tsx";
 import { AdminTools } from "../admin/AdminTools.tsx";
 import { RoomClient, type Friend, type RoomStatus } from "../room/client.ts";
@@ -360,7 +360,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   /** The signed-in player (their name is the one Oak checks, and kept the same as theirs). */
   const [account, setAccount] = useState<Account | null>(null);
   /** Everyone on the server, for the Pokédex menu (the room only knows who's online). */
-  const [players, setPlayers] = useState<{ id: string; name: string }[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
   /** The game is asking for a name: the page asks instead (tap-first UI). */
   const [nameAsk, setNameAsk] = useState<NameAsk | null>(null);
   const [onboarding, setOnboardingState] = useState<Onboarding>(null);
@@ -977,8 +977,11 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
           if (!account) return setRoom({ status: "signed-out", friends: [] });
           setAccount(account);
           setAdmin(account.admin);
-          // The Pokédex menu lists every friend, not only the ones online now.
-          if (menuRef.current) void listPlayers().then((all) => !disposed && setPlayers(all));
+          // The Pokédex menu lists every friend, not only the ones online now, with where the
+          // others were last seen; asked again whenever someone comes or goes, so a friend who
+          // just left stays on the map where they stopped.
+          const refreshPlayers = () => menuRef.current && void listPlayers().then((all) => !disposed && setPlayers(all));
+          refreshPlayers();
           const client = new RoomClient();
           roomClient = client;
           // Before connecting, so the first welcome resends anything still in the outbox.
@@ -990,6 +993,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
             setRoom({ status, friends: Object.values(friends) });
           unsubscribeRoom = client.store.subscribe((next, prev) => {
             if (next.friends !== prev.friends) live!.setGhosts(toGhosts(next.friends));
+            if (Object.keys(next.friends).sort().join() !== Object.keys(prev.friends).sort().join()) refreshPlayers();
             if (next.status !== prev.status || next.friends !== prev.friends) show(next);
             // The cable needs our player ID, which the first welcome brings.
             if (next.you && !roomLink && host) {
@@ -1368,7 +1372,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   );
   const menuFriends = useMemo(() => {
     const online = new Map((room?.friends ?? []).map((f) => [f.id, f]));
-    const all = players.map((p) => ({ ...(online.get(p.id) ?? { ...p, presence: null }), online: online.has(p.id) }));
+    const all = players.map((p) => ({ ...(online.get(p.id) ?? { ...p, presence: null }), ...(p.seen ? { seen: p.seen } : {}), online: online.has(p.id) }));
     for (const f of online.values()) if (!players.some((p) => p.id === f.id)) all.push({ ...f, online: true });
     return all;
   }, [room, players]);

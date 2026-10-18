@@ -22,6 +22,7 @@ import {
 } from "@pokehd/rom";
 import { scriptedOutcome } from "../dex/battles.ts";
 import type { Catalogue } from "../dex/catalogue.ts";
+import type { LastSeen } from "../room/account.ts";
 import type { Friend as RoomFriend } from "../room/client.ts";
 import { bikeAllowed, escapeRopeWorks, itemLine, itemPrice, shelf } from "./items.ts";
 import type { PlayJournal } from "./journal.ts";
@@ -143,7 +144,8 @@ export interface LiveInput {
   app: AppOptions;
 }
 
-export type LiveFriend = RoomFriend & { online: boolean };
+/** A friend: online with live presence, or away with where they were last seen. */
+export type LiveFriend = RoomFriend & { online: boolean; seen?: LastSeen };
 
 /**
  * Where a place indoors sits on the outdoor map: the door that leads into it, through any floors
@@ -312,8 +314,14 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
     .filter((x) => outdoor(x.map))
     .map((x) => ({ item: itemName(rom, x.item), map: MAP_NAMES[x.map]!, x: x.x, y: x.y, text: x.source === "bought" ? "Bought here" : x.source === "hidden" ? "Hidden here" : "Found here", ...(x.at >= today ? { today: true } : {}) }));
   const trailMaps = (journal?.places() ?? []).filter((p) => outdoor(p.map));
+  // Friends on the map: where they are now while they play, else where they were last seen.
+  // Indoors, like "you", they stand at the building's door.
   const friendsAt: MenuModel["layers"]["friendsAt"] = {};
-  for (const fr of friends) if (fr.presence && outdoor(fr.presence.mapId)) friendsAt[fr.id] = [MAP_NAMES[fr.presence.mapId]!, fr.presence.x, fr.presence.y];
+  for (const fr of friends) {
+    const at = fr.presence ?? fr.seen;
+    const spot = at && (outdoor(at.mapId) ? { map: at.mapId, x: at.x, y: at.y } : outdoorSpot(world, at.mapId));
+    if (spot && MAP_NAMES[spot.map]) friendsAt[fr.id] = [MAP_NAMES[spot.map]!, spot.x, spot.y];
+  }
   const cache = learnsCache.get(rom) ?? new Map<number, Learns>();
   learnsCache.set(rom, cache);
   return {
@@ -330,7 +338,14 @@ export function liveModel({ rom, world, catalogue, game, journal, friends, saved
       id: fr.id,
       name: fr.name,
       online: fr.online,
-      where: fr.presence ? (catalogue.placeOf(fr.presence.mapId)?.name ?? "Playing") : fr.online ? "Here, not playing yet" : "Not playing now",
+      where: fr.presence
+        ? (catalogue.placeOf(fr.presence.mapId)?.name ?? "Playing")
+        : fr.online
+          ? "Here, not playing yet"
+          : fr.seen && catalogue.placeOf(fr.seen.mapId)
+            ? `Last seen in ${catalogue.placeOf(fr.seen.mapId)!.name}`
+            : "Not playing now",
+      ...(!fr.presence && fr.seen ? { seen: { place: catalogue.placeOf(fr.seen.mapId)?.name ?? "", ago: ago(fr.seen.at) } } : {}),
       colour: FRIEND_COLOURS[i % FRIEND_COLOURS.length]!,
     })),
     visited,

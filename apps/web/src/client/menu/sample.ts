@@ -63,7 +63,7 @@ const CHECKPOINTS: { place: string; map: string; x: number; y: number; when: str
   { place: "Cerulean City", map: "CERULEAN_CITY", x: 19, y: 18, when: "1 hour ago", today: true },
   { place: "Pewter City", map: "PEWTER_CITY", x: 13, y: 26, when: "Yesterday" },
 ];
-const FRIEND_AT: Record<string, [string, number, number]> = { nick: ["CELADON_CITY", 20, 12], sam: ["ROUTE_3", 30, 8] };
+const FRIEND_AT: Record<string, [string, number, number]> = { nick: ["CELADON_CITY", 20, 12], sam: ["ROUTE_3", 30, 8], gran: ["VERMILION_CITY", 9, 14] };
 const TRAIL = ["PALLET_TOWN", "ROUTE_1", "VIRIDIAN_CITY", "ROUTE_2", "PEWTER_CITY", "ROUTE_3", "ROUTE_4", "CERULEAN_CITY", "ROUTE_5", "ROUTE_6", "VERMILION_CITY"];
 const TODAY_FROM = 7;
 
@@ -109,7 +109,7 @@ export function sampleModel(trainers: readonly TrainerClass[]): MenuModel {
     friends: [
       { id: "nick", name: "Nick", online: true, where: "Celadon City", colour: "#8e5bb5", gift: "a POTION" },
       { id: "sam", name: "Sam", online: true, where: "Route 3", colour: "#2c8fd6" },
-      { id: "gran", name: "Gran", online: false, where: "Played yesterday", colour: "#d0703a" },
+      { id: "gran", name: "Gran", online: false, where: "Last seen in Vermilion City", colour: "#d0703a", seen: { place: "Vermilion City", ago: "yesterday" } },
     ],
     visited: new Set(["PALLET TOWN", "ROUTE 1", "VIRIDIAN CITY", "ROUTE 22", "ROUTE 2", "VIRIDIAN FOREST", "PEWTER CITY", "ROUTE 3", "MT.MOON", "ROUTE 4", "CERULEAN CITY", "ROUTE 24", "ROUTE 25", "ROUTE 5", "UNDERGROUND PATH", "ROUTE 6", "VERMILION CITY", "ROUTE 11"]),
     here: { place: "VERMILION CITY", map: 5, x: 11, y: 9 },

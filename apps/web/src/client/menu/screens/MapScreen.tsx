@@ -1,6 +1,6 @@
 // The Map tab: Kanto from the ROM (world-map.ts) under a fog that lifts where you've been. Drag
 // to move, pinch or + − to zoom, ◎ to find yourself. Layers add what the journal remembers:
-// Pokémon met, items found, your trail, checkpoints, friends, wild areas. Tap anything for a card.
+// Pokémon met, items found, your trail, checkpoints, friends (now, or where last seen), wild areas. Tap anything for a card.
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { MAP_NAMES } from "@pokehd/rom";
 import { monPic, niceMon, nicePlace, spritePic, useEnv } from "../env.tsx";
@@ -216,12 +216,12 @@ export function MapScreen({ focus }: { focus?: string }) {
               )}
             {layers.friends &&
               model.friends
-                .filter((f) => f.online && FRIEND_AT[f.id])
+                .filter((f) => FRIEND_AT[f.id])
                 .map((f) => {
                   const [m, x, y] = FRIEND_AT[f.id]!;
                   const p = pos(m, x, y);
                   return (
-                    <button key={f.id} type="button" className="m-friendpin" style={pinStyle(p.x, p.y)} onClick={tap({ t: "friend", id: f.id })} aria-label={f.name}>
+                    <button key={f.id} type="button" className={`m-friendpin${f.seen ? " away" : ""}${sel?.t === "friend" && sel.id === f.id ? " sel" : ""}`} style={pinStyle(p.x, p.y)} onClick={tap({ t: "friend", id: f.id })} aria-label={f.name}>
                       <Avatar friend={f} />
                     </button>
                   );
@@ -327,8 +327,8 @@ function MapCard({ sel, map, onClose, go, friend, saves }: { sel: Sel | null; ma
       <div className="m-mapcard-row">
         <Avatar friend={f} />
         <div>
-          <div className="m-title">{f.name} is here</div>
-          <div className="m-sub">{f.where} · playing now</div>
+          <div className="m-title">{f.seen ? `${f.name} was here` : `${f.name} is here`}</div>
+          <div className="m-sub">{f.seen ? `${f.seen.place || "Kanto"} · ${f.seen.ago}` : `${f.where} · playing now`}</div>
         </div>
         <button type="button" className="m-pill" onClick={() => friend(f.id)}>See</button>
       </div>

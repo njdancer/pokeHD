@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { CloseCode, ROOM_KEEPALIVE_MS, type PlayerInfo, type Presence, type ServerMessage } from "@pokehd/protocol";
-import { join, leave, quietPeers, receive, type GiftStore, type Peer, type StoredGift } from "./room.ts";
+import { join, leave, quietPeers, receive, type GiftStore, type LastSeen, type Peer, type SeenStore, type StoredGift } from "./room.ts";
 
 /** Headers the Worker sets on the upgrade request it forwards, after checking the session. */
 export const PLAYER_ID_HEADER = "x-pokehd-player-id";
@@ -21,10 +21,12 @@ interface Attachment {
  */
 export class Room extends DurableObject<Env> {
   readonly #gifts: GiftStore;
+  readonly #seen: SeenStore & { all(): Record<string, LastSeen> };
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.#gifts = giftStore(ctx.storage.kv);
+    this.#seen = seenStore(ctx.storage.kv);
     // Keepalives are answered without waking the room.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
@@ -48,7 +50,7 @@ export class Room extends DurableObject<Env> {
     const now = Date.now();
     // Noted at most once a heartbeat, not for every presence update.
     if (now - (attachment.heardAt ?? 0) > ROOM_KEEPALIVE_MS) ws.serializeAttachment({ ...attachment, heardAt: now });
-    receive(this.#peers(), peer(ws), message, this.#gifts);
+    receive(this.#peers(), peer(ws), message, this.#gifts, this.#seen);
   }
 
   /**
@@ -69,7 +71,7 @@ export class Room extends DurableObject<Env> {
       } catch {
         // Already closing.
       }
-      leave(this.#peers(), gone);
+      leave(this.#peers(), gone, this.#seen);
     }
     await this.#watch();
   }
@@ -80,8 +82,13 @@ export class Room extends DurableObject<Env> {
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + ROOM_KEEPALIVE_MS);
   }
 
+  /** Where every player was last seen in the world (RPC, for the friends list). */
+  lastSeen(): Record<string, LastSeen> {
+    return this.#seen.all();
+  }
+
   override webSocketClose(ws: WebSocket, code: number): void {
-    leave(this.#peers(), peer(ws));
+    leave(this.#peers(), peer(ws), this.#seen);
     try {
       ws.close(code === 1005 ? 1000 : code, "Bye");
     } catch {
@@ -90,7 +97,7 @@ export class Room extends DurableObject<Env> {
   }
 
   override webSocketError(ws: WebSocket): void {
-    leave(this.#peers(), peer(ws));
+    leave(this.#peers(), peer(ws), this.#seen);
   }
 
   /** Open connections, as peers. Sockets already closing (e.g. just replaced) are left out. */
@@ -153,6 +160,33 @@ function giftStore(kv: SyncKvStorage): GiftStore {
       if (key === undefined) return;
       kv.delete(key);
       kv.delete(index(to, id));
+    },
+  };
+}
+
+/** How often a player's spot is written while they stay on one map. */
+const SEEN_EVERY_MS = 30_000;
+
+/**
+ * Last-seen spots, keyed `seen:<player ID>`. Presence arrives many times a second while someone
+ * walks, so a spot is written only on a new map, every SEEN_EVERY_MS, or as they leave. What was
+ * last written is remembered in memory, so after hibernation the first presence writes again.
+ */
+function seenStore(kv: SyncKvStorage) {
+  const written = new Map<string, LastSeen>();
+  return {
+    note(id: string, { mapId, x, y }: Presence, final = false) {
+      const now = Date.now();
+      const last = written.get(id);
+      if (last && last.mapId === mapId && (final ? last.x === x && last.y === y : now - last.at < SEEN_EVERY_MS)) return;
+      const spot = { mapId, x, y, at: now };
+      written.set(id, spot);
+      kv.put(`seen:${id}`, spot);
+    },
+    all() {
+      const out: Record<string, LastSeen> = {};
+      for (const [key, spot] of kv.list<LastSeen>({ prefix: "seen:" })) out[key.slice("seen:".length)] = spot;
+      return out;
     },
   };
 }

@@ -110,12 +110,15 @@ app.patch("/me", async (c) => {
   return c.json(account(c, result.player));
 });
 
-/** Everyone else on the server: the Pokédex menu's friends, names only (who's online comes from the room). */
+/**
+ * Everyone else on the server: the Pokédex menu's friends, with where each was last seen in the
+ * world for the map (who's online, and where they are now, comes from the room).
+ */
 app.get("/friends", async (c) => {
   const player = await currentPlayer(c);
   if (!player) return c.json({ error: "signed-out" }, 401);
-  const players = await directory(c).listPlayers();
-  return c.json({ friends: players.filter((p) => p.id !== player.id).map((p) => ({ id: p.id, name: p.name })) });
+  const [players, seen] = await Promise.all([directory(c).listPlayers(), c.env.ROOM.getByName("world").lastSeen()]);
+  return c.json({ friends: players.filter((p) => p.id !== player.id).map((p) => ({ id: p.id, name: p.name, ...(seen[p.id] ? { seen: seen[p.id] } : {}) })) });
 });
 
 app.post("/sign-out", async (c) => {

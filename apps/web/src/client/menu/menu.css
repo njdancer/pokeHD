@@ -408,6 +408,9 @@ img.m-sprite { width: 40px; height: 40px; }
 .m-flagpin::after { content: ""; position: absolute; left: 7px; top: 0; width: 18px; height: 14px; background: #3f86e0; clip-path: polygon(0 0, 100% 0, 75% 50%, 100% 100%, 0 100%); }
 .m-friendpin { padding: 0; border: 0; background: none; border-radius: 50%; }
 .m-friendpin .m-avatar { width: 36px; height: 36px; font-size: 16px; }
+/* Away: where they were last seen, faded so the friends playing now stand out. */
+.m-friendpin.away .m-avatar { opacity: 0.6; filter: saturate(0.4); }
+.m-friendpin.sel .m-avatar { opacity: 1; outline: 3px solid var(--m-accent); }
 .m-you { pointer-events: none; width: 44px; height: 44px; display: grid; place-items: center; }
 .m-you::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #2c8fd640; border: 2.5px solid #2c8fd6; animation: m-you 1.6s ease-out infinite; }
 .m-you .m-pixel { position: relative; width: 32px; height: 32px; filter: drop-shadow(0 2px 2px #0005); }
