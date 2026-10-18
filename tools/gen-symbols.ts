@@ -71,6 +71,13 @@ export const ALLOWLIST: readonly string[] = [
   "wXCoord",
   "wYBlockCoord",
   "wYCoord",
+  // Diagonals walk as a staircase: where the overworld loop reads the pad, and what its collision checks read
+  "OverworldLoopLessDelay.checkIfDownButtonIsPressed",
+  "OverworldLoopLessDelay.noCollision",
+  "hJoyHeld",
+  "wChannelSoundIDs",
+  "wSpritePlayerStateData1CollisionData",
+  "wTilesetCollisionPtr",
   // Battle state in WRAM and HRAM (p2-battle-read)
   "hWhoseTurn",
   "wAnimSoundID",

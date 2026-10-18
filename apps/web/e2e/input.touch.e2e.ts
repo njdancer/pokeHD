@@ -14,7 +14,7 @@ async function centre(page: Page, label: string) {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2, w: box.width, h: box.height };
 }
 
-test("touch: the stick appears under the thumb, turns cleanly, and fingers combine", async ({ page }) => {
+test("touch: the stick appears under the thumb, turns cleanly, holds diagonals, and fingers combine", async ({ page }) => {
   await page.goto("/dev/emu");
   await expect(page.getByTestId("touch-pad")).toBeVisible();
   const send = await touches(page);
@@ -35,9 +35,11 @@ test("touch: the stick appears under the thumb, turns cleanly, and fingers combi
   await expect(held(page)).toHaveText("none");
   await send("touchMove", [{ x, y: y - r, id: 1 }]);
   await expect(held(page)).toHaveText("Up");
-  // Wobbling just past the diagonal keeps walking up; a clear lean turns.
-  await send("touchMove", [{ x: x + r * 0.75, y: y - r * 0.7, id: 1 }]);
+  // A little off the axis keeps walking up; near the diagonal it holds both (a staircase); a clear lean turns.
+  await send("touchMove", [{ x: x + r * 0.3, y: y - r, id: 1 }]);
   await expect(held(page)).toHaveText("Up");
+  await send("touchMove", [{ x: x + r * 0.75, y: y - r * 0.7, id: 1 }]);
+  await expect(held(page)).toHaveText("Up Right");
   await send("touchMove", [{ x: x + r, y: y - r * 0.2, id: 1 }]);
   await expect(held(page)).toHaveText("Right");
   // Sliding far past the edge drags the stick along, so coming back a little turns straight around.

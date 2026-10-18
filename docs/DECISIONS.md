@@ -771,3 +771,23 @@ Corner's poster and the Cinnabar Gym quiz's gates. The HD view now follows wOver
 Why: diffing wOverworldMap every frame would also work, but it can't tell a map part-way through
 loading (or the old map's blocks while wCurMap already names the next) from a real change; the
 routines say exactly when the blocks are whole and whose they are.
+
+## D46. Diagonals walk as a staircase
+
+Nick asked for it (2026-10-18): running along a fence to a gap, the touch stick had to switch
+direction on exactly the right step. The stick now holds two directions near a diagonal (15°
+either side of it, letting go at 22° off the axis), as a gamepad's stick and two held keys
+already could. The game reads two held directions by priority (Down, Up, Left, Right), so
+`StairStep` (packages/emu) narrows them to one where the overworld loop reads the pad between
+steps (`OverworldLoopLessDelay.checkIfDownButtonIsPressed`):
+
+- **Which way:** the one the last step didn't take, if it's open, else the other. In the open the
+  player zigzags; along a fence the step into it is skipped until the gap, then taken.
+- **Open:** what CollisionCheckOnLand (or …OnWater while surfing) would answer, read from the
+  same WRAM without running them, since they face the player that way and play the bump. Ledges
+  and stepping ashore count as closed, so a diagonal never jumps or ends a surf by itself. With
+  both ways closed the player pushes the way it already faces, so it never turns to bump a wall.
+- One direction held, scripted movement, a ledge jump: untouched. Two hook slots.
+
+Why: only the pad the game reads changes, at the point it reads it, so every step is still the
+game's own; the original gave diagonals no meaning, so nothing a straight press does changes.

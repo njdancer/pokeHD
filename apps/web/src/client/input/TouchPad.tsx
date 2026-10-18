@@ -22,8 +22,8 @@ export interface TouchPadProps {
 /**
  * The on-screen joypad: a thumbstick on the left, B and A on the right, Select and Start between.
  * The stick floats: it appears wherever a thumb lands in the left-hand zone and follows a thumb
- * that slides past its edge, so it can't be missed. It holds one of four directions (see
- * `stickDirection`). Multi-touch: each finger is tracked separately, and one that slides off a
+ * that slides past its edge, so it can't be missed. It holds one of four directions, or two near a
+ * diagonal (see `stickDirection`). Multi-touch: each finger is tracked separately, and one that slides off a
  * button keeps it held until it lifts, as a thumb resting on a real button would.
  */
 export function TouchPad({ onChange, menuButtons = true }: TouchPadProps) {
