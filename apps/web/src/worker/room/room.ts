@@ -37,6 +37,22 @@ export interface GiftStore {
   delete(to: string, id: string): void;
 }
 
+/** Where a player was when last seen in the world, for friends' maps while they're away. */
+export interface LastSeen {
+  mapId: number;
+  x: number;
+  y: number;
+  at: number;
+}
+
+/**
+ * Where everyone was last seen. `note` is called for every presence, so the store decides how
+ * often to write; `final` is their spot as they leave, always kept.
+ */
+export interface SeenStore {
+  note(id: string, presence: Presence, final?: boolean): void;
+}
+
 /** A new connection: replace the player's old one, greet them, tell everyone else. */
 export function join(peers: readonly Peer[], newcomer: Peer, gifts?: GiftStore): void {
   const others = peers.filter((p) => p !== newcomer);
@@ -59,12 +75,13 @@ export function join(peers: readonly Peer[], newcomer: Peer, gifts?: GiftStore):
 }
 
 /** A frame from `from`. */
-export function receive(peers: readonly Peer[], from: Peer, frame: string | ArrayBuffer, gifts?: GiftStore): void {
+export function receive(peers: readonly Peer[], from: Peer, frame: string | ArrayBuffer, gifts?: GiftStore, seen?: SeenStore): void {
   const message = parseClientMessage(frame);
   if (!message) return from.send({ type: "error", reason: "bad-message" });
   switch (message.type) {
     case "presence":
       from.presence = message.presence;
+      if (message.presence) seen?.note(from.player.id, message.presence);
       broadcast(others(peers, from), { type: "presence", id: from.player.id, presence: message.presence });
       return;
     case "link": {
@@ -98,9 +115,11 @@ export function quietPeers<P>(peers: readonly P[], lastHeard: (p: P) => number, 
 }
 
 /** `leaver` closed. Unless the player is still connected elsewhere, they've left. */
-export function leave(peers: readonly Peer[], leaver: Peer): void {
+export function leave(peers: readonly Peer[], leaver: Peer, seen?: SeenStore): void {
   const rest = others(peers, leaver);
   if (rest.some((p) => p.player.id === leaver.player.id)) return;
+  // Before "left" goes out, so a friend who asks where they were straight away gets this spot.
+  if (leaver.presence) seen?.note(leaver.player.id, leaver.presence, true);
   broadcast(rest, { type: "left", id: leaver.player.id });
 }
 

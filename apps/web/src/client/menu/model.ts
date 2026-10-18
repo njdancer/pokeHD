@@ -74,6 +74,8 @@ export interface Friend {
   online: boolean;
   where: string;
   colour: string;
+  /** Away from the world: the place they were last seen, and how long ago. */
+  seen?: { place: string; ago: string };
   /** A gift waiting from them. */
   gift?: string;
 }
@@ -141,7 +143,7 @@ export interface MapLayers {
   encounters: { dex: number; map: string; x: number; y: number; how: "caught" | "seen" | "battled"; text: string; today?: boolean }[];
   finds: { item: string; map: string; x: number; y: number; text: string; today?: boolean }[];
   checkpoints: { place: string; map: string; x: number; y: number; when: string; today?: boolean }[];
-  /** Friends playing now, by friend ID: their map's name and step. */
+  /** Friends by ID, where they are now or were last seen (indoors, at the door): map name and step. */
   friendsAt: Record<string, [map: string, x: number, y: number]>;
   /** Outdoor maps walked, in the order first visited; from `todayFrom` on, today. */
   trail: string[];

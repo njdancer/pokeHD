@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CloseCode, ROOM_QUIET_MS, type Presence, type ServerMessage } from "@pokehd/protocol";
-import { join, leave, quietPeers, receive, type Peer } from "./room.ts";
+import { join, leave, quietPeers, receive, type Peer, type SeenStore } from "./room.ts";
 
 const here: Presence = {
   mapId: 0,
@@ -173,5 +173,30 @@ describe("quiet connections", () => {
     expect(quietPeers(["phone", "mac"], (p) => heard.get(p)!, ROOM_QUIET_MS - 1)).toEqual([]);
     expect(quietPeers(["phone", "mac"], (p) => heard.get(p)!, ROOM_QUIET_MS)).toEqual(["phone"]);
     expect(quietPeers(["phone", "mac"], (p) => heard.get(p)!, 9_000 + ROOM_QUIET_MS)).toEqual(["phone", "mac"]);
+  });
+});
+
+describe("last seen", () => {
+  it("notes every presence, and the spot a player leaves from before saying they left", () => {
+    const notes: [string, number, number, boolean][] = [];
+    const seen: SeenStore = { note: (id, p, final = false) => void notes.push([id, p.x, p.y, final]) };
+    const peers = [fake("sam"), fake("alex")];
+    const [sam, alex] = peers as [FakePeer, FakePeer];
+    receive(peers, sam, JSON.stringify({ type: "presence", presence: here }), undefined, seen);
+    receive(peers, sam, JSON.stringify({ type: "presence", presence: null }), undefined, seen);
+    expect(notes).toEqual([["sam", 5, 6, false]]);
+    receive(peers, sam, JSON.stringify({ type: "presence", presence: { ...here, x: 7 } }), undefined, seen);
+    leave([alex], sam, seen);
+    expect(notes.at(-1)).toEqual(["sam", 7, 6, true]);
+    expect(alex.inbox.at(-1)).toEqual({ type: "left", id: "sam" });
+  });
+
+  it("isn't noted when the player is still connected elsewhere", () => {
+    const notes: string[] = [];
+    const seen: SeenStore = { note: (id) => void notes.push(id) };
+    const [old, now] = [fake("sam"), fake("sam")];
+    old.presence = here;
+    leave([now], old, seen);
+    expect(notes).toEqual([]);
   });
 });

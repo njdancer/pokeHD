@@ -47,11 +47,25 @@ export async function signOut(): Promise<void> {
   await fetch("/api/sign-out", { method: "POST" });
 }
 
+/** Where a friend was last seen in the world: an outdoor or indoor map, its step, and when. */
+export interface LastSeen {
+  mapId: number;
+  x: number;
+  y: number;
+  at: number;
+}
+
+export interface Player {
+  id: string;
+  name: string;
+  seen?: LastSeen;
+}
+
 /** Everyone else on the server (friends-only, so all of them are friends); empty when signed out. */
-export async function listPlayers(): Promise<{ id: string; name: string }[]> {
+export async function listPlayers(): Promise<Player[]> {
   const res = await fetch("/api/friends");
   if (!res.ok) return [];
-  return ((await res.json()) as { friends: { id: string; name: string }[] }).friends;
+  return ((await res.json()) as { friends: Player[] }).friends;
 }
 
 // Admin (Nick's session).
