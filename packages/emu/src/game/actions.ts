@@ -222,16 +222,20 @@ export class GameActions {
   /**
    * Queues the action for the next idle point. The returned function cancels it if it hasn't
    * started yet (a page's queued tap the player took back); `done` then gets "cancelled".
+   * `started` is called when the game takes it up.
    */
-  run(action: GameAction, done: (result: ActionResult) => void): () => void {
+  run(action: GameAction, done: (result: ActionResult) => void, started?: () => void): () => void {
     let cancelled = false;
-    let started = false;
+    let begun = false;
     const job = this.#job(action, (result) => done(cancelled ? { ok: false, reason: "cancelled", messages: [] } : result));
     const check = job.check;
     job.check = (g) => {
       if (cancelled) return { drop: "cancelled" };
       const verdict = check?.(g);
-      if (!verdict) started = true;
+      if (!verdict) {
+        begun = true;
+        started?.();
+      }
       return verdict;
     };
     this.#queued++;
@@ -242,7 +246,7 @@ export class GameActions {
     };
     this.#safe.enqueue(job);
     return () => {
-      if (!started) cancelled = true;
+      if (!begun) cancelled = true;
     };
   }
 

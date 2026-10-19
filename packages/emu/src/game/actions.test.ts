@@ -178,6 +178,16 @@ describe.skipIf(!existsSync(ROM_PATH))("game actions (ROM)", () => {
     walksAfter(gb);
   });
 
+  it("says when the game takes an action up, and not before", async () => {
+    const { gb, actions } = await game();
+    const seen: string[] = [];
+    actions.run({ kind: "move-mon", from: 1, to: 0 }, () => seen.push("done"), () => seen.push("started"));
+    expect(seen).toEqual([]);
+    for (let i = 0; i < 1200 && !seen.includes("done"); i++) gb.runFrame();
+    expect(seen).toEqual(["started", "done"]);
+    expect(species(gb)).toEqual([PIKACHU, SQUIRTLE, PIDGEY]);
+  });
+
   it("reads the team and bag for the menu", async () => {
     const { gb } = await game();
     const snap = decodeSnapshot(SNAPSHOT_RANGES.map(([a, n]) => gb.readBytes(a, n)));

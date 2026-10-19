@@ -21,6 +21,7 @@ import {
   type WorldData,
 } from "@pokehd/rom";
 import { scriptedOutcome } from "../dex/battles.ts";
+import { reportError } from "../errors.ts";
 import type { Catalogue } from "../dex/catalogue.ts";
 import type { LastSeen } from "../room/account.ts";
 import type { Friend as RoomFriend } from "../room/client.ts";
@@ -423,7 +424,8 @@ export function requestOf(rom: Uint8Array, ask: GameAsk): Request | null {
 }
 
 export interface LiveHost {
-  act(action: GameAction, signal?: AbortSignal): Promise<ActionResult>;
+  /** `waiting` hears why, if the game hasn't taken the action up after a few seconds. */
+  act(action: GameAction, signal?: AbortSignal, waiting?: (reason: string) => void): Promise<ActionResult>;
   answer(id: number, answer: AskAnswer): void;
   /** The game's words after an action, or why it didn't happen. */
   notice(text: string): void;
@@ -551,8 +553,19 @@ export class LiveActions implements MenuActions {
     return true;
   }
 
+  /**
+   * Runs the action at the game's next idle point. One the game is slow to take up says so, and
+   * is reported with why it waits, so a tap that seems to do nothing can be traced on any device.
+   */
+  #act(action: GameAction): Promise<ActionResult> {
+    return this.#host.act(action, undefined, (why) => {
+      this.#host.notice("Waiting for a quiet moment in the game…");
+      reportError("stuck", new Error(`${action.kind} waited: ${why} (${JSON.stringify(action)})`));
+    });
+  }
+
   #do(action: GameAction): string {
-    void this.#host.act(action).then((r) => {
+    void this.#act(action).then((r) => {
       const text = said(r);
       if (text) this.#host.notice(text);
     });
@@ -605,7 +618,7 @@ export class LiveActions implements MenuActions {
     // may be up) would queue another round of them after it (QA bug 48).
     if (this.#teaching) return "";
     this.#teaching = true;
-    void this.#host.act({ kind: "use-item", item, mon, answers: [true] }).then((r) => {
+    void this.#act({ kind: "use-item", item, mon, answers: [true] }).then((r) => {
       this.#teaching = false;
       const text = said(r);
       if (text) this.#host.notice(text);
@@ -648,7 +661,7 @@ export class LiveActions implements MenuActions {
     return "Trades and battles start at a Pokémon Center's link desk for now.";
   }
   save(): string {
-    void this.#host.act({ kind: "save" }).then((r) => this.#host.notice(r.ok ? "Saved!" : said(r) || "Couldn't save just now."));
+    void this.#act({ kind: "save" }).then((r) => this.#host.notice(r.ok ? "Saved!" : said(r) || "Couldn't save just now."));
     return "";
   }
   setOption<K extends keyof GameOptions>(key: K, value: GameOptions[K]): void {
