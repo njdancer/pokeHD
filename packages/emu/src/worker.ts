@@ -13,7 +13,7 @@ import { GameActions } from "./game/actions.ts";
 import { GameAsks } from "./game/asks.ts";
 import { BattleMenus } from "./game/battle-menus.ts";
 import { GiftDesk } from "./gifts/desk.ts";
-import { SafePoint } from "./gifts/safepoint.ts";
+import { busyReason, SafePoint } from "./gifts/safepoint.ts";
 import { JournalHooks } from "./journal-hooks.ts";
 import { LinkPort } from "./link.ts";
 import { BlockWatch } from "./block-watch.ts";
@@ -54,6 +54,10 @@ let rom: Uint8Array | undefined;
 let actions: GameActions | undefined;
 /** Queued actions' cancels, by the page's id. */
 const cancels = new Map<number, () => void>();
+/** Menu actions the game hasn't taken up yet: from which frame, and its overworld loop count then. */
+const waiting = new Map<number, { since: number; loops: number }>();
+/** How long an action may wait before the page hears why (3 s). */
+const WAIT_FRAMES = 180;
 let asks: GameAsks | undefined;
 let battleMenus: BattleMenus | undefined;
 let blockWatch: BlockWatch | undefined;
@@ -70,6 +74,7 @@ function runOneFrame() {
   frames++;
   autosave?.frame();
   blockWatch?.frame();
+  if (waiting.size > 0) tellWaiting(gb);
 
   const pcm = gb.drainAudio();
   if (audio) {
@@ -120,6 +125,20 @@ function flushSram(): boolean {
  */
 function fillAudio() {
   while (!paused && gb && audio && queuedSamples < samplesPerFrame * AUDIO_LEAD_FRAMES) runOneFrame();
+}
+
+/** Tells the page about actions still waiting after WAIT_FRAMES, once each, and why. */
+function tellWaiting(g: GameBoy) {
+  const safe = SafePoint.of(g);
+  for (const [id, w] of waiting) {
+    if (frames - w.since < WAIT_FRAMES) continue;
+    waiting.delete(id);
+    const pc = g.registers.pc.toString(16).padStart(4, "0");
+    const reason = safe.calling
+      ? "another action is still running"
+      : (busyReason(g) ?? (safe.loops === w.loops ? `the game isn't walking around (pc ${pc})` : "queued behind other actions"));
+    post({ type: "action-waiting", id, reason });
+  }
 }
 
 /** Timer pacing when there's no audio clock. */
@@ -319,14 +338,21 @@ async function handle(data: ToWorker) {
       case "action": {
         const { id } = data;
         if (!actions) post({ type: "action-done", id, result: { ok: false, reason: "menu hooks are off", messages: [] } });
-        else
+        else {
+          waiting.set(id, { since: frames, loops: SafePoint.of(gb!).loops });
           cancels.set(
             id,
-            actions.run(data.action, (result) => {
-              cancels.delete(id);
-              post({ type: "action-done", id, result });
-            }),
+            actions.run(
+              data.action,
+              (result) => {
+                cancels.delete(id);
+                waiting.delete(id);
+                post({ type: "action-done", id, result });
+              },
+              () => waiting.delete(id),
+            ),
           );
+        }
         break;
       }
       case "action-cancel":

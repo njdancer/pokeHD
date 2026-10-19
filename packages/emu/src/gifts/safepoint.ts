@@ -90,6 +90,7 @@ export class SafePoint {
   readonly #queue: Job[] = [];
   readonly #remove: () => void;
   #running: Running | undefined;
+  #loops = 0;
 
   private constructor(gb: GameBoy) {
     this.#gb = gb;
@@ -105,6 +106,11 @@ export class SafePoint {
     return this.#queue.length + (this.#running ? 1 : 0);
   }
 
+  /** How many times the game has come round its overworld loop: unchanged, it's busy elsewhere. */
+  get loops(): number {
+    return this.#loops;
+  }
+
   /** True while a job's routine is mid-call (the game is running our call, not its own code). */
   get calling(): boolean {
     return this.#running !== undefined;
@@ -118,6 +124,7 @@ export class SafePoint {
   }
 
   #onLoop(): void {
+    this.#loops++;
     const gb = this.#gb;
     const run = this.#running;
     if (run) {

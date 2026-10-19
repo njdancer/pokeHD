@@ -136,6 +136,8 @@ export type FromWorker =
   /** On success, `sram` is the save the game just wrote: store it before sending the gift. */
   | { type: "gift-taken"; id: number; result: TakeResult; sram?: Uint8Array }
   | { type: "action-done"; id: number; result: ActionResult }
+  /** A menu action the game hasn't taken up after a few seconds, and why it's waiting. */
+  | { type: "action-waiting"; id: number; reason: string }
   /** The game asks the player something (a list, the party, a quantity, yes or no): the page answers. */
   | { type: "ask"; id: number; ask: GameAsk }
   /** The battle waits for the player's choice (the battle menu or the move list): the page answers. */

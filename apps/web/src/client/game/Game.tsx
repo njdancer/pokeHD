@@ -1361,7 +1361,7 @@ export function Game({ rom, romKey, header, onForget, held, onReady, menu = fals
   const liveGame = useMemo(
     () => ({
       read: async () => decodeSnapshot(await hostRef.current!.read(SNAPSHOT_RANGES)),
-      act: (action: Parameters<EmulatorHost["act"]>[0], signal?: AbortSignal) => hostRef.current!.act(action, signal),
+      act: (...args: Parameters<EmulatorHost["act"]>) => hostRef.current!.act(...args),
       answer: (id: number, answer: AskAnswer) => {
         const asked = lastAskRef.current;
         if (asked?.id === id) battleItemRef.current.answered(asked.ask, answer);

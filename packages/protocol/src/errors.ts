@@ -10,8 +10,9 @@ import * as v from "valibot";
  * - `gpu`: a WebGPU validation or out-of-memory error nobody captured.
  * - `gpu-lost`: the GPU device or WebGL context was lost.
  * - `emulator`: the emulator's worker failed.
+ * - `stuck`: a menu action the game didn't get round to, and why it was waiting.
  */
-export const ERROR_KINDS = ["error", "rejection", "react", "gpu", "gpu-lost", "emulator"] as const;
+export const ERROR_KINDS = ["error", "rejection", "react", "gpu", "gpu-lost", "emulator", "stuck"] as const;
 export type ErrorKind = (typeof ERROR_KINDS)[number];
 
 /** A string cut to at most `max` characters. */

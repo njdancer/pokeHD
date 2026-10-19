@@ -19,7 +19,7 @@ export interface LiveMenuProps {
   catalogue: Catalogue;
   game: {
     read(): Promise<GameSnapshot>;
-    act(action: GameAction, signal?: AbortSignal): Promise<ActionResult>;
+    act(action: GameAction, signal?: AbortSignal, waiting?: (reason: string) => void): Promise<ActionResult>;
     answer(id: number, answer: AskAnswer): void;
   };
   /**
@@ -72,7 +72,7 @@ export function LiveMenu({ rom, world, catalogue, game, bind, ask, onAskDone, op
       ...game,
       // What the action changed (a TM used up, a Potion fewer) shows as soon as it's done, not at
       // the next read a second on, which a quick look could miss (QA bug 47's TM01 ×1).
-      act: (action, signal) => game.act(action, signal).finally(() => setActed((n) => n + 1)),
+      act: (action, signal, waiting) => game.act(action, signal, waiting).finally(() => setActed((n) => n + 1)),
       notice: (text) => setNotice((n) => ({ text, n: (n?.n ?? 0) + 1 })),
       setApp,
       ...(sendGift ? { sendGift } : {}),

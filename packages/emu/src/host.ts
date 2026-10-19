@@ -130,6 +130,7 @@ export class EmulatorHost {
   readonly #takes = new Map<number, (taken: TakenGift) => void>();
   readonly #resumePoints = new Map<number, (state: Uint8Array | null) => void>();
   readonly #actions = new Map<number, (result: ActionResult) => void>();
+  readonly #waits = new Map<number, (reason: string) => void>();
   #linkSend: ((message: LinkMessage) => void) | undefined;
 
   constructor(options: EmulatorHostOptions) {
@@ -214,6 +215,11 @@ export class EmulatorHost {
         case "action-done":
           this.#actions.get(data.id)?.(data.result);
           this.#actions.delete(data.id);
+          this.#waits.delete(data.id);
+          break;
+        case "action-waiting":
+          this.#waits.get(data.id)?.(data.reason);
+          this.#waits.delete(data.id);
           break;
         case "ask":
           options.onAsk?.(data.id, data.ask);
@@ -452,12 +458,14 @@ export class EmulatorHost {
 
   /**
    * Runs a Pokédex menu action with the game's own routine at its next overworld idle point
-   * (needs `onAsk`). Resolves with what the game said, or why it didn't happen.
+   * (needs `onAsk`). Resolves with what the game said, or why it didn't happen. `waiting` hears
+   * why, if the game hasn't taken it up after a few seconds.
    */
-  act(action: GameAction, signal?: AbortSignal): Promise<ActionResult> {
+  act(action: GameAction, signal?: AbortSignal, waiting?: (reason: string) => void): Promise<ActionResult> {
     const id = this.#nextId++;
     return new Promise((resolve) => {
       this.#actions.set(id, resolve);
+      if (waiting) this.#waits.set(id, waiting);
       this.#post({ type: "action", id, action });
       // Taken back before it started: the game drops it, and its "cancelled" answers this.
       signal?.addEventListener("abort", () => this.#post({ type: "action-cancel", id }), { once: true });
